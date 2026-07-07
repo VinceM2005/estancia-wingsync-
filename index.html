@@ -1,0 +1,457 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Estancia Wingsync - Pigeon Clocking System</title>
+
+    <link
+      rel="stylesheet"
+      href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+    />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+    <link rel="stylesheet" href="style.css" />
+  </head>
+  <body>
+    <div id="login-screen">
+      <div class="login-box">
+        <h2>Estancia Wingsync</h2>
+        <p>Malinao, Albay Pigeon Clocking System</p>
+        <div class="form-group" style="text-align: left; margin-top: 20px">
+          <label>User ID</label>
+          <input
+            type="text"
+            id="login-id"
+            class="form-control"
+            placeholder="P-001 or ADMIN"
+            onkeyup="this.value = this.value.toUpperCase()"
+          />
+        </div>
+        <div class="form-group" style="text-align: left">
+          <label>Password</label>
+          <div class="password-wrapper">
+            <input
+              type="password"
+              id="login-pass"
+              class="form-control"
+              placeholder="Enter Password"
+            />
+            <span
+              class="password-toggle"
+              onclick="app.togglePasswordVisibility('login-pass', this)"
+            >
+              👁️
+            </span>
+          </div>
+        </div>
+        <button class="btn btn-primary" onclick="app.login()">Log In</button>
+        <p id="login-error" style="color: red; margin-top: 10px; display: none">
+          Invalid User ID or Password.
+        </p>
+      </div>
+    </div>
+
+    <div id="app-screen" class="hidden">
+      <aside id="sidebar">
+        <!-- ===== NEW BRAND HEADER ===== -->
+        <div class="sidebar-header">
+          <div class="brand-container">
+            <!-- Logo Placeholder (replace src with your logo file) -->
+            <div class="brand-logo">
+              <img src="logo.png" alt="EMARPC Logo" id="club-logo-img" />
+              <span class="logo-placeholder-text">🕊️</span>
+            </div>
+            <div class="brand-text">
+              <div class="brand-acronym">ERPC</div>
+              <div class="brand-fullname">Estancia Racing Pigeon Club</div>
+            </div>
+          </div>
+        </div>
+        <!-- ========================== -->
+        <ul class="sidebar-menu">
+          <li
+            onclick="app.navigate('dashboard')"
+            id="nav-dashboard"
+            class="active"
+          >
+            📊 Dashboard
+          </li>
+          <li onclick="app.navigate('profile')" id="nav-profile">
+            👤 My Profile
+          </li>
+          <li onclick="app.navigate('results')" id="nav-results">
+            🏆 Event Results
+          </li>
+          <li onclick="app.navigate('logs')" id="nav-logs">📝 App Logs</li>
+          <li
+            onclick="app.navigate('admin-players')"
+            id="nav-admin-players"
+            class="admin-only hidden"
+          >
+            👥 Manage Players
+          </li>
+          <li
+            onclick="app.navigate('admin-events')"
+            id="nav-admin-events"
+            class="admin-only hidden"
+          >
+            📅 Manage Events
+          </li>
+        </ul>
+        <div class="sidebar-footer" onclick="app.logout()">🚪 Log Out</div>
+      </aside>
+
+      <main id="main-content">
+        <header>
+          <button class="menu-toggle" onclick="app.toggleSidebar()">☰</button>
+          <h3 id="header-title">Dashboard</h3>
+          <div id="header-user">Welcome, User</div>
+        </header>
+
+        <div class="content-area">
+          <div id="view-dashboard" class="view-section">
+            <div id="player-clock-in-area" class="card clock-in-box hidden">
+              <h2 style="color: var(--primary)">Quick Clock In</h2>
+              <p style="margin-bottom: 20px; color: #666"></p>
+              <input
+                type="text"
+                id="clock-in-code"
+                class="form-control"
+                placeholder="ENTER EVENT CODE"
+                onkeyup="this.value = this.value.toUpperCase()"
+              />
+              <button
+                class="btn btn-success"
+                style="font-size: 1.2em; padding: 15px 30px"
+                onclick="app.clockIn()"
+              >
+                🕒 Clock Bird Arrival
+              </button>
+            </div>
+            <div class="card">
+              <h3>Current Events</h3>
+              <table id="active-events-table">
+                <thead>
+                  <tr>
+                    <th>Event Name</th>
+                    <th>Release Time</th>
+                    <th>Status</th>
+                  </tr>
+                </thead>
+                <tbody></tbody>
+              </table>
+            </div>
+          </div>
+
+          <div id="view-profile" class="view-section hidden">
+            <div class="card" style="max-width: 600px; margin: auto">
+              <h2 id="prof-name" style="text-align: center">Name</h2>
+              <p style="text-align: center; color: #666; margin-bottom: 20px">
+                User ID: <span id="prof-id" style="font-weight: bold"></span>
+              </p>
+              <div class="form-group">
+                <label>Contact</label
+                ><input
+                  type="text"
+                  id="prof-contact"
+                  class="form-control"
+                  disabled
+                />
+              </div>
+              <div class="form-group player-only hidden">
+                <label>Loft Latitude</label
+                ><input
+                  type="text"
+                  id="prof-lat"
+                  class="form-control"
+                  disabled
+                />
+              </div>
+              <div class="form-group player-only hidden">
+                <label>Loft Longitude</label
+                ><input
+                  type="text"
+                  id="prof-lng"
+                  class="form-control"
+                  disabled
+                />
+              </div>
+              <hr style="margin: 20px 0" />
+              <label>New Password</label>
+              <div class="password-wrapper">
+                <input
+                  type="password"
+                  id="new-password"
+                  class="form-control"
+                  style="margin-bottom: 10px"
+                />
+                <span
+                  class="password-toggle"
+                  onclick="app.togglePasswordVisibility('new-password', this)"
+                >
+                  👁️
+                </span>
+              </div>
+              <button class="btn btn-primary" onclick="app.changePassword()">
+                Update Password
+              </button>
+            </div>
+          </div>
+
+          <div id="view-results" class="view-section hidden">
+            <div class="card">
+              <div class="dashboard-header">
+                <h2>Leaderboard</h2>
+                <select
+                  id="result-event-filter"
+                  class="form-control"
+                  style="width: 250px"
+                  onchange="app.renderResults()"
+                ></select>
+              </div>
+              <!-- ===== NEW: Release Time Display ===== -->
+              <div
+                id="event-release-info"
+                style="
+                  text-align: center;
+                  margin: 10px 0;
+                  font-weight: bold;
+                  color: var(--primary);
+                "
+              ></div>
+              <p style="font-size: 0.9em; color: #666; margin-bottom: 15px"></p>
+              <table id="results-table">
+                <thead>
+                  <tr>
+                    <th>Rank</th>
+                    <th>Player</th>
+                    <th>Air Distance</th>
+                    <th>Arrival Time</th>
+                    <th>Flight Time</th>
+                    <th>Speed (m/min)</th>
+                  </tr>
+                </thead>
+                <tbody></tbody>
+              </table>
+            </div>
+          </div>
+          <div id="view-logs" class="view-section hidden">
+            <div class="card">
+              <h2>Logs</h2>
+              <ul
+                id="log-list"
+                style="max-height: 400px; overflow-y: auto"
+              ></ul>
+            </div>
+          </div>
+
+          <div id="view-admin-players" class="view-section hidden admin-only">
+            <div class="card">
+              <div class="dashboard-header">
+                <h2>Manage Players</h2>
+                <button class="btn btn-primary" onclick="app.openPlayerModal()">
+                  + Add New Player
+                </button>
+              </div>
+              <table id="players-table">
+                <thead>
+                  <tr>
+                    <th>ID</th>
+                    <th>Name</th>
+                    <th>Location (Lat/Lng)</th>
+                    <th>Contact</th>
+                    <th>Actions</th>
+                  </tr>
+                </thead>
+                <tbody></tbody>
+              </table>
+            </div>
+          </div>
+
+          <div id="view-admin-events" class="view-section hidden admin-only">
+            <div class="card">
+              <div class="dashboard-header">
+                <h2>Manage Events</h2>
+                <button class="btn btn-primary" onclick="app.openEventModal()">
+                  + Create Event
+                </button>
+              </div>
+              <table id="admin-events-table">
+                <thead>
+                  <tr>
+                    <th>Codes</th>
+                    <th>Name</th>
+                    <th>Release Point</th>
+                    <th>Actions</th>
+                  </tr>
+                </thead>
+                <tbody></tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </main>
+    </div>
+
+    <div id="modal-player" class="modal-overlay">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h3>Add Player (Pinpoint Loft)</h3>
+          <button class="close-modal" onclick="app.closeModal('modal-player')">
+            ×
+          </button>
+        </div>
+        <div class="form-group">
+          <label>Full Name</label
+          ><input
+            type="text"
+            id="modal-p-name"
+            class="form-control"
+            placeholder="Surname, First Name M.I."
+          />
+        </div>
+        <div class="form-group">
+          <label>Contact Number</label
+          ><input
+            type="text"
+            id="modal-p-contact"
+            class="form-control"
+            placeholder="09..."
+          />
+        </div>
+        <div class="form-group">
+          <label>Pinpoint Player's Loft on Map</label>
+          <div id="player-map" class="map-container"></div>
+          <small
+            >Coordinates:
+            <span id="player-coords-text">None selected</span></small
+          >
+        </div>
+        <button
+          class="btn btn-success"
+          style="width: 100%"
+          onclick="app.savePlayer()"
+        >
+          Save Player
+        </button>
+      </div>
+    </div>
+
+    <div id="modal-event" class="modal-overlay">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h3>Create Event (Pinpoint Release)</h3>
+          <button class="close-modal" onclick="app.closeModal('modal-event')">
+            ×
+          </button>
+        </div>
+        <div class="form-group">
+          <label>Event Name</label
+          ><input type="text" id="modal-e-name" class="form-control" />
+        </div>
+        <div class="form-group">
+          <label>Event Codes</label>
+          <div class="code-inputs" style="display: grid; gap: 10px">
+            <input
+              type="text"
+              id="modal-e-code-1"
+              class="form-control"
+              placeholder="Code 1"
+              onkeyup="this.value = this.value.toUpperCase()"
+            />
+            <input
+              type="text"
+              id="modal-e-code-2"
+              class="form-control"
+              placeholder="Code 2"
+              onkeyup="this.value = this.value.toUpperCase()"
+            />
+            <input
+              type="text"
+              id="modal-e-code-3"
+              class="form-control"
+              placeholder="Code 3"
+              onkeyup="this.value = this.value.toUpperCase()"
+            />
+          </div>
+          <button
+            class="btn btn-secondary"
+            type="button"
+            style="margin-top: 10px"
+            onclick="app.generateEventCodes()"
+          >
+            Generate Codes
+          </button>
+          <small style="display: block; margin-top: 8px; color: #666"> </small>
+        </div>
+        <div class="form-group">
+          <label>Release Date & Time</label
+          ><input
+            type="datetime-local"
+            id="modal-e-time"
+            class="form-control"
+          />
+        </div>
+        <div class="form-group">
+          <label>Pinpoint Release Location on Map</label>
+          <div id="event-map" class="map-container"></div>
+          <small
+            >Coordinates:
+            <span id="event-coords-text">None selected</span></small
+          >
+        </div>
+        <button
+          class="btn btn-success"
+          style="width: 100%"
+          onclick="app.saveEvent()"
+        >
+          Create Event
+        </button>
+      </div>
+    </div>
+
+    <!-- ===== EDIT PLAYER MODAL ===== -->
+    <div id="modal-edit-player" class="modal-overlay">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h3>Edit Player</h3>
+          <button
+            class="close-modal"
+            onclick="app.closeModal('modal-edit-player')"
+          >
+            ×
+          </button>
+        </div>
+        <input type="hidden" id="edit-player-id" />
+        <div class="form-group">
+          <label>Full Name</label>
+          <input
+            type="text"
+            id="edit-p-name"
+            class="form-control"
+            placeholder="Surname, First Name M.I."
+          />
+        </div>
+        <div class="form-group">
+          <label>Contact Number</label>
+          <input
+            type="text"
+            id="edit-p-contact"
+            class="form-control"
+            placeholder="09..."
+          />
+        </div>
+        <button
+          class="btn btn-success"
+          style="width: 100%"
+          onclick="app.saveEditPlayer()"
+        >
+          Update Player
+        </button>
+      </div>
+    </div>
+
+    <script src="app.js"></script>
+  </body>
+</html>
