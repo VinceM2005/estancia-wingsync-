@@ -1,7 +1,7 @@
 // ===== API Configuration =====
 // 🔴 REMEMBER: Change this to your LIVE backend URL before deploying!
 //    Example: https://your-backend.onrender.com/api
-const API_URL = "http://localhost:5000/api";
+const API_URL = "https://estancia-wingsync-backend.onrender.com/api";
 
 // ===== Maps Variables =====
 let playerMap, playerMarker, eventMap, eventMarker;
