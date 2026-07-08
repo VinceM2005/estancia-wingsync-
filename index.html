@@ -54,10 +54,8 @@
 
     <div id="app-screen" class="hidden">
       <aside id="sidebar">
-        <!-- ===== NEW BRAND HEADER ===== -->
         <div class="sidebar-header">
           <div class="brand-container">
-            <!-- Logo Placeholder (replace src with your logo file) -->
             <div class="brand-logo">
               <img src="logo.png" alt="EMARPC Logo" id="club-logo-img" />
               <span class="logo-placeholder-text">🕊️</span>
@@ -68,7 +66,6 @@
             </div>
           </div>
         </div>
-        <!-- ========================== -->
         <ul class="sidebar-menu">
           <li
             onclick="app.navigate('dashboard')"
@@ -199,18 +196,12 @@
             </div>
           </div>
 
+          <!-- ===== EVENT RESULTS (updated - no dropdown) ===== -->
           <div id="view-results" class="view-section hidden">
             <div class="card">
               <div class="dashboard-header">
                 <h2>Leaderboard</h2>
-                <select
-                  id="result-event-filter"
-                  class="form-control"
-                  style="width: 250px"
-                  onchange="app.renderResults()"
-                ></select>
               </div>
-              <!-- ===== NEW: Release Time Display ===== -->
               <div
                 id="event-release-info"
                 style="
@@ -236,6 +227,7 @@
               </table>
             </div>
           </div>
+
           <div id="view-logs" class="view-section hidden">
             <div class="card">
               <h2>Logs</h2>
@@ -411,7 +403,6 @@
       </div>
     </div>
 
-    <!-- ===== EDIT PLAYER MODAL ===== -->
     <div id="modal-edit-player" class="modal-overlay">
       <div class="modal-content">
         <div class="modal-header">
