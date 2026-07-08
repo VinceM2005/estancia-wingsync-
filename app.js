@@ -1,17 +1,250 @@
 // ===== API Configuration =====
-// 🔴 REMEMBER: Change this to your LIVE backend URL before deploying!
-//    Example: https://your-backend.onrender.com/api
+// For development - change to your production URL when deploying
+//const API_URL = "http://localhost:5000/api";
 const API_URL = "https://estancia-wingsync-backend.onrender.com/api";
 
-// ===== Maps Variables =====
+// ===== Maps Variables - Google Maps =====
 let playerMap, playerMarker, eventMap, eventMarker;
 let selectedPlayerLat = null,
   selectedPlayerLng = null;
 let selectedEventLat = null,
   selectedEventLng = null;
+let mapsInitialized = false;
 
 const defaultLat = 13.415;
 const defaultLng = 123.635;
+
+// ===== Google Maps Initialization =====
+function initMaps() {
+  mapsInitialized = true;
+  console.log("✅ Google Maps initialized successfully");
+}
+
+// ===== Create Google Map with Precision and Retry =====
+function createGoogleMap(
+  containerId,
+  searchBoxId,
+  coordsTextId,
+  mapType = "player",
+  retries = 0,
+) {
+  if (!mapsInitialized) {
+    setTimeout(
+      () =>
+        createGoogleMap(
+          containerId,
+          searchBoxId,
+          coordsTextId,
+          mapType,
+          retries + 1,
+        ),
+      500,
+    );
+    return;
+  }
+
+  const mapElement = document.getElementById(containerId);
+  if (!mapElement) {
+    console.error(`Map container ${containerId} not found`);
+    return;
+  }
+
+  // Ensure the container is visible and has a valid height
+  const rect = mapElement.getBoundingClientRect();
+  if (rect.height === 0 && retries < 5) {
+    console.log(
+      `Map container ${containerId} not yet visible, retrying... (${retries + 1})`,
+    );
+    setTimeout(
+      () =>
+        createGoogleMap(
+          containerId,
+          searchBoxId,
+          coordsTextId,
+          mapType,
+          retries + 1,
+        ),
+      300,
+    );
+    return;
+  }
+
+  // If still zero height after 5 retries, set a fallback height
+  if (rect.height === 0) {
+    mapElement.style.height = "400px";
+  }
+
+  const map = new google.maps.Map(mapElement, {
+    center: { lat: defaultLat, lng: defaultLng },
+    zoom: 15,
+    mapTypeId: google.maps.MapTypeId.HYBRID,
+    mapTypeControl: true,
+    mapTypeControlOptions: {
+      style: google.maps.MapTypeControlStyle.HORIZONTAL_BAR,
+      position: google.maps.ControlPosition.TOP_RIGHT,
+    },
+    zoomControl: true,
+    zoomControlOptions: {
+      position: google.maps.ControlPosition.RIGHT_CENTER,
+    },
+    fullscreenControl: true,
+    streetViewControl: true,
+    streetViewControlOptions: {
+      position: google.maps.ControlPosition.RIGHT_BOTTOM,
+    },
+  });
+
+  // Add search box
+  const searchBox = document.getElementById(searchBoxId);
+  if (searchBox) {
+    const autocomplete = new google.maps.places.Autocomplete(searchBox);
+    autocomplete.bindTo("bounds", map);
+    autocomplete.setFields(["geometry", "name", "formatted_address"]);
+
+    autocomplete.addListener("place_changed", function () {
+      const place = autocomplete.getPlace();
+      if (!place.geometry) {
+        app.showModal({
+          title: "Location Not Found",
+          message: "Please select a location from the dropdown.",
+          icon: "⚠️",
+          iconColor: "#e67e22",
+        });
+        return;
+      }
+
+      const lat = parseFloat(place.geometry.location.lat().toFixed(6));
+      const lng = parseFloat(place.geometry.location.lng().toFixed(6));
+
+      map.setCenter(place.geometry.location);
+      map.setZoom(17);
+
+      setMarker(mapType, lat, lng, map, coordsTextId, place);
+    });
+  }
+
+  // Click on map to set location
+  map.addListener("click", function (event) {
+    const lat = parseFloat(event.latLng.lat().toFixed(6));
+    const lng = parseFloat(event.latLng.lng().toFixed(6));
+    setMarker(mapType, lat, lng, map, coordsTextId);
+  });
+
+  // Trigger resize after a moment to ensure proper rendering
+  setTimeout(() => {
+    google.maps.event.trigger(map, "resize");
+  }, 300);
+
+  return map;
+}
+
+// ===== Set Marker with Precision =====
+function setMarker(mapType, lat, lng, map, coordsTextId, place = null) {
+  // Validate coordinates
+  if (lat < -90 || lat > 90 || lng < -180 || lng > 180) {
+    app.showModal({
+      title: "Invalid Location",
+      message: "Please select a valid location on the map.",
+      icon: "⚠️",
+      iconColor: "#e67e22",
+    });
+    return;
+  }
+
+  // Remove existing marker
+  if (mapType === "player" && playerMarker) {
+    playerMarker.setMap(null);
+  }
+  if (mapType === "event" && eventMarker) {
+    eventMarker.setMap(null);
+  }
+
+  const position = new google.maps.LatLng(lat, lng);
+
+  const marker = new google.maps.Marker({
+    position: position,
+    map: map,
+    draggable: true,
+    animation: google.maps.Animation.DROP,
+    title: place ? place.name : "Selected Location",
+  });
+
+  // Update coordinates with 6 decimal places
+  const latStr = lat.toFixed(6);
+  const lngStr = lng.toFixed(6);
+  document.getElementById(coordsTextId).innerText = `${latStr}, ${lngStr}`;
+
+  // Store selected coordinates
+  if (mapType === "player") {
+    selectedPlayerLat = lat;
+    selectedPlayerLng = lng;
+    playerMarker = marker;
+  } else {
+    selectedEventLat = lat;
+    selectedEventLng = lng;
+    eventMarker = marker;
+  }
+
+  // Show info window
+  const content = place
+    ? `<div style="padding: 8px; max-width: 260px;">
+            <strong>📍 ${place.name || "Selected Location"}</strong><br>
+            <span style="font-size: 12px; color: #666;">
+                ${place.formatted_address || ""}<br>
+                <b style="color: #1a2a33;">${latStr}, ${lngStr}</b>
+            </span>
+        </div>`
+    : `<div style="padding: 8px;">
+            <strong>📍 Selected Location</strong><br>
+            <span style="font-size: 12px; color: #666;">
+                <b style="color: #1a2a33;">${latStr}, ${lngStr}</b>
+            </span>
+        </div>`;
+
+  const infoWindow = new google.maps.InfoWindow({ content });
+  infoWindow.open(map, marker);
+
+  // Drag end listener for precision adjustment
+  marker.addListener("dragend", function () {
+    const pos = marker.getPosition();
+    const newLat = parseFloat(pos.lat().toFixed(6));
+    const newLng = parseFloat(pos.lng().toFixed(6));
+
+    // Validate new coordinates
+    if (newLat < -90 || newLat > 90 || newLng < -180 || newLng > 180) {
+      app.showModal({
+        title: "Invalid Location",
+        message: "Please select a valid location on the map.",
+        icon: "⚠️",
+        iconColor: "#e67e22",
+      });
+      return;
+    }
+
+    document.getElementById(coordsTextId).innerText =
+      `${newLat.toFixed(6)}, ${newLng.toFixed(6)}`;
+
+    if (mapType === "player") {
+      selectedPlayerLat = newLat;
+      selectedPlayerLng = newLng;
+    } else {
+      selectedEventLat = newLat;
+      selectedEventLng = newLng;
+    }
+
+    infoWindow.setContent(`
+            <div style="padding: 8px;">
+                <strong>📍 Selected Location</strong><br>
+                <span style="font-size: 12px; color: #666;">
+                    <b style="color: #1a2a33;">${newLat.toFixed(6)}, ${newLng.toFixed(6)}</b>
+                </span>
+            </div>
+        `);
+    infoWindow.open(map, marker);
+  });
+
+  return marker;
+}
 
 // ===== Main App =====
 const app = {
@@ -48,104 +281,104 @@ const app = {
     const modal = document.createElement("div");
     modal.id = "custom-modal";
     modal.style.cssText = `
-      position: fixed;
-      top: 0;
-      left: 0;
-      width: 100%;
-      height: 100%;
-      background: rgba(0, 0, 0, 0.55);
-      backdrop-filter: blur(4px);
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      z-index: 9999;
-      padding: 20px;
-      animation: customFadeIn 0.3s ease;
-    `;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.55);
+            backdrop-filter: blur(4px);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 9999;
+            padding: 20px;
+            animation: customFadeIn 0.3s ease;
+        `;
 
     modal.innerHTML = `
-      <div style="
-        background: #ffffff;
-        border-radius: 16px;
-        padding: 32px 40px;
-        max-width: 440px;
-        width: 100%;
-        box-shadow: 0 20px 60px rgba(0,0,0,0.3);
-        text-align: center;
-        animation: customSlideUp 0.35s ease;
-        position: relative;
-        max-height: 90vh;
-        overflow-y: auto;
-      ">
-        <button class="custom-modal-close" style="
-          position: absolute;
-          top: 12px;
-          right: 16px;
-          background: none;
-          border: none;
-          font-size: 28px;
-          color: #999;
-          cursor: pointer;
-          transition: color 0.2s;
-          line-height: 1;
-          padding: 4px 8px;
-          border-radius: 50%;
-        " onmouseover="this.style.color='#333'" onmouseout="this.style.color='#999'">×</button>
+            <div style="
+                background: #ffffff;
+                border-radius: 16px;
+                padding: 32px 40px;
+                max-width: 440px;
+                width: 100%;
+                box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+                text-align: center;
+                animation: customSlideUp 0.35s ease;
+                position: relative;
+                max-height: 90vh;
+                overflow-y: auto;
+            ">
+                <button class="custom-modal-close" style="
+                    position: absolute;
+                    top: 12px;
+                    right: 16px;
+                    background: none;
+                    border: none;
+                    font-size: 28px;
+                    color: #999;
+                    cursor: pointer;
+                    transition: color 0.2s;
+                    line-height: 1;
+                    padding: 4px 8px;
+                    border-radius: 50%;
+                " onmouseover="this.style.color='#333'" onmouseout="this.style.color='#999'">×</button>
 
-        <div style="
-          font-size: 48px;
-          margin-bottom: 8px;
-          animation: customPulse 0.8s ease 0.3s;
-          color: ${iconColor};
-        ">${icon}</div>
+                <div style="
+                    font-size: 48px;
+                    margin-bottom: 8px;
+                    animation: customPulse 0.8s ease 0.3s;
+                    color: ${iconColor};
+                ">${icon}</div>
 
-        <div style="
-          font-size: 22px;
-          font-weight: 700;
-          color: #1a2a33;
-          margin-bottom: 8px;
-          letter-spacing: -0.3px;
-        ">${title}</div>
+                <div style="
+                    font-size: 22px;
+                    font-weight: 700;
+                    color: #1a2a33;
+                    margin-bottom: 8px;
+                    letter-spacing: -0.3px;
+                ">${title}</div>
 
-        <div style="
-          width: 50px;
-          height: 3px;
-          background: ${iconColor};
-          margin: 6px auto 14px;
-          border-radius: 4px;
-        "></div>
+                <div style="
+                    width: 50px;
+                    height: 3px;
+                    background: ${iconColor};
+                    margin: 6px auto 14px;
+                    border-radius: 4px;
+                "></div>
 
-        <div style="
-          font-size: 15px;
-          color: #5b6f82;
-          line-height: 1.6;
-          margin-bottom: ${showButton ? "20px" : "0"};
-          white-space: pre-wrap;
-          word-break: break-word;
-        ">${message}</div>
+                <div style="
+                    font-size: 15px;
+                    color: #5b6f82;
+                    line-height: 1.6;
+                    margin-bottom: ${showButton ? "20px" : "0"};
+                    white-space: pre-wrap;
+                    word-break: break-word;
+                ">${message}</div>
 
-        ${
-          showButton
-            ? `
-          <button class="custom-modal-btn" style="
-            padding: 10px 40px;
-            background: ${iconColor};
-            color: #fff;
-            border: none;
-            border-radius: 8px;
-            font-size: 16px;
-            font-weight: 600;
-            cursor: pointer;
-            transition: background 0.2s, transform 0.1s;
-          " onmouseover="this.style.background='${iconColor}dd'" onmouseout="this.style.background='${iconColor}'" 
-             onmousedown="this.style.transform='scale(0.97)'" onmouseup="this.style.transform='scale(1)'">
-            ${buttonText}
-          </button>
-        `
-            : ""
-        }
-      </div>
-    `;
+                ${
+                  showButton
+                    ? `
+                    <button class="custom-modal-btn" style="
+                        padding: 10px 40px;
+                        background: ${iconColor};
+                        color: #fff;
+                        border: none;
+                        border-radius: 8px;
+                        font-size: 16px;
+                        font-weight: 600;
+                        cursor: pointer;
+                        transition: background 0.2s, transform 0.1s;
+                    " onmouseover="this.style.background='${iconColor}dd'" onmouseout="this.style.background='${iconColor}'" 
+                       onmousedown="this.style.transform='scale(0.97)'" onmouseup="this.style.transform='scale(1)'">
+                        ${buttonText}
+                    </button>
+                `
+                    : ""
+                }
+            </div>
+        `;
 
     const styleId = "custom-modal-styles";
     let style = document.getElementById(styleId);
@@ -153,35 +386,35 @@ const app = {
       style = document.createElement("style");
       style.id = styleId;
       style.textContent = `
-        @keyframes customFadeIn {
-          from { opacity: 0; }
-          to { opacity: 1; }
-        }
-        @keyframes customSlideUp {
-          from { opacity: 0; transform: translateY(30px) scale(0.95); }
-          to { opacity: 1; transform: translateY(0) scale(1); }
-        }
-        @keyframes customPulse {
-          0% { transform: scale(0.6); opacity: 0; }
-          50% { transform: scale(1.2); }
-          100% { transform: scale(1); opacity: 1; }
-        }
-        @media (max-width: 480px) {
-          #custom-modal > div {
-            padding: 24px 20px !important;
-          }
-          #custom-modal .custom-modal-close {
-            font-size: 24px !important;
-            top: 8px !important;
-            right: 12px !important;
-          }
-          #custom-modal .custom-modal-btn {
-            padding: 10px 28px !important;
-            font-size: 15px !important;
-            width: 100%;
-          }
-        }
-      `;
+                @keyframes customFadeIn {
+                    from { opacity: 0; }
+                    to { opacity: 1; }
+                }
+                @keyframes customSlideUp {
+                    from { opacity: 0; transform: translateY(30px) scale(0.95); }
+                    to { opacity: 1; transform: translateY(0) scale(1); }
+                }
+                @keyframes customPulse {
+                    0% { transform: scale(0.6); opacity: 0; }
+                    50% { transform: scale(1.2); }
+                    100% { transform: scale(1); opacity: 1; }
+                }
+                @media (max-width: 480px) {
+                    #custom-modal > div {
+                        padding: 24px 20px !important;
+                    }
+                    #custom-modal .custom-modal-close {
+                        font-size: 24px !important;
+                        top: 8px !important;
+                        right: 12px !important;
+                    }
+                    #custom-modal .custom-modal-btn {
+                        padding: 10px 28px !important;
+                        font-size: 15px !important;
+                        width: 100%;
+                    }
+                }
+            `;
       document.head.appendChild(style);
     }
     document.body.appendChild(modal);
@@ -287,6 +520,25 @@ const app = {
     }
     this.navigate("dashboard");
     this.loadProfile();
+    this.fetchAllEvents();
+  },
+
+  fetchAllEvents() {
+    fetch(`${API_URL}/events/all`)
+      .then((res) => res.json())
+      .then((events) => {
+        this.allEvents = events;
+        this.eventLookup = {};
+        events.forEach((e) => {
+          this.eventLookup[e.code] = e;
+          if (e.codes && e.codes.length > 0) {
+            e.codes.forEach((c) => {
+              this.eventLookup[c] = e;
+            });
+          }
+        });
+      })
+      .catch((err) => console.error("Failed to fetch events for lookup:", err));
   },
 
   navigate(view) {
@@ -335,10 +587,10 @@ const app = {
             tbody += `<td data-label="Codes">${codesDisplay}</td>`;
           }
           tbody += `
-            <td data-label="Name">${e.name}</td>
-            <td data-label="Release">${new Date(e.releaseTime).toLocaleString()}</td>
-            <td data-label="Status">${e.status}</td>
-          </tr>`;
+                        <td data-label="Name">${e.name}</td>
+                        <td data-label="Release">${new Date(e.releaseTime).toLocaleString()}</td>
+                        <td data-label="Status">${e.status}</td>
+                    </tr>`;
         });
         tbody += "</tbody>";
 
@@ -354,6 +606,17 @@ const app = {
       this.showModal({
         title: "Missing Code",
         message: "Please enter an event code.",
+        icon: "❌",
+        iconColor: "#c0392b",
+      });
+      return;
+    }
+
+    const codeRegex = /^[0-9]{2}[A-Z]{3}$/;
+    if (!codeRegex.test(code)) {
+      this.showModal({
+        title: "Invalid Code",
+        message: "Code must be in format: 2 digits + 3 letters (e.g., 12ABC)",
         icon: "❌",
         iconColor: "#c0392b",
       });
@@ -396,8 +659,8 @@ const app = {
         });
 
         this.showModal({
-          title: "Bird Clocked!",
-          message: `${formattedDate}  ${formattedTime}\n${event.name} (ERPC)\nAir Distance: ${data.distance.toFixed(2)} KM\nSpeed: ${data.speed.toFixed(2)} m/min`,
+          title: "✅ Bird Clocked!",
+          message: `${formattedDate}  ${formattedTime}\n📋 ${event.name} (ERPC)\n📏 Air Distance: ${data.distance.toFixed(4)} KM\n⚡ Speed: ${data.speed.toFixed(4)} m/min`,
           icon: "✅",
           iconColor: "#27ae60",
           buttonText: "OK",
@@ -423,8 +686,8 @@ const app = {
     document.getElementById("prof-contact").value =
       this.currentUser.contact || "";
     if (this.currentUser.role === "player") {
-      document.getElementById("prof-lat").value = this.currentUser.lat;
-      document.getElementById("prof-lng").value = this.currentUser.lng;
+      document.getElementById("prof-lat").value = this.currentUser.lat || "";
+      document.getElementById("prof-lng").value = this.currentUser.lng || "";
     }
   },
 
@@ -482,53 +745,57 @@ const app = {
       });
   },
 
-  // ========== RESULTS (with search filter - NO dropdown) ==========
+  // ========== RESULTS ==========
   initResultsView() {
-    fetch(`${API_URL}/events/all`)
-      .then((res) => res.json())
-      .then((events) => {
-        this.allEvents = events;
-        this.eventLookup = {};
+    if (this.allEvents.length === 0) {
+      fetch(`${API_URL}/events/all`)
+        .then((res) => res.json())
+        .then((events) => {
+          this.allEvents = events;
+          this.buildEventLookup(events);
+          this.setupResultsView();
+        })
+        .catch((err) => console.error("Results init error:", err));
+    } else {
+      this.setupResultsView();
+    }
+  },
 
-        events.forEach((e) => {
-          this.eventLookup[e.code] = e;
-          if (e.codes && e.codes.length > 0) {
-            e.codes.forEach((c) => {
-              this.eventLookup[c] = e;
-            });
-          }
+  buildEventLookup(events) {
+    this.eventLookup = {};
+    events.forEach((e) => {
+      this.eventLookup[e.code] = e;
+      if (e.codes && e.codes.length > 0) {
+        e.codes.forEach((c) => {
+          this.eventLookup[c] = e;
         });
+      }
+    });
+  },
 
-        // Create search input if it doesn't exist
-        let searchInput = document.getElementById("result-search-input");
-        if (!searchInput) {
-          const container = document.querySelector("#view-results .card");
-          const header = container.querySelector(".dashboard-header");
-          const searchDiv = document.createElement("div");
-          searchDiv.style.cssText =
-            "margin: 10px 0 15px; display: flex; gap: 10px; flex-wrap: wrap;";
-          searchDiv.innerHTML = `
-            <input id="result-search-input" type="text" class="form-control" style="flex:1; min-width:200px;" placeholder="🔍 Search events by name or code..." oninput="app.filterResults()">
-            <button class="btn btn-secondary" onclick="document.getElementById('result-search-input').value=''; app.filterResults();">✕ Clear</button>
-          `;
-          container.insertBefore(searchDiv, header.nextSibling);
-        }
+  setupResultsView() {
+    let searchInput = document.getElementById("result-search-input");
+    if (!searchInput) {
+      const container = document.querySelector("#view-results .card");
+      const header = container.querySelector(".dashboard-header");
+      const searchDiv = document.createElement("div");
+      searchDiv.style.cssText =
+        "margin: 10px 0 15px; display: flex; gap: 10px; flex-wrap: wrap;";
+      searchDiv.innerHTML = `
+                        <input id="result-search-input" type="text" class="form-control" style="flex:1; min-width:200px;" placeholder="🔍 Search events by name or code..." oninput="app.filterResults()">
+                        <button class="btn btn-secondary" onclick="document.getElementById('result-search-input').value=''; app.filterResults();">✕ Clear</button>
+                    `;
+      container.insertBefore(searchDiv, header.nextSibling);
+    }
 
-        // Remove the dropdown if it exists
-        const select = document.getElementById("result-event-filter");
-        if (select) select.style.display = "none";
-
-        document.getElementById("event-release-info").innerHTML = "";
-        // Auto-select first event if available
-        if (events.length > 0) {
-          this.selectedEventCode = events[0].code;
-          this.renderResults();
-        } else {
-          this.selectedEventCode = null;
-          this.renderResults();
-        }
-      })
-      .catch((err) => console.error("Results init error:", err));
+    document.getElementById("event-release-info").innerHTML = "";
+    if (this.allEvents.length > 0) {
+      this.selectedEventCode = this.allEvents[0].code;
+      this.renderResults();
+    } else {
+      this.selectedEventCode = null;
+      this.renderResults();
+    }
   },
 
   filterResults() {
@@ -536,7 +803,6 @@ const app = {
       .getElementById("result-search-input")
       .value.toLowerCase()
       .trim();
-
     const filteredEvents = this.allEvents.filter((e) => {
       const nameMatch = e.name.toLowerCase().includes(searchTerm);
       const codeMatch = e.code.toLowerCase().includes(searchTerm);
@@ -545,13 +811,11 @@ const app = {
       return nameMatch || codeMatch || codesMatch;
     });
 
-    // Auto-select first filtered event
     if (filteredEvents.length > 0) {
       this.selectedEventCode = filteredEvents[0].code;
     } else {
       this.selectedEventCode = null;
     }
-
     this.renderResults();
   },
 
@@ -569,11 +833,12 @@ const app = {
     const event = this.eventLookup[this.selectedEventCode];
     if (event) {
       releaseInfoDiv.innerHTML = `
-        <div style="text-align:center; margin-bottom: 10px;">
-          <div style="font-size: 20px; font-weight: 700; color: #1a2a33;">${event.name}</div>
-          <div style="font-size: 14px; color: #5b6f82; margin-top: 4px;">📅 Release Time: <strong>${new Date(event.releaseTime).toLocaleString()}</strong></div>
-        </div>
-      `;
+                <div style="text-align:center; margin-bottom: 10px;">
+                    <div style="font-size: 20px; font-weight: 700; color: #1a2a33;">${event.name}</div>
+                    <div style="font-size: 14px; color: #5b6f82; margin-top: 4px;">📅 Release Time: <strong>${new Date(event.releaseTime).toLocaleString()}</strong></div>
+                    <div style="font-size: 13px; color: #888; margin-top: 2px;">📍 Release Point: ${event.lat.toFixed(6)}, ${event.lng.toFixed(6)}</div>
+                </div>
+            `;
     } else {
       releaseInfoDiv.innerHTML = "";
     }
@@ -581,18 +846,25 @@ const app = {
     fetch(`${API_URL}/results/${this.selectedEventCode}`)
       .then((res) => res.json())
       .then((results) => {
+        if (results.length === 0) {
+          tbody.innerHTML =
+            '<tr><td colspan="6" style="text-align:center; color:#999; padding:20px;">No results yet for this event.</td></tr>';
+          return;
+        }
         tbody.innerHTML = results
           .map(
             (r, i) => `
-          <tr>
-            <td data-label="Rank">${i === 0 ? "🥇" : i === 1 ? "🥈" : i === 2 ? "🥉" : i + 1}</td>
-            <td data-label="Player">${r.userName}</td>
-            <td data-label="Air Dist">${r.distanceKm} km</td>
-            <td data-label="Arr">${new Date(r.arrivalTime).toLocaleTimeString()}</td>
-            <td data-label="Flight Hrs">${r.flightTimeHours} hrs</td>
-            <td data-label="Speed m/min" style="color:var(--primary);"><b>${r.speedMPM || (r.speedKPH * 16.6667).toFixed(2)}</b></td>
-          </tr>
-        `,
+                    <tr>
+                        <td data-label="Rank">${i === 0 ? "🥇" : i === 1 ? "🥈" : i === 2 ? "🥉" : i + 1}</td>
+                        <td data-label="Player">${r.userName}</td>
+                        <td data-label="Air Dist">${r.distanceKm} km</td>
+                        <td data-label="Arr">${new Date(r.arrivalTime).toLocaleTimeString()}</td>
+                        <td data-label="Flight Hrs">${r.flightTimeHours} hrs</td>
+                        <td data-label="Speed m/min" style="color:var(--primary); font-weight: 700; font-size: 1.1em;">
+                            ${r.speedMPM.toFixed(4)}
+                        </td>
+                    </tr>
+                `,
           )
           .join("");
       })
@@ -607,10 +879,10 @@ const app = {
         document.getElementById("log-list").innerHTML = logs
           .map(
             (log) => `
-          <li style="padding: 10px; border-bottom: 1px solid #eee;">
-            <small>[${log.time}]</small><br>${log.message}
-          </li>
-        `,
+                        <li style="padding: 10px; border-bottom: 1px solid #eee;">
+                            <small>[${log.time}]</small><br>${log.message}
+                        </li>
+                    `,
           )
           .join("");
       })
@@ -632,9 +904,9 @@ const app = {
           searchDiv.style.cssText =
             "margin: 10px 0 15px; display: flex; gap: 10px; flex-wrap: wrap;";
           searchDiv.innerHTML = `
-            <input id="players-search-input" type="text" class="form-control" style="flex:1; min-width:200px;" placeholder="🔍 Search players by name or ID..." oninput="app.filterPlayers()">
-            <button class="btn btn-secondary" onclick="document.getElementById('players-search-input').value=''; app.filterPlayers();">✕ Clear</button>
-          `;
+                        <input id="players-search-input" type="text" class="form-control" style="flex:1; min-width:200px;" placeholder="🔍 Search players by name or ID..." oninput="app.filterPlayers()">
+                        <button class="btn btn-secondary" onclick="document.getElementById('players-search-input').value=''; app.filterPlayers();">✕ Clear</button>
+                    `;
           container.insertBefore(searchDiv, header.nextSibling);
         }
 
@@ -658,33 +930,68 @@ const app = {
     document.querySelector("#players-table tbody").innerHTML = filtered
       .map(
         (u) => `
-          <tr>
-            <td data-label="ID">${u.id}</td>
-            <td data-label="Name">${u.name}</td>
-            <td data-label="Lat/Lng">${u.lat.toFixed(4)}, ${u.lng.toFixed(4)}</td>
-            <td data-label="Contact">${u.contact}</td>
-            <td data-label="Actions">
-              <button class="btn btn-primary btn-sm" onclick="app.openEditPlayerModal('${u.id}')">✏️ Edit</button>
-              <button class="btn btn-danger btn-sm" onclick="app.deletePlayer('${u.id}')">🗑️ Delete</button>
-            </td>
-          </tr>
-        `,
+                <tr>
+                    <td data-label="ID">${u.id}</td>
+                    <td data-label="Name">${u.name}</td>
+                    <td data-label="Lat/Lng">${u.lat.toFixed(6)}, ${u.lng.toFixed(6)}</td>
+                    <td data-label="Contact">${u.contact}</td>
+                    <td data-label="Actions">
+                        <button class="btn btn-primary btn-sm" onclick="app.openEditPlayerModal('${u.id}')">✏️ Edit</button>
+                        <button class="btn btn-danger btn-sm" onclick="app.deletePlayer('${u.id}')">🗑️ Delete</button>
+                    </td>
+                </tr>
+            `,
       )
       .join("");
   },
 
   savePlayer() {
-    const name = document.getElementById("modal-p-name").value;
-    const contact = document.getElementById("modal-p-contact").value;
-    if (!name || !selectedPlayerLat) {
+    const name = document.getElementById("modal-p-name").value.trim();
+    const contact = document.getElementById("modal-p-contact").value.trim();
+
+    if (!name) {
       this.showModal({
         title: "Incomplete",
-        message: "Name and Map Pin are required.",
+        message: "Player name is required.",
         icon: "❌",
         iconColor: "#c0392b",
       });
       return;
     }
+
+    if (!selectedPlayerLat || !selectedPlayerLng) {
+      this.showModal({
+        title: "Missing Location",
+        message:
+          "Please select a location on the map by clicking or searching.",
+        icon: "❌",
+        iconColor: "#c0392b",
+      });
+      return;
+    }
+
+    if (selectedPlayerLat < -90 || selectedPlayerLat > 90) {
+      this.showModal({
+        title: "Invalid Latitude",
+        message: "Latitude must be between -90 and 90 degrees.",
+        icon: "❌",
+        iconColor: "#c0392b",
+      });
+      return;
+    }
+
+    if (selectedPlayerLng < -180 || selectedPlayerLng > 180) {
+      this.showModal({
+        title: "Invalid Longitude",
+        message: "Longitude must be between -180 and 180 degrees.",
+        icon: "❌",
+        iconColor: "#c0392b",
+      });
+      return;
+    }
+
+    const lat = parseFloat(selectedPlayerLat.toFixed(6));
+    const lng = parseFloat(selectedPlayerLng.toFixed(6));
 
     fetch(`${API_URL}/users/player`, {
       method: "POST",
@@ -692,8 +999,8 @@ const app = {
       body: JSON.stringify({
         name,
         contact,
-        lat: selectedPlayerLat,
-        lng: selectedPlayerLng,
+        lat: lat,
+        lng: lng,
       }),
     })
       .then((res) => res.json())
@@ -701,23 +1008,17 @@ const app = {
         if (data.success) {
           this.closeModal("modal-player");
           this.renderPlayers();
-          selectedPlayerLat = selectedPlayerLng = null;
-          if (playerMarker) {
-            playerMap.removeLayer(playerMarker);
-            playerMarker = null;
-          }
-          document.getElementById("player-coords-text").innerText =
-            "None selected";
+          this.clearPlayerSelection();
           this.showModal({
-            title: "Player Saved",
-            message: `Player Saved: ${data.user.id}`,
+            title: "✅ Player Saved",
+            message: `Player Saved: ${data.user.id}\n📍 ${data.user.lat.toFixed(6)}, ${data.user.lng.toFixed(6)}`,
             icon: "✅",
             iconColor: "#27ae60",
           });
         } else {
           this.showModal({
             title: "Save Failed",
-            message: "Failed to save player.",
+            message: data.error || "Failed to save player.",
             icon: "❌",
             iconColor: "#c0392b",
           });
@@ -731,6 +1032,16 @@ const app = {
           iconColor: "#e67e22",
         });
       });
+  },
+
+  clearPlayerSelection() {
+    selectedPlayerLat = null;
+    selectedPlayerLng = null;
+    if (playerMarker) {
+      playerMarker.setMap(null);
+      playerMarker = null;
+    }
+    document.getElementById("player-coords-text").innerText = "None selected";
   },
 
   openEditPlayerModal(playerId) {
@@ -765,6 +1076,7 @@ const app = {
     const id = document.getElementById("edit-player-id").value;
     const name = document.getElementById("edit-p-name").value.trim();
     const contact = document.getElementById("edit-p-contact").value.trim();
+
     if (!name) {
       this.showModal({
         title: "Incomplete",
@@ -786,7 +1098,7 @@ const app = {
           this.closeModal("modal-edit-player");
           this.renderPlayers();
           this.showModal({
-            title: "Player Updated",
+            title: "✅ Player Updated",
             message: "Player updated successfully!",
             icon: "✅",
             iconColor: "#27ae60",
@@ -850,6 +1162,7 @@ const app = {
       .then((res) => res.json())
       .then((events) => {
         this.allEvents = events;
+        this.buildEventLookup(events);
 
         let searchInput = document.getElementById("events-search-input");
         if (!searchInput) {
@@ -859,9 +1172,9 @@ const app = {
           searchDiv.style.cssText =
             "margin: 10px 0 15px; display: flex; gap: 10px; flex-wrap: wrap;";
           searchDiv.innerHTML = `
-            <input id="events-search-input" type="text" class="form-control" style="flex:1; min-width:200px;" placeholder="🔍 Search events by name or code..." oninput="app.filterEvents()">
-            <button class="btn btn-secondary" onclick="document.getElementById('events-search-input').value=''; app.filterEvents();">✕ Clear</button>
-          `;
+                        <input id="events-search-input" type="text" class="form-control" style="flex:1; min-width:200px;" placeholder="🔍 Search events by name or code..." oninput="app.filterEvents()">
+                        <button class="btn btn-secondary" onclick="document.getElementById('events-search-input').value=''; app.filterEvents();">✕ Clear</button>
+                    `;
           container.insertBefore(searchDiv, header.nextSibling);
         }
 
@@ -886,18 +1199,18 @@ const app = {
     document.querySelector("#admin-events-table tbody").innerHTML = filtered
       .map(
         (e) => `
-          <tr>
-            <td data-label="Codes">${e.codes && e.codes.length ? e.codes.join(", ") : e.code}</td>
-            <td data-label="Name">${e.name}</td>
-            <td data-label="Point">${e.lat.toFixed(4)}, ${e.lng.toFixed(4)}</td>
-            <td data-label="Actions">
-              <button class="btn btn-danger btn-sm" onclick="app.toggleEvent('${e.code}')">
-                ${e.status === "Active" ? "Close" : "Re-open"}
-              </button>
-              <button class="btn btn-danger btn-sm" onclick="app.deleteEvent('${e.code}')">🗑️ Delete</button>
-            </td>
-          </tr>
-        `,
+                <tr>
+                    <td data-label="Codes">${e.codes && e.codes.length ? e.codes.join(", ") : e.code}</td>
+                    <td data-label="Name">${e.name}</td>
+                    <td data-label="Point">${e.lat.toFixed(6)}, ${e.lng.toFixed(6)}</td>
+                    <td data-label="Actions">
+                        <button class="btn btn-danger btn-sm" onclick="app.toggleEvent('${e.code}')">
+                            ${e.status === "Active" ? "🔒 Close" : "🔓 Re-open"}
+                        </button>
+                        <button class="btn btn-danger btn-sm" onclick="app.deleteEvent('${e.code}')">🗑️ Delete</button>
+                    </td>
+                </tr>
+            `,
       )
       .join("");
   },
@@ -912,7 +1225,7 @@ const app = {
           this.renderEvents();
           this.renderDashboard();
           this.showModal({
-            title: "Event Updated",
+            title: "🔄 Event Updated",
             message: `Event status changed to ${data.event.status}.`,
             icon: "🔄",
             iconColor: "#2a7a62",
@@ -986,11 +1299,61 @@ const app = {
       .map((c) => c.toUpperCase())
       .filter((c) => c);
 
-    if (!name || codes.length === 0 || !time || !selectedEventLat) {
+    if (!name) {
       this.showModal({
         title: "Incomplete",
+        message: "Event name is required.",
+        icon: "❌",
+        iconColor: "#c0392b",
+      });
+      return;
+    }
+
+    if (codes.length === 0) {
+      this.showModal({
+        title: "Incomplete",
+        message: "At least one event code is required.",
+        icon: "❌",
+        iconColor: "#c0392b",
+      });
+      return;
+    }
+
+    if (!time) {
+      this.showModal({
+        title: "Incomplete",
+        message: "Release date and time are required.",
+        icon: "❌",
+        iconColor: "#c0392b",
+      });
+      return;
+    }
+
+    if (!selectedEventLat || !selectedEventLng) {
+      this.showModal({
+        title: "Missing Location",
         message:
-          "Name, at least one event code, date/time, and map pin are required.",
+          "Please select a release location on the map by clicking or searching.",
+        icon: "❌",
+        iconColor: "#c0392b",
+      });
+      return;
+    }
+
+    if (selectedEventLat < -90 || selectedEventLat > 90) {
+      this.showModal({
+        title: "Invalid Latitude",
+        message: "Latitude must be between -90 and 90 degrees.",
+        icon: "❌",
+        iconColor: "#c0392b",
+      });
+      return;
+    }
+
+    if (selectedEventLng < -180 || selectedEventLng > 180) {
+      this.showModal({
+        title: "Invalid Longitude",
+        message: "Longitude must be between -180 and 180 degrees.",
         icon: "❌",
         iconColor: "#c0392b",
       });
@@ -1008,6 +1371,21 @@ const app = {
       return;
     }
 
+    const codeRegex = /^[0-9]{2}[A-Z]{3}$/;
+    const invalidCodes = codes.filter((c) => !codeRegex.test(c));
+    if (invalidCodes.length > 0) {
+      this.showModal({
+        title: "Invalid Code Format",
+        message: `Invalid codes: ${invalidCodes.join(", ")}\nUse format: 2 digits + 3 letters (e.g., 12ABC)`,
+        icon: "❌",
+        iconColor: "#c0392b",
+      });
+      return;
+    }
+
+    const lat = parseFloat(selectedEventLat.toFixed(6));
+    const lng = parseFloat(selectedEventLng.toFixed(6));
+
     fetch(`${API_URL}/events`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -1015,8 +1393,8 @@ const app = {
         codes: uniqueCodes,
         name,
         releaseTime: new Date(time).toISOString(),
-        lat: selectedEventLat,
-        lng: selectedEventLng,
+        lat: lat,
+        lng: lng,
       }),
     })
       .then((res) => res.json())
@@ -1025,16 +1403,11 @@ const app = {
           this.closeModal("modal-event");
           this.renderEvents();
           this.renderDashboard();
-          selectedEventLat = selectedEventLng = null;
-          if (eventMarker) {
-            eventMap.removeLayer(eventMarker);
-            eventMarker = null;
-          }
-          document.getElementById("event-coords-text").innerText =
-            "None selected";
+          this.clearEventSelection();
+          this.fetchAllEvents();
           this.showModal({
-            title: "Event Created",
-            message: `Event Created: ${data.event.codes?.join(", ") || data.event.code}`,
+            title: "✅ Event Created",
+            message: `Event Created: ${data.event.codes?.join(", ") || data.event.code}\n📍 ${data.event.lat.toFixed(6)}, ${data.event.lng.toFixed(6)}`,
             icon: "✅",
             iconColor: "#27ae60",
           });
@@ -1057,6 +1430,16 @@ const app = {
       });
   },
 
+  clearEventSelection() {
+    selectedEventLat = null;
+    selectedEventLng = null;
+    if (eventMarker) {
+      eventMarker.setMap(null);
+      eventMarker = null;
+    }
+    document.getElementById("event-coords-text").innerText = "None selected";
+  },
+
   generateEventCodes() {
     fetch(`${API_URL}/events/generate-code?count=3`)
       .then((res) => res.json())
@@ -1066,57 +1449,160 @@ const app = {
         document.getElementById("modal-e-code-2").value = codes[1] || "";
         document.getElementById("modal-e-code-3").value = codes[2] || "";
       })
-      .catch((err) => alert("Error generating codes: " + err.message));
+      .catch((err) => {
+        this.showModal({
+          title: "Error Generating Codes",
+          message: err.message || "Unable to generate codes. Please try again.",
+          icon: "❌",
+          iconColor: "#c0392b",
+        });
+      });
   },
 
-  // ========== MODALS & MAPS ==========
+  // ========== GOOGLE MAPS MODALS (FIXED) ==========
   openPlayerModal() {
-    document.getElementById("modal-player").classList.add("show");
+    const modal = document.getElementById("modal-player");
+    modal.classList.add("show");
+    // Wait for modal to become visible and render
     setTimeout(() => {
       if (!playerMap) {
-        playerMap = L.map("player-map").setView([defaultLat, defaultLng], 14);
-        L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
-          attribution: "© OpenStreetMap",
-        }).addTo(playerMap);
-        playerMap.on("click", function (e) {
-          if (playerMarker) playerMap.removeLayer(playerMarker);
-          playerMarker = L.marker(e.latlng).addTo(playerMap);
-          selectedPlayerLat = e.latlng.lat;
-          selectedPlayerLng = e.latlng.lng;
-          document.getElementById("player-coords-text").innerText =
-            `${selectedPlayerLat.toFixed(5)}, ${selectedPlayerLng.toFixed(5)}`;
-        });
+        playerMap = createGoogleMap(
+          "player-map",
+          "player-search-box",
+          "player-coords-text",
+          "player",
+        );
       } else {
-        playerMap.invalidateSize();
+        // Trigger resize to re-render
+        google.maps.event.trigger(playerMap, "resize");
+        // Also recenter if needed
+        const center = playerMap.getCenter();
+        if (center) playerMap.setCenter(center);
       }
-    }, 300);
+    }, 500); // Increased delay
   },
 
   openEventModal() {
-    document.getElementById("modal-event").classList.add("show");
+    const modal = document.getElementById("modal-event");
+    modal.classList.add("show");
     setTimeout(() => {
       if (!eventMap) {
-        eventMap = L.map("event-map").setView([defaultLat, defaultLng], 8);
-        L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
-          attribution: "© OpenStreetMap",
-        }).addTo(eventMap);
-        eventMap.on("click", function (e) {
-          if (eventMarker) eventMap.removeLayer(eventMarker);
-          eventMarker = L.marker(e.latlng).addTo(eventMap);
-          selectedEventLat = e.latlng.lat;
-          selectedEventLng = e.latlng.lng;
-          document.getElementById("event-coords-text").innerText =
-            `${selectedEventLat.toFixed(5)}, ${selectedEventLng.toFixed(5)}`;
-        });
+        eventMap = createGoogleMap(
+          "event-map",
+          "event-search-box",
+          "event-coords-text",
+          "event",
+        );
       } else {
-        eventMap.invalidateSize();
+        google.maps.event.trigger(eventMap, "resize");
+        const center = eventMap.getCenter();
+        if (center) eventMap.setCenter(center);
       }
       this.generateEventCodes();
-    }, 300);
+    }, 500);
   },
 
   closeModal(id) {
     document.getElementById(id).classList.remove("show");
+  },
+
+  // ========== GET CURRENT LOCATION ==========
+  getCurrentLocation(mapType = "player") {
+    if (!navigator.geolocation) {
+      this.showModal({
+        title: "Location Not Available",
+        message: "Your browser doesn't support geolocation.",
+        icon: "⚠️",
+        iconColor: "#e67e22",
+      });
+      return;
+    }
+
+    this.showModal({
+      title: "📍 Getting Location",
+      message: "Please allow location access when prompted...",
+      icon: "📍",
+      iconColor: "#2a7a62",
+      showButton: false,
+    });
+
+    let locationReceived = false;
+
+    const timeoutId = setTimeout(() => {
+      if (!locationReceived) {
+        document.getElementById("custom-modal")?.remove();
+        this.showModal({
+          title: "Location Timeout",
+          message:
+            "GPS is taking too long. Please select location manually on the map.",
+          icon: "⏱️",
+          iconColor: "#e67e22",
+          buttonText: "OK, I'll select manually",
+        });
+      }
+    }, 15000);
+
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        locationReceived = true;
+        clearTimeout(timeoutId);
+        document.getElementById("custom-modal")?.remove();
+
+        const lat = parseFloat(position.coords.latitude.toFixed(6));
+        const lng = parseFloat(position.coords.longitude.toFixed(6));
+
+        if (lat < -90 || lat > 90 || lng < -180 || lng > 180) {
+          this.showModal({
+            title: "Invalid Location",
+            message: "Received invalid coordinates from GPS.",
+            icon: "❌",
+            iconColor: "#c0392b",
+          });
+          return;
+        }
+
+        const map = mapType === "player" ? playerMap : eventMap;
+        if (map) {
+          map.setCenter({ lat, lng });
+          map.setZoom(18);
+
+          const coordsTextId =
+            mapType === "player" ? "player-coords-text" : "event-coords-text";
+          setMarker(mapType, lat, lng, map, coordsTextId);
+        }
+      },
+      (error) => {
+        locationReceived = true;
+        clearTimeout(timeoutId);
+        document.getElementById("custom-modal")?.remove();
+
+        let message =
+          "Unable to get your location. Please select manually on the map.";
+        if (error.code === 1) {
+          message =
+            "Location access denied. Please allow location access in your browser settings or select manually on the map.";
+        } else if (error.code === 2) {
+          message =
+            "Location unavailable. Please check your GPS signal and try again, or select manually on the map.";
+        } else if (error.code === 3) {
+          message =
+            "Location request timed out. Please try again or select manually on the map.";
+        }
+
+        this.showModal({
+          title: "Location Error",
+          message: message,
+          icon: "❌",
+          iconColor: "#c0392b",
+          buttonText: "OK, I'll select manually",
+        });
+      },
+      {
+        enableHighAccuracy: true,
+        timeout: 15000,
+        maximumAge: 0,
+      },
+    );
   },
 
   togglePasswordVisibility(inputId, toggleElement) {
@@ -1126,20 +1612,7 @@ const app = {
     input.type = isPassword ? "text" : "password";
     toggleElement.innerText = isPassword ? "🙈" : "👁️";
   },
-
-  calculateDistance(lat1, lon1, lat2, lon2) {
-    const R = 6371;
-    const dLat = ((lat2 - lat1) * Math.PI) / 180;
-    const dLon = ((lon2 - lon1) * Math.PI) / 180;
-    const a =
-      Math.sin(dLat / 2) * Math.sin(dLat / 2) +
-      Math.cos((lat1 * Math.PI) / 180) *
-        Math.cos((lat2 * Math.PI) / 180) *
-        Math.sin(dLon / 2) *
-        Math.sin(dLon / 2);
-    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-    return R * c;
-  },
 };
 
+// Initialize app when page loads
 window.onload = () => app.init();

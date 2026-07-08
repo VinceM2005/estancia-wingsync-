@@ -5,11 +5,12 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Estancia Wingsync - Pigeon Clocking System</title>
 
-    <link
-      rel="stylesheet"
-      href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
-    />
-    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <!-- Google Maps API with your key -->
+    <script
+      src="https://maps.googleapis.com/maps/api/js?key=AIzaSyBrEWXV135IN7v1hM6Dwd_ynoKAK5t7TL8&libraries=places&callback=initMaps"
+      async
+      defer
+    ></script>
 
     <link rel="stylesheet" href="style.css" />
   </head>
@@ -49,6 +50,7 @@
         <p id="login-error" style="color: red; margin-top: 10px; display: none">
           Invalid User ID or Password.
         </p>
+        <div style="margin-top: 15px; font-size: 12px; color: #999"></div>
       </div>
     </div>
 
@@ -57,7 +59,7 @@
         <div class="sidebar-header">
           <div class="brand-container">
             <div class="brand-logo">
-              <img src="logo.png" alt="EMARPC Logo" id="club-logo-img" />
+              <img src="logo.png" alt="ERPC Logo" id="club-logo-img" />
               <span class="logo-placeholder-text">🕊️</span>
             </div>
             <div class="brand-text">
@@ -110,12 +112,14 @@
           <div id="view-dashboard" class="view-section">
             <div id="player-clock-in-area" class="card clock-in-box hidden">
               <h2 style="color: var(--primary)">Quick Clock In</h2>
-              <p style="margin-bottom: 20px; color: #666"></p>
+              <p style="margin-bottom: 20px; color: #666">
+                Enter the event code to clock your pigeon's arrival
+              </p>
               <input
                 type="text"
                 id="clock-in-code"
                 class="form-control"
-                placeholder="ENTER EVENT CODE"
+                placeholder="ENTER EVENT CODE "
                 onkeyup="this.value = this.value.toUpperCase()"
               />
               <button
@@ -127,7 +131,7 @@
               </button>
             </div>
             <div class="card">
-              <h3>Current Events</h3>
+              <h3>📋 Current Events</h3>
               <table id="active-events-table">
                 <thead>
                   <tr>
@@ -148,8 +152,8 @@
                 User ID: <span id="prof-id" style="font-weight: bold"></span>
               </p>
               <div class="form-group">
-                <label>Contact</label
-                ><input
+                <label>Contact</label>
+                <input
                   type="text"
                   id="prof-contact"
                   class="form-control"
@@ -157,8 +161,8 @@
                 />
               </div>
               <div class="form-group player-only hidden">
-                <label>Loft Latitude</label
-                ><input
+                <label>Loft Latitude</label>
+                <input
                   type="text"
                   id="prof-lat"
                   class="form-control"
@@ -166,8 +170,8 @@
                 />
               </div>
               <div class="form-group player-only hidden">
-                <label>Loft Longitude</label
-                ><input
+                <label>Loft Longitude</label>
+                <input
                   type="text"
                   id="prof-lng"
                   class="form-control"
@@ -196,11 +200,10 @@
             </div>
           </div>
 
-          <!-- ===== EVENT RESULTS (updated - no dropdown) ===== -->
           <div id="view-results" class="view-section hidden">
             <div class="card">
               <div class="dashboard-header">
-                <h2>Leaderboard</h2>
+                <h2>🏆 Leaderboard</h2>
               </div>
               <div
                 id="event-release-info"
@@ -211,7 +214,6 @@
                   color: var(--primary);
                 "
               ></div>
-              <p style="font-size: 0.9em; color: #666; margin-bottom: 15px"></p>
               <table id="results-table">
                 <thead>
                   <tr>
@@ -230,7 +232,7 @@
 
           <div id="view-logs" class="view-section hidden">
             <div class="card">
-              <h2>Logs</h2>
+              <h2>📝 Logs</h2>
               <ul
                 id="log-list"
                 style="max-height: 400px; overflow-y: auto"
@@ -241,7 +243,7 @@
           <div id="view-admin-players" class="view-section hidden admin-only">
             <div class="card">
               <div class="dashboard-header">
-                <h2>Manage Players</h2>
+                <h2>👥 Manage Players</h2>
                 <button class="btn btn-primary" onclick="app.openPlayerModal()">
                   + Add New Player
                 </button>
@@ -264,7 +266,7 @@
           <div id="view-admin-events" class="view-section hidden admin-only">
             <div class="card">
               <div class="dashboard-header">
-                <h2>Manage Events</h2>
+                <h2>📅 Manage Events</h2>
                 <button class="btn btn-primary" onclick="app.openEventModal()">
                   + Create Event
                 </button>
@@ -286,17 +288,18 @@
       </main>
     </div>
 
+    <!-- Player Modal -->
     <div id="modal-player" class="modal-overlay">
       <div class="modal-content">
         <div class="modal-header">
-          <h3>Add Player (Pinpoint Loft)</h3>
+          <h3>📍 Add Player (Pinpoint Loft)</h3>
           <button class="close-modal" onclick="app.closeModal('modal-player')">
             ×
           </button>
         </div>
         <div class="form-group">
-          <label>Full Name</label
-          ><input
+          <label>Full Name</label>
+          <input
             type="text"
             id="modal-p-name"
             class="form-control"
@@ -304,8 +307,8 @@
           />
         </div>
         <div class="form-group">
-          <label>Contact Number</label
-          ><input
+          <label>Contact Number</label>
+          <input
             type="text"
             id="modal-p-contact"
             class="form-control"
@@ -313,34 +316,72 @@
           />
         </div>
         <div class="form-group">
+          <label>🔍 Search Location</label>
+          <input
+            type="text"
+            id="player-search-box"
+            class="form-control"
+            placeholder="Search for a location..."
+          />
+          <small style="display: block; margin-top: 4px; color: #666"
+            >Type an address or landmark, then select from dropdown</small
+          >
+        </div>
+        <div class="form-group">
           <label>Pinpoint Player's Loft on Map</label>
           <div id="player-map" class="map-container"></div>
           <small
-            >Coordinates:
+            >📍 Coordinates:
             <span id="player-coords-text">None selected</span></small
           >
+          <div
+            style="display: flex; gap: 8px; margin-top: 6px; flex-wrap: wrap"
+          >
+            <button
+              class="btn btn-sm btn-primary"
+              onclick="app.getCurrentLocation('player')"
+              style="font-size: 11px"
+            >
+              📍 Use My Location
+            </button>
+            <small
+              style="
+                color: #888;
+                font-size: 11px;
+                display: flex;
+                align-items: center;
+              "
+              >Click map to set exact point • Drag marker to adjust</small
+            >
+          </div>
         </div>
         <button
           class="btn btn-success"
           style="width: 100%"
           onclick="app.savePlayer()"
         >
-          Save Player
+          💾 Save Player
         </button>
       </div>
     </div>
 
+    <!-- Event Modal -->
     <div id="modal-event" class="modal-overlay">
       <div class="modal-content">
         <div class="modal-header">
-          <h3>Create Event (Pinpoint Release)</h3>
+          <h3>📍 Create Event (Pinpoint Release)</h3>
           <button class="close-modal" onclick="app.closeModal('modal-event')">
             ×
           </button>
         </div>
         <div class="form-group">
-          <label>Event Name</label
-          ><input type="text" id="modal-e-name" class="form-control" />
+          <label>Event Name</label>
+          <input
+            type="text"
+            id="modal-e-name"
+            class="form-control"
+            placeholder="e.g., Estancia Cup 2026"
+          />
         </div>
         <div class="form-group">
           <label>Event Codes</label>
@@ -349,21 +390,21 @@
               type="text"
               id="modal-e-code-1"
               class="form-control"
-              placeholder="Code 1"
+              placeholder="Code 1 (e.g., 12ABC)"
               onkeyup="this.value = this.value.toUpperCase()"
             />
             <input
               type="text"
               id="modal-e-code-2"
               class="form-control"
-              placeholder="Code 2"
+              placeholder="Code 2 (e.g., 34DEF)"
               onkeyup="this.value = this.value.toUpperCase()"
             />
             <input
               type="text"
               id="modal-e-code-3"
               class="form-control"
-              placeholder="Code 3"
+              placeholder="Code 3 (e.g., 56GHI)"
               onkeyup="this.value = this.value.toUpperCase()"
             />
           </div>
@@ -373,40 +414,71 @@
             style="margin-top: 10px"
             onclick="app.generateEventCodes()"
           >
-            Generate Codes
+            🎲 Generate Codes
           </button>
-          <small style="display: block; margin-top: 8px; color: #666"> </small>
+          <small style="display: block; margin-top: 8px; color: #666"
+            >Format: 2 digits + 3 letters (e.g., 12ABC)</small
+          >
         </div>
         <div class="form-group">
-          <label>Release Date & Time</label
-          ><input
-            type="datetime-local"
-            id="modal-e-time"
+          <label>Release Date & Time</label>
+          <input type="datetime-local" id="modal-e-time" class="form-control" />
+        </div>
+        <div class="form-group">
+          <label>🔍 Search Location</label>
+          <input
+            type="text"
+            id="event-search-box"
             class="form-control"
+            placeholder="Search for a location..."
           />
+          <small style="display: block; margin-top: 4px; color: #666"
+            >Type an address or landmark, then select from dropdown</small
+          >
         </div>
         <div class="form-group">
           <label>Pinpoint Release Location on Map</label>
           <div id="event-map" class="map-container"></div>
           <small
-            >Coordinates:
+            >📍 Coordinates:
             <span id="event-coords-text">None selected</span></small
           >
+          <div
+            style="display: flex; gap: 8px; margin-top: 6px; flex-wrap: wrap"
+          >
+            <button
+              class="btn btn-sm btn-primary"
+              onclick="app.getCurrentLocation('event')"
+              style="font-size: 11px"
+            >
+              📍 Use My Location
+            </button>
+            <small
+              style="
+                color: #888;
+                font-size: 11px;
+                display: flex;
+                align-items: center;
+              "
+              >Click map to set exact point • Drag marker to adjust</small
+            >
+          </div>
         </div>
         <button
           class="btn btn-success"
           style="width: 100%"
           onclick="app.saveEvent()"
         >
-          Create Event
+          💾 Create Event
         </button>
       </div>
     </div>
 
+    <!-- Edit Player Modal -->
     <div id="modal-edit-player" class="modal-overlay">
       <div class="modal-content">
         <div class="modal-header">
-          <h3>Edit Player</h3>
+          <h3>✏️ Edit Player</h3>
           <button
             class="close-modal"
             onclick="app.closeModal('modal-edit-player')"
@@ -438,7 +510,7 @@
           style="width: 100%"
           onclick="app.saveEditPlayer()"
         >
-          Update Player
+          💾 Update Player
         </button>
       </div>
     </div>
