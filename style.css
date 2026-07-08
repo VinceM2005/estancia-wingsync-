@@ -649,3 +649,20 @@ tr:last-child td {
     max-width: 100%;
   }
 }
+
+/* ===== SEARCH INPUTS ===== */
+#result-search-input,
+#players-search-input,
+#events-search-input {
+  border-radius: 20px !important;
+  padding: 10px 18px !important;
+  border: 2px solid #e9edf2 !important;
+  transition: border-color 0.2s !important;
+}
+
+#result-search-input:focus,
+#players-search-input:focus,
+#events-search-input:focus {
+  border-color: var(--primary) !important;
+  box-shadow: 0 0 0 3px rgba(42, 122, 98, 0.12) !important;
+}

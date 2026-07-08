@@ -126,6 +126,11 @@ function generateRandomCode() {
   return digits + letters;
 }
 
+// ===== NEW: Code format validation =====
+function validateCodeFormat(code) {
+  return /^[0-9]{2}[A-Z]{3}$/.test(code);
+}
+
 async function codeExists(code) {
   return await Event.findOne({
     $or: [{ code }, { codes: code }],
@@ -135,19 +140,23 @@ async function codeExists(code) {
 async function getUniqueEventCode() {
   let code;
   let exists = true;
-  while (exists) {
+  let attempts = 0;
+  while (exists && attempts < 100) {
     code = generateRandomCode();
     const existing = await codeExists(code);
     if (!existing) exists = false;
+    attempts++;
   }
   return code;
 }
 
 async function getUniqueEventCodes(count = 3) {
   const codes = [];
-  while (codes.length < count) {
+  let attempts = 0;
+  while (codes.length < count && attempts < 100) {
     const code = await getUniqueEventCode();
     if (!codes.includes(code)) codes.push(code);
+    attempts++;
   }
   return codes;
 }
@@ -336,28 +345,43 @@ app.delete("/api/events/:code", async (req, res) => {
 app.post("/api/events", async (req, res) => {
   let { codes, name, releaseTime, lat, lng } = req.body;
 
-  if (!Array.isArray(codes) || codes.length === 0) {
+  // Ensure codes is an array
+  if (!Array.isArray(codes)) {
+    codes = codes ? [codes] : [];
+  }
+
+  // Remove empty and trim
+  codes = codes.map((code) => code.trim().toUpperCase()).filter(Boolean);
+
+  // If no codes provided, generate 3 unique ones
+  if (codes.length === 0) {
     codes = await getUniqueEventCodes(3);
   }
 
-  codes = codes.map((code) => code.trim().toUpperCase()).filter(Boolean);
-  if (codes.length === 0)
-    return res
-      .status(400)
-      .json({ error: "At least one event code is required" });
+  // ===== NEW: Validate all codes are in correct format (NNLLL) =====
+  const invalidCodes = codes.filter((c) => !validateCodeFormat(c));
+  if (invalidCodes.length > 0) {
+    return res.status(400).json({
+      error: `Invalid code format: ${invalidCodes.join(
+        ", ",
+      )}. Use format: 2 digits + 3 letters (e.g., 12ABC)`,
+    });
+  }
 
   const uniqueCodes = [...new Set(codes)];
-  if (uniqueCodes.length !== codes.length)
+  if (uniqueCodes.length !== codes.length) {
     return res
       .status(400)
       .json({ error: "Duplicate event codes are not allowed" });
+  }
 
   for (const code of codes) {
     const existing = await codeExists(code);
-    if (existing)
+    if (existing) {
       return res
         .status(400)
         .json({ error: `Event code already exists: ${code}` });
+    }
   }
 
   const event = await Event.create({

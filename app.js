@@ -16,7 +16,11 @@ const defaultLng = 123.635;
 // ===== Main App =====
 const app = {
   currentUser: null,
-  eventLookup: {}, // Stores event details keyed by code for quick lookup
+  eventLookup: {},
+  allEvents: [],
+  allPlayers: [],
+  allResults: {},
+  selectedEventCode: null,
 
   init() {
     const sessionStr = sessionStorage.getItem("wingsync_user");
@@ -26,10 +30,202 @@ const app = {
     }
   },
 
+  // ========== CUSTOM MODAL SYSTEM ==========
+  showModal(options) {
+    const existingModal = document.getElementById("custom-modal");
+    if (existingModal) existingModal.remove();
+
+    const {
+      title = "Notification",
+      message = "",
+      icon = "ℹ️",
+      iconColor = "#2a7a62",
+      buttonText = "OK",
+      onClose = null,
+      showButton = true,
+    } = options;
+
+    const modal = document.createElement("div");
+    modal.id = "custom-modal";
+    modal.style.cssText = `
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: rgba(0, 0, 0, 0.55);
+      backdrop-filter: blur(4px);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 9999;
+      padding: 20px;
+      animation: customFadeIn 0.3s ease;
+    `;
+
+    modal.innerHTML = `
+      <div style="
+        background: #ffffff;
+        border-radius: 16px;
+        padding: 32px 40px;
+        max-width: 440px;
+        width: 100%;
+        box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+        text-align: center;
+        animation: customSlideUp 0.35s ease;
+        position: relative;
+        max-height: 90vh;
+        overflow-y: auto;
+      ">
+        <button class="custom-modal-close" style="
+          position: absolute;
+          top: 12px;
+          right: 16px;
+          background: none;
+          border: none;
+          font-size: 28px;
+          color: #999;
+          cursor: pointer;
+          transition: color 0.2s;
+          line-height: 1;
+          padding: 4px 8px;
+          border-radius: 50%;
+        " onmouseover="this.style.color='#333'" onmouseout="this.style.color='#999'">×</button>
+
+        <div style="
+          font-size: 48px;
+          margin-bottom: 8px;
+          animation: customPulse 0.8s ease 0.3s;
+          color: ${iconColor};
+        ">${icon}</div>
+
+        <div style="
+          font-size: 22px;
+          font-weight: 700;
+          color: #1a2a33;
+          margin-bottom: 8px;
+          letter-spacing: -0.3px;
+        ">${title}</div>
+
+        <div style="
+          width: 50px;
+          height: 3px;
+          background: ${iconColor};
+          margin: 6px auto 14px;
+          border-radius: 4px;
+        "></div>
+
+        <div style="
+          font-size: 15px;
+          color: #5b6f82;
+          line-height: 1.6;
+          margin-bottom: ${showButton ? "20px" : "0"};
+          white-space: pre-wrap;
+          word-break: break-word;
+        ">${message}</div>
+
+        ${
+          showButton
+            ? `
+          <button class="custom-modal-btn" style="
+            padding: 10px 40px;
+            background: ${iconColor};
+            color: #fff;
+            border: none;
+            border-radius: 8px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: background 0.2s, transform 0.1s;
+          " onmouseover="this.style.background='${iconColor}dd'" onmouseout="this.style.background='${iconColor}'" 
+             onmousedown="this.style.transform='scale(0.97)'" onmouseup="this.style.transform='scale(1)'">
+            ${buttonText}
+          </button>
+        `
+            : ""
+        }
+      </div>
+    `;
+
+    const styleId = "custom-modal-styles";
+    let style = document.getElementById(styleId);
+    if (!style) {
+      style = document.createElement("style");
+      style.id = styleId;
+      style.textContent = `
+        @keyframes customFadeIn {
+          from { opacity: 0; }
+          to { opacity: 1; }
+        }
+        @keyframes customSlideUp {
+          from { opacity: 0; transform: translateY(30px) scale(0.95); }
+          to { opacity: 1; transform: translateY(0) scale(1); }
+        }
+        @keyframes customPulse {
+          0% { transform: scale(0.6); opacity: 0; }
+          50% { transform: scale(1.2); }
+          100% { transform: scale(1); opacity: 1; }
+        }
+        @media (max-width: 480px) {
+          #custom-modal > div {
+            padding: 24px 20px !important;
+          }
+          #custom-modal .custom-modal-close {
+            font-size: 24px !important;
+            top: 8px !important;
+            right: 12px !important;
+          }
+          #custom-modal .custom-modal-btn {
+            padding: 10px 28px !important;
+            font-size: 15px !important;
+            width: 100%;
+          }
+        }
+      `;
+      document.head.appendChild(style);
+    }
+    document.body.appendChild(modal);
+
+    modal.addEventListener("click", function (e) {
+      if (e.target === this) {
+        this.remove();
+        if (onClose) onClose();
+      }
+    });
+
+    const closeBtn = modal.querySelector(".custom-modal-close");
+    if (closeBtn) {
+      closeBtn.addEventListener("click", function () {
+        modal.remove();
+        if (onClose) onClose();
+      });
+    }
+
+    const btn = modal.querySelector(".custom-modal-btn");
+    if (btn) {
+      btn.addEventListener("click", function () {
+        modal.remove();
+        if (onClose) onClose();
+      });
+    }
+
+    return modal;
+  },
+
   // ========== AUTH ==========
   login() {
     const id = document.getElementById("login-id").value;
     const pass = document.getElementById("login-pass").value;
+
+    if (!id || !pass) {
+      this.showModal({
+        title: "Login Error",
+        message: "Please enter both User ID and Password.",
+        icon: "❌",
+        iconColor: "#c0392b",
+      });
+      return;
+    }
 
     fetch(`${API_URL}/login`, {
       method: "POST",
@@ -44,10 +240,23 @@ const app = {
           document.getElementById("login-error").style.display = "none";
           this.showApp();
         } else {
-          document.getElementById("login-error").style.display = "block";
+          this.showModal({
+            title: "Login Failed",
+            message: "Invalid User ID or Password. Please try again.",
+            icon: "❌",
+            iconColor: "#c0392b",
+          });
         }
       })
-      .catch((err) => alert("Login error: " + err.message));
+      .catch(() => {
+        this.showModal({
+          title: "Connection Error",
+          message:
+            "Unable to connect to the server. Please check your internet connection.",
+          icon: "⚠️",
+          iconColor: "#e67e22",
+        });
+      });
   },
 
   logout() {
@@ -102,7 +311,7 @@ const app = {
     document.getElementById("sidebar").classList.toggle("open");
   },
 
-  // ========== DASHBOARD (hides Code column for players) ==========
+  // ========== DASHBOARD ==========
   renderDashboard() {
     fetch(`${API_URL}/events/active`)
       .then((res) => res.json())
@@ -141,7 +350,15 @@ const app = {
   // ========== CLOCK IN ==========
   clockIn() {
     const code = document.getElementById("clock-in-code").value.trim();
-    if (!code) return alert("Please enter an event code.");
+    if (!code) {
+      this.showModal({
+        title: "Missing Code",
+        message: "Please enter an event code.",
+        icon: "❌",
+        iconColor: "#c0392b",
+      });
+      return;
+    }
 
     fetch(`${API_URL}/clockin`, {
       method: "POST",
@@ -154,14 +371,49 @@ const app = {
     })
       .then((res) => res.json())
       .then((data) => {
-        if (data.error) return alert(data.error);
-        alert(
-          `Bird Clocked!\nAir Distance: ${data.distance.toFixed(2)} km\nSpeed: ${data.speed} m/min`,
-        );
+        if (data.error) {
+          this.showModal({
+            title: "Clock In Failed",
+            message: data.error,
+            icon: "❌",
+            iconColor: "#c0392b",
+          });
+          return;
+        }
+
+        const event = this.eventLookup[code] || { name: "Unknown Event" };
+        const now = new Date();
+        const formattedDate = now.toLocaleDateString("en-US", {
+          year: "numeric",
+          month: "2-digit",
+          day: "2-digit",
+        });
+        const formattedTime = now.toLocaleTimeString("en-US", {
+          hour: "2-digit",
+          minute: "2-digit",
+          second: "2-digit",
+          hour12: true,
+        });
+
+        this.showModal({
+          title: "Bird Clocked!",
+          message: `${formattedDate}  ${formattedTime}\n${event.name} (ERPC)\nAir Distance: ${data.distance.toFixed(2)} KM\nSpeed: ${data.speed.toFixed(2)} m/min`,
+          icon: "✅",
+          iconColor: "#27ae60",
+          buttonText: "OK",
+        });
+
         document.getElementById("clock-in-code").value = "";
         this.renderDashboard();
       })
-      .catch((err) => alert("Clock‑in error: " + err.message));
+      .catch((err) => {
+        this.showModal({
+          title: "Connection Error",
+          message: "Unable to connect to the server. Please try again.",
+          icon: "⚠️",
+          iconColor: "#e67e22",
+        });
+      });
   },
 
   // ========== PROFILE ==========
@@ -178,7 +430,16 @@ const app = {
 
   changePassword() {
     const newPass = document.getElementById("new-password").value;
-    if (newPass.length < 5) return alert("Password too short!");
+    if (newPass.length < 5) {
+      this.showModal({
+        title: "Password Error",
+        message: "Password must be at least 5 characters long.",
+        icon: "❌",
+        iconColor: "#c0392b",
+      });
+      return;
+    }
+
     fetch(`${API_URL}/users/update-password`, {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
@@ -190,66 +451,136 @@ const app = {
       .then((res) => res.json())
       .then((data) => {
         if (data.success) {
-          alert("Password updated.");
           this.currentUser.password = newPass;
           sessionStorage.setItem(
             "wingsync_user",
             JSON.stringify(this.currentUser),
           );
           document.getElementById("new-password").value = "";
+          this.showModal({
+            title: "Password Updated",
+            message: "Your password has been changed successfully.",
+            icon: "✅",
+            iconColor: "#27ae60",
+          });
         } else {
-          alert("Failed to update password.");
+          this.showModal({
+            title: "Update Failed",
+            message: "Failed to update password. Please try again.",
+            icon: "❌",
+            iconColor: "#c0392b",
+          });
         }
       })
-      .catch((err) => alert("Error: " + err.message));
+      .catch(() => {
+        this.showModal({
+          title: "Connection Error",
+          message: "Unable to connect to the server.",
+          icon: "⚠️",
+          iconColor: "#e67e22",
+        });
+      });
   },
 
-  // ========== RESULTS (now shows release time) ==========
+  // ========== RESULTS (with search filter - NO dropdown) ==========
   initResultsView() {
     fetch(`${API_URL}/events/all`)
       .then((res) => res.json())
       .then((events) => {
-        // Build lookup and populate dropdown
+        this.allEvents = events;
         this.eventLookup = {};
-        const select = document.getElementById("result-event-filter");
-        select.innerHTML = '<option value="">Select Event...</option>';
+
         events.forEach((e) => {
           this.eventLookup[e.code] = e;
-          select.innerHTML += `<option value="${e.code}">${e.name}</option>`;
+          if (e.codes && e.codes.length > 0) {
+            e.codes.forEach((c) => {
+              this.eventLookup[c] = e;
+            });
+          }
         });
-        // Clear any previous release info
+
+        // Create search input if it doesn't exist
+        let searchInput = document.getElementById("result-search-input");
+        if (!searchInput) {
+          const container = document.querySelector("#view-results .card");
+          const header = container.querySelector(".dashboard-header");
+          const searchDiv = document.createElement("div");
+          searchDiv.style.cssText =
+            "margin: 10px 0 15px; display: flex; gap: 10px; flex-wrap: wrap;";
+          searchDiv.innerHTML = `
+            <input id="result-search-input" type="text" class="form-control" style="flex:1; min-width:200px;" placeholder="🔍 Search events by name or code..." oninput="app.filterResults()">
+            <button class="btn btn-secondary" onclick="document.getElementById('result-search-input').value=''; app.filterResults();">✕ Clear</button>
+          `;
+          container.insertBefore(searchDiv, header.nextSibling);
+        }
+
+        // Remove the dropdown if it exists
+        const select = document.getElementById("result-event-filter");
+        if (select) select.style.display = "none";
+
         document.getElementById("event-release-info").innerHTML = "";
-        // If an event was previously selected, re-render
-        if (select.value) {
+        // Auto-select first event if available
+        if (events.length > 0) {
+          this.selectedEventCode = events[0].code;
+          this.renderResults();
+        } else {
+          this.selectedEventCode = null;
           this.renderResults();
         }
       })
       .catch((err) => console.error("Results init error:", err));
   },
 
-  renderResults() {
-    const eventCode = document.getElementById("result-event-filter").value;
-    const releaseInfoDiv = document.getElementById("event-release-info");
+  filterResults() {
+    const searchTerm = document
+      .getElementById("result-search-input")
+      .value.toLowerCase()
+      .trim();
 
-    if (!eventCode) {
-      document.querySelector("#results-table tbody").innerHTML = "";
-      releaseInfoDiv.innerHTML = "";
+    const filteredEvents = this.allEvents.filter((e) => {
+      const nameMatch = e.name.toLowerCase().includes(searchTerm);
+      const codeMatch = e.code.toLowerCase().includes(searchTerm);
+      const codesMatch =
+        e.codes && e.codes.some((c) => c.toLowerCase().includes(searchTerm));
+      return nameMatch || codeMatch || codesMatch;
+    });
+
+    // Auto-select first filtered event
+    if (filteredEvents.length > 0) {
+      this.selectedEventCode = filteredEvents[0].code;
+    } else {
+      this.selectedEventCode = null;
+    }
+
+    this.renderResults();
+  },
+
+  renderResults() {
+    const releaseInfoDiv = document.getElementById("event-release-info");
+    const tbody = document.querySelector("#results-table tbody");
+
+    if (!this.selectedEventCode) {
+      tbody.innerHTML = "";
+      releaseInfoDiv.innerHTML =
+        '<p style="text-align:center; color:#999; padding:20px;">No events found. Create an event to see results.</p>';
       return;
     }
 
-    // Show release time for the selected event
-    const event = this.eventLookup[eventCode];
+    const event = this.eventLookup[this.selectedEventCode];
     if (event) {
-      const releaseTimeFormatted = new Date(event.releaseTime).toLocaleString();
-      releaseInfoDiv.innerHTML = `📅 Release Time: <strong>${releaseTimeFormatted}</strong>`;
+      releaseInfoDiv.innerHTML = `
+        <div style="text-align:center; margin-bottom: 10px;">
+          <div style="font-size: 20px; font-weight: 700; color: #1a2a33;">${event.name}</div>
+          <div style="font-size: 14px; color: #5b6f82; margin-top: 4px;">📅 Release Time: <strong>${new Date(event.releaseTime).toLocaleString()}</strong></div>
+        </div>
+      `;
     } else {
       releaseInfoDiv.innerHTML = "";
     }
 
-    fetch(`${API_URL}/results/${eventCode}`)
+    fetch(`${API_URL}/results/${this.selectedEventCode}`)
       .then((res) => res.json())
       .then((results) => {
-        const tbody = document.querySelector("#results-table tbody");
         tbody.innerHTML = results
           .map(
             (r, i) => `
@@ -291,9 +622,42 @@ const app = {
     fetch(`${API_URL}/users/players`)
       .then((res) => res.json())
       .then((users) => {
-        document.querySelector("#players-table tbody").innerHTML = users
-          .map(
-            (u) => `
+        this.allPlayers = users;
+
+        let searchInput = document.getElementById("players-search-input");
+        if (!searchInput) {
+          const container = document.querySelector("#view-admin-players .card");
+          const header = container.querySelector(".dashboard-header");
+          const searchDiv = document.createElement("div");
+          searchDiv.style.cssText =
+            "margin: 10px 0 15px; display: flex; gap: 10px; flex-wrap: wrap;";
+          searchDiv.innerHTML = `
+            <input id="players-search-input" type="text" class="form-control" style="flex:1; min-width:200px;" placeholder="🔍 Search players by name or ID..." oninput="app.filterPlayers()">
+            <button class="btn btn-secondary" onclick="document.getElementById('players-search-input').value=''; app.filterPlayers();">✕ Clear</button>
+          `;
+          container.insertBefore(searchDiv, header.nextSibling);
+        }
+
+        this.filterPlayers();
+      })
+      .catch((err) => console.error("Players error:", err));
+  },
+
+  filterPlayers() {
+    const searchTerm = document
+      .getElementById("players-search-input")
+      .value.toLowerCase()
+      .trim();
+    const filtered = this.allPlayers.filter((u) => {
+      const nameMatch = u.name.toLowerCase().includes(searchTerm);
+      const idMatch = u.id.toLowerCase().includes(searchTerm);
+      const contactMatch = u.contact && u.contact.includes(searchTerm);
+      return nameMatch || idMatch || contactMatch;
+    });
+
+    document.querySelector("#players-table tbody").innerHTML = filtered
+      .map(
+        (u) => `
           <tr>
             <td data-label="ID">${u.id}</td>
             <td data-label="Name">${u.name}</td>
@@ -305,17 +669,22 @@ const app = {
             </td>
           </tr>
         `,
-          )
-          .join("");
-      })
-      .catch((err) => console.error("Players error:", err));
+      )
+      .join("");
   },
 
   savePlayer() {
     const name = document.getElementById("modal-p-name").value;
     const contact = document.getElementById("modal-p-contact").value;
-    if (!name || !selectedPlayerLat)
-      return alert("Name and Map Pin are required.");
+    if (!name || !selectedPlayerLat) {
+      this.showModal({
+        title: "Incomplete",
+        message: "Name and Map Pin are required.",
+        icon: "❌",
+        iconColor: "#c0392b",
+      });
+      return;
+    }
 
     fetch(`${API_URL}/users/player`, {
       method: "POST",
@@ -330,7 +699,6 @@ const app = {
       .then((res) => res.json())
       .then((data) => {
         if (data.success) {
-          alert(`Player Saved: ${data.user.id}`);
           this.closeModal("modal-player");
           this.renderPlayers();
           selectedPlayerLat = selectedPlayerLng = null;
@@ -340,32 +708,72 @@ const app = {
           }
           document.getElementById("player-coords-text").innerText =
             "None selected";
+          this.showModal({
+            title: "Player Saved",
+            message: `Player Saved: ${data.user.id}`,
+            icon: "✅",
+            iconColor: "#27ae60",
+          });
         } else {
-          alert("Failed to save player.");
+          this.showModal({
+            title: "Save Failed",
+            message: "Failed to save player.",
+            icon: "❌",
+            iconColor: "#c0392b",
+          });
         }
       })
-      .catch((err) => alert("Error: " + err.message));
+      .catch(() => {
+        this.showModal({
+          title: "Connection Error",
+          message: "Unable to connect to the server.",
+          icon: "⚠️",
+          iconColor: "#e67e22",
+        });
+      });
   },
 
-  // ========== ADMIN: EDIT PLAYER ==========
   openEditPlayerModal(playerId) {
     fetch(`${API_URL}/users/player/${playerId}`)
       .then((res) => res.json())
       .then((user) => {
-        if (user.error) return alert("Player not found");
+        if (user.error) {
+          this.showModal({
+            title: "Error",
+            message: "Player not found.",
+            icon: "❌",
+            iconColor: "#c0392b",
+          });
+          return;
+        }
         document.getElementById("edit-player-id").value = user.id;
         document.getElementById("edit-p-name").value = user.name;
         document.getElementById("edit-p-contact").value = user.contact || "";
         document.getElementById("modal-edit-player").classList.add("show");
       })
-      .catch((err) => alert("Error fetching player: " + err.message));
+      .catch(() => {
+        this.showModal({
+          title: "Connection Error",
+          message: "Unable to fetch player details.",
+          icon: "⚠️",
+          iconColor: "#e67e22",
+        });
+      });
   },
 
   saveEditPlayer() {
     const id = document.getElementById("edit-player-id").value;
     const name = document.getElementById("edit-p-name").value.trim();
     const contact = document.getElementById("edit-p-contact").value.trim();
-    if (!name) return alert("Name is required");
+    if (!name) {
+      this.showModal({
+        title: "Incomplete",
+        message: "Name is required.",
+        icon: "❌",
+        iconColor: "#c0392b",
+      });
+      return;
+    }
 
     fetch(`${API_URL}/users/player/${id}`, {
       method: "PUT",
@@ -375,14 +783,31 @@ const app = {
       .then((res) => res.json())
       .then((data) => {
         if (data.success) {
-          alert("Player updated successfully!");
           this.closeModal("modal-edit-player");
           this.renderPlayers();
+          this.showModal({
+            title: "Player Updated",
+            message: "Player updated successfully!",
+            icon: "✅",
+            iconColor: "#27ae60",
+          });
         } else {
-          alert("Failed to update player.");
+          this.showModal({
+            title: "Update Failed",
+            message: "Failed to update player.",
+            icon: "❌",
+            iconColor: "#c0392b",
+          });
         }
       })
-      .catch((err) => alert("Error: " + err.message));
+      .catch(() => {
+        this.showModal({
+          title: "Connection Error",
+          message: "Unable to connect to the server.",
+          icon: "⚠️",
+          iconColor: "#e67e22",
+        });
+      });
   },
 
   deletePlayer(playerId) {
@@ -393,13 +818,30 @@ const app = {
       .then((res) => res.json())
       .then((data) => {
         if (data.success) {
-          alert("Player deleted.");
           this.renderPlayers();
+          this.showModal({
+            title: "Player Deleted",
+            message: "Player has been removed.",
+            icon: "🗑️",
+            iconColor: "#c0392b",
+          });
         } else {
-          alert("Failed to delete player.");
+          this.showModal({
+            title: "Delete Failed",
+            message: "Failed to delete player.",
+            icon: "❌",
+            iconColor: "#c0392b",
+          });
         }
       })
-      .catch((err) => alert("Error: " + err.message));
+      .catch(() => {
+        this.showModal({
+          title: "Connection Error",
+          message: "Unable to connect to the server.",
+          icon: "⚠️",
+          iconColor: "#e67e22",
+        });
+      });
   },
 
   // ========== ADMIN: EVENTS ==========
@@ -407,9 +849,43 @@ const app = {
     fetch(`${API_URL}/events/all`)
       .then((res) => res.json())
       .then((events) => {
-        document.querySelector("#admin-events-table tbody").innerHTML = events
-          .map(
-            (e) => `
+        this.allEvents = events;
+
+        let searchInput = document.getElementById("events-search-input");
+        if (!searchInput) {
+          const container = document.querySelector("#view-admin-events .card");
+          const header = container.querySelector(".dashboard-header");
+          const searchDiv = document.createElement("div");
+          searchDiv.style.cssText =
+            "margin: 10px 0 15px; display: flex; gap: 10px; flex-wrap: wrap;";
+          searchDiv.innerHTML = `
+            <input id="events-search-input" type="text" class="form-control" style="flex:1; min-width:200px;" placeholder="🔍 Search events by name or code..." oninput="app.filterEvents()">
+            <button class="btn btn-secondary" onclick="document.getElementById('events-search-input').value=''; app.filterEvents();">✕ Clear</button>
+          `;
+          container.insertBefore(searchDiv, header.nextSibling);
+        }
+
+        this.filterEvents();
+      })
+      .catch((err) => console.error("Events error:", err));
+  },
+
+  filterEvents() {
+    const searchTerm = document
+      .getElementById("events-search-input")
+      .value.toLowerCase()
+      .trim();
+    const filtered = this.allEvents.filter((e) => {
+      const nameMatch = e.name.toLowerCase().includes(searchTerm);
+      const codeMatch = e.code.toLowerCase().includes(searchTerm);
+      const codesMatch =
+        e.codes && e.codes.some((c) => c.toLowerCase().includes(searchTerm));
+      return nameMatch || codeMatch || codesMatch;
+    });
+
+    document.querySelector("#admin-events-table tbody").innerHTML = filtered
+      .map(
+        (e) => `
           <tr>
             <td data-label="Codes">${e.codes && e.codes.length ? e.codes.join(", ") : e.code}</td>
             <td data-label="Name">${e.name}</td>
@@ -422,10 +898,8 @@ const app = {
             </td>
           </tr>
         `,
-          )
-          .join("");
-      })
-      .catch((err) => console.error("Events error:", err));
+      )
+      .join("");
   },
 
   toggleEvent(code) {
@@ -437,11 +911,29 @@ const app = {
         if (data.success) {
           this.renderEvents();
           this.renderDashboard();
+          this.showModal({
+            title: "Event Updated",
+            message: `Event status changed to ${data.event.status}.`,
+            icon: "🔄",
+            iconColor: "#2a7a62",
+          });
         } else {
-          alert("Failed to toggle event.");
+          this.showModal({
+            title: "Update Failed",
+            message: "Failed to toggle event status.",
+            icon: "❌",
+            iconColor: "#c0392b",
+          });
         }
       })
-      .catch((err) => alert("Error: " + err.message));
+      .catch(() => {
+        this.showModal({
+          title: "Connection Error",
+          message: "Unable to connect to the server.",
+          icon: "⚠️",
+          iconColor: "#e67e22",
+        });
+      });
   },
 
   deleteEvent(eventCode) {
@@ -457,17 +949,33 @@ const app = {
       .then((res) => res.json())
       .then((data) => {
         if (data.success) {
-          alert("Event deleted.");
           this.renderEvents();
           this.renderDashboard();
+          this.showModal({
+            title: "Event Deleted",
+            message: "Event has been removed.",
+            icon: "🗑️",
+            iconColor: "#c0392b",
+          });
         } else {
-          alert("Failed to delete event.");
+          this.showModal({
+            title: "Delete Failed",
+            message: "Failed to delete event.",
+            icon: "❌",
+            iconColor: "#c0392b",
+          });
         }
       })
-      .catch((err) => alert("Error: " + err.message));
+      .catch(() => {
+        this.showModal({
+          title: "Connection Error",
+          message: "Unable to connect to the server.",
+          icon: "⚠️",
+          iconColor: "#e67e22",
+        });
+      });
   },
 
-  // ===== CREATE / SAVE EVENT =====
   saveEvent() {
     const name = document.getElementById("modal-e-name").value.trim();
     const code1 = document.getElementById("modal-e-code-1").value.trim();
@@ -478,14 +986,27 @@ const app = {
       .map((c) => c.toUpperCase())
       .filter((c) => c);
 
-    if (!name || codes.length === 0 || !time || !selectedEventLat)
-      return alert(
-        "Name, at least one event code, date/time, and map pin are required.",
-      );
+    if (!name || codes.length === 0 || !time || !selectedEventLat) {
+      this.showModal({
+        title: "Incomplete",
+        message:
+          "Name, at least one event code, date/time, and map pin are required.",
+        icon: "❌",
+        iconColor: "#c0392b",
+      });
+      return;
+    }
 
     const uniqueCodes = [...new Set(codes)];
-    if (uniqueCodes.length !== codes.length)
-      return alert("Please use unique codes for this event.");
+    if (uniqueCodes.length !== codes.length) {
+      this.showModal({
+        title: "Duplicate Codes",
+        message: "Please use unique codes for this event.",
+        icon: "❌",
+        iconColor: "#c0392b",
+      });
+      return;
+    }
 
     fetch(`${API_URL}/events`, {
       method: "POST",
@@ -501,9 +1022,6 @@ const app = {
       .then((res) => res.json())
       .then((data) => {
         if (data.success) {
-          alert(
-            `Event Created: ${data.event.codes?.join(", ") || data.event.code}`,
-          );
           this.closeModal("modal-event");
           this.renderEvents();
           this.renderDashboard();
@@ -514,14 +1032,31 @@ const app = {
           }
           document.getElementById("event-coords-text").innerText =
             "None selected";
+          this.showModal({
+            title: "Event Created",
+            message: `Event Created: ${data.event.codes?.join(", ") || data.event.code}`,
+            icon: "✅",
+            iconColor: "#27ae60",
+          });
         } else {
-          alert("Failed to create event: " + (data.error || "unknown error"));
+          this.showModal({
+            title: "Create Failed",
+            message: data.error || "Failed to create event.",
+            icon: "❌",
+            iconColor: "#c0392b",
+          });
         }
       })
-      .catch((err) => alert("Error: " + err.message));
+      .catch(() => {
+        this.showModal({
+          title: "Connection Error",
+          message: "Unable to connect to the server.",
+          icon: "⚠️",
+          iconColor: "#e67e22",
+        });
+      });
   },
 
-  // ========== GENERATE EVENT CODE ==========
   generateEventCodes() {
     fetch(`${API_URL}/events/generate-code?count=3`)
       .then((res) => res.json())
