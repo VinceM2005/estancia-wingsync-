@@ -31,9 +31,7 @@ const UserSchema = new mongoose.Schema({
     min: -90,
     max: 90,
     validate: {
-      validator: function (v) {
-        return v !== null && v !== undefined && !isNaN(v);
-      },
+      validator: (v) => v !== null && v !== undefined && !isNaN(v),
       message: "Latitude must be a valid number",
     },
   },
@@ -45,9 +43,7 @@ const UserSchema = new mongoose.Schema({
     min: -180,
     max: 180,
     validate: {
-      validator: function (v) {
-        return v !== null && v !== undefined && !isNaN(v);
-      },
+      validator: (v) => v !== null && v !== undefined && !isNaN(v),
       message: "Longitude must be a valid number",
     },
   },
@@ -59,21 +55,23 @@ const EventSchema = new mongoose.Schema({
   name: { type: String, required: true },
   releaseTime: { type: Date, required: true },
   status: { type: String, default: "Active", enum: ["Active", "Closed"] },
-  lat: {
-    type: Number,
-    required: true,
-    min: -90,
-    max: 90,
-  },
-  lng: {
-    type: Number,
-    required: true,
-    min: -180,
-    max: 180,
-  },
+  lat: { type: Number, required: true, min: -90, max: 90 },
+  lng: { type: Number, required: true, min: -180, max: 180 },
 });
 
-// ===== Counter for clock‑ins per user per event =====
+// ===== Race Code Schema (per player per event) =====
+const RaceCodeSchema = new mongoose.Schema({
+  eventId: { type: String, required: true, index: true },
+  userId: { type: String, required: true, index: true },
+  code: { type: String, required: true, unique: true },
+  status: { type: String, enum: ["unused", "used"], default: "unused" },
+  generatedAt: { type: Date, default: Date.now },
+  usedAt: { type: Date },
+});
+RaceCodeSchema.index({ eventId: 1, userId: 1, status: 1 });
+RaceCodeSchema.index({ eventId: 1, userId: 1 }, { unique: true });
+
+// ===== ATOMIC COUNTER for clock‑ins =====
 const CounterSchema = new mongoose.Schema({
   eventId: { type: String, required: true },
   userId: { type: String, required: true },
@@ -93,7 +91,6 @@ const ResultSchema = new mongoose.Schema({
   speedKPH: { type: Number, required: true },
   speedMPM: { type: Number, required: true },
 });
-
 ResultSchema.index({ eventId: 1, userId: 1, clockInCode: 1 }, { unique: true });
 
 const LogSchema = new mongoose.Schema({
@@ -101,10 +98,9 @@ const LogSchema = new mongoose.Schema({
   message: { type: String, required: true },
   createdAt: { type: Date, default: Date.now },
 });
-
 LogSchema.index({ createdAt: 1 }, { expireAfterSeconds: 2592000 });
 
-// ===== INDEXES FOR PERFORMANCE =====
+// ===== INDEXES =====
 UserSchema.index({ role: 1 });
 EventSchema.index({ status: 1 });
 EventSchema.index({ releaseTime: -1 });
@@ -113,11 +109,12 @@ ResultSchema.index({ speedMPM: -1 });
 
 const User = mongoose.model("User", UserSchema);
 const Event = mongoose.model("Event", EventSchema);
+const RaceCode = mongoose.model("RaceCode", RaceCodeSchema);
+const Counter = mongoose.model("Counter", CounterSchema);
 const Result = mongoose.model("Result", ResultSchema);
 const Log = mongoose.model("Log", LogSchema);
-const Counter = mongoose.model("Counter", CounterSchema);
 
-// ===== SEED DATABASE =====
+// ===== SEED =====
 async function seedDatabase() {
   try {
     const count = await User.countDocuments();
@@ -167,23 +164,20 @@ async function seedDatabase() {
   }
 }
 
-// ===== HIGH PRECISION HAVERSINE =====
+// ===== HELPERS =====
 function calculateDistance(lat1, lon1, lat2, lon2) {
   if (
     typeof lat1 !== "number" ||
     typeof lon1 !== "number" ||
     typeof lat2 !== "number" ||
     typeof lon2 !== "number"
-  ) {
+  )
     throw new Error("Invalid coordinates for distance calculation");
-  }
-
   const R = 6371.009;
   const dLat = ((lat2 - lat1) * Math.PI) / 180;
   const dLon = ((lon2 - lon1) * Math.PI) / 180;
   const lat1Rad = (lat1 * Math.PI) / 180;
   const lat2Rad = (lat2 * Math.PI) / 180;
-
   const a =
     Math.sin(dLat / 2) * Math.sin(dLat / 2) +
     Math.sin(dLon / 2) *
@@ -194,48 +188,26 @@ function calculateDistance(lat1, lon1, lat2, lon2) {
   return R * c;
 }
 
-// ===== CODE GENERATION =====
-function generateRandomCode() {
-  const digits = String(Math.floor(Math.random() * 90 + 10));
-  const letters =
-    String.fromCharCode(65 + Math.floor(Math.random() * 26)) +
-    String.fromCharCode(65 + Math.floor(Math.random() * 26)) +
-    String.fromCharCode(65 + Math.floor(Math.random() * 26));
-  return digits + letters;
-}
-
-function validateCodeFormat(code) {
-  return /^[0-9]{2}[A-Z]{3}$/.test(code);
-}
-
-async function codeExists(code) {
-  return await Event.findOne({
-    $or: [{ code }, { codes: code }],
-  });
-}
-
-async function getUniqueEventCode() {
-  let code;
-  let exists = true;
-  let attempts = 0;
-  while (exists && attempts < 100) {
-    code = generateRandomCode();
-    const existing = await codeExists(code);
-    if (!existing) exists = false;
-    attempts++;
+function generateRaceCode() {
+  const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+  let code = "";
+  for (let i = 0; i < 6; i++) {
+    code += chars[Math.floor(Math.random() * chars.length)];
   }
   return code;
 }
 
-async function getUniqueEventCodes(count = 3) {
-  const codes = [];
+async function getUniqueRaceCode() {
+  let code;
+  let exists = true;
   let attempts = 0;
-  while (codes.length < count && attempts < 100) {
-    const code = await getUniqueEventCode();
-    if (!codes.includes(code)) codes.push(code);
+  while (exists && attempts < 50) {
+    code = generateRaceCode();
+    const found = await RaceCode.findOne({ code });
+    if (!found) exists = false;
     attempts++;
   }
-  return codes;
+  return code;
 }
 
 // ===== API ROUTES =====
@@ -283,18 +255,153 @@ app.get("/api/events/all", async (req, res) => {
   }
 });
 
-app.get("/api/events/generate-code", async (req, res) => {
+// ===== Registration summary =====
+app.get("/api/events/registrations-summary", async (req, res) => {
   try {
-    const count = parseInt(req.query.count, 10) || 3;
-    const codes = await getUniqueEventCodes(count);
-    res.json({ codes });
+    const summary = await RaceCode.aggregate([
+      {
+        $group: {
+          _id: "$eventId",
+          playerCount: { $addToSet: "$userId" },
+          pigeonCount: { $sum: 1 },
+        },
+      },
+      {
+        $project: {
+          eventId: "$_id",
+          playerCount: { $size: "$playerCount" },
+          pigeonCount: 1,
+        },
+      },
+    ]);
+    res.json(summary);
   } catch (error) {
-    console.error("Generate code error:", error);
+    console.error("Registrations summary error:", error);
     res.status(500).json({ error: "Server error" });
   }
 });
 
-// ===== CLOCK IN WITH PRECISION AND ATOMIC COUNTER =====
+// ===== Registration routes =====
+app.get("/api/events/:eventId/registrations", async (req, res) => {
+  try {
+    const { eventId } = req.params;
+    const event = await Event.findOne({ code: eventId });
+    if (!event) return res.status(404).json({ error: "Event not found" });
+
+    const registrations = await RaceCode.aggregate([
+      { $match: { eventId } },
+      {
+        $group: {
+          _id: "$userId",
+          codes: { $push: "$code" },
+          statuses: { $push: "$status" },
+        },
+      },
+      {
+        $lookup: {
+          from: "users",
+          localField: "_id",
+          foreignField: "id",
+          as: "user",
+        },
+      },
+      { $unwind: "$user" },
+      {
+        $project: {
+          userId: "$_id",
+          userName: "$user.name",
+          codes: 1,
+          statuses: 1,
+        },
+      },
+    ]);
+
+    res.json(registrations);
+  } catch (error) {
+    console.error("Get registrations error:", error);
+    res.status(500).json({ error: "Server error" });
+  }
+});
+
+app.post("/api/events/:eventId/register-players", async (req, res) => {
+  try {
+    const { eventId } = req.params;
+    const { registrations } = req.body;
+
+    if (
+      !registrations ||
+      !Array.isArray(registrations) ||
+      registrations.length === 0
+    ) {
+      return res.status(400).json({ error: "No registrations provided" });
+    }
+
+    const event = await Event.findOne({ code: eventId });
+    if (!event) return res.status(404).json({ error: "Event not found" });
+    if (event.status !== "Active")
+      return res.status(400).json({ error: "Event is not active" });
+
+    const results = [];
+    for (const reg of registrations) {
+      const { userId, pigeonCount } = reg;
+
+      if (!userId) return res.status(400).json({ error: "UserId is required" });
+      if (
+        typeof pigeonCount !== "number" ||
+        pigeonCount < 1 ||
+        pigeonCount > 10
+      ) {
+        return res.status(400).json({
+          error: `Invalid pigeon count: ${pigeonCount}. Must be between 1 and 10.`,
+        });
+      }
+
+      const user = await User.findOne({ id: userId });
+      if (!user)
+        return res.status(400).json({ error: `User ${userId} not found` });
+
+      const existing = await RaceCode.findOne({ eventId, userId });
+      if (existing) {
+        return res.status(400).json({
+          error: `Player ${user.name} already registered for this event`,
+        });
+      }
+
+      const codes = [];
+      for (let i = 0; i < pigeonCount; i++) {
+        const code = await getUniqueRaceCode();
+        if (!code) throw new Error("Failed to generate unique race code");
+        codes.push({ code });
+      }
+
+      const raceCodes = codes.map((c) => ({
+        eventId,
+        userId,
+        code: c.code,
+        status: "unused",
+      }));
+      await RaceCode.insertMany(raceCodes);
+
+      results.push({
+        userId,
+        userName: user.name,
+        codes: codes.map((c) => c.code),
+      });
+    }
+
+    await Log.create({
+      time: new Date().toLocaleString(),
+      message: `Registered players for event ${event.name}`,
+    });
+
+    res.json({ success: true, registrations: results });
+  } catch (error) {
+    console.error("Register players error:", error);
+    res.status(500).json({ error: "Server error: " + error.message });
+  }
+});
+
+// ===== CLOCK IN WITH ATOMIC COUNTER =====
 app.post("/api/clockin", async (req, res) => {
   try {
     const { userId, eventCode, arrivalTime } = req.body;
@@ -304,9 +411,7 @@ app.post("/api/clockin", async (req, res) => {
     }
 
     const user = await User.findOne({ id: userId });
-    if (!user) {
-      return res.status(400).json({ error: "Invalid user" });
-    }
+    if (!user) return res.status(400).json({ error: "Invalid user" });
 
     if (
       user.lat === undefined ||
@@ -320,92 +425,75 @@ app.post("/api/clockin", async (req, res) => {
       });
     }
 
-    const event = await Event.findOne({
-      status: "Active",
-      $or: [{ code: eventCode }, { codes: eventCode }],
+    // Find the race code (unused)
+    const raceCode = await RaceCode.findOne({
+      code: eventCode,
+      status: "unused",
     });
-
-    if (!event) {
-      return res.status(400).json({
-        error: "Invalid or inactive event code",
-      });
+    if (!raceCode) {
+      return res
+        .status(400)
+        .json({ error: "Invalid or already used race code." });
     }
 
-    if (
-      event.lat === undefined ||
-      event.lat === null ||
-      event.lng === undefined ||
-      event.lng === null
-    ) {
-      return res.status(400).json({
-        error: "Event release coordinates are missing",
-      });
+    if (raceCode.userId !== userId) {
+      return res
+        .status(400)
+        .json({ error: "This code does not belong to you." });
     }
 
-    // ===== ATOMIC COUNTER for max 3 clock‑ins =====
-    // Use findOneAndUpdate to atomically increment and get the new count
+    const event = await Event.findOne({ code: raceCode.eventId });
+    if (!event) return res.status(400).json({ error: "Event not found" });
+    if (event.status !== "Active")
+      return res.status(400).json({ error: "Event is not active" });
+
+    // ===== ATOMIC COUNTER =====
+    // Atomically increment and get the new count
     const counter = await Counter.findOneAndUpdate(
       { eventId: event.code, userId: userId },
       { $inc: { count: 1 } },
-      { upsert: true, returnDocument: "after" }, // <-- FIXED: replaced new: true with returnDocument: 'after'
+      { upsert: true, returnDocument: "after" },
     );
 
     const newCount = counter.count;
 
-    // If count > 3, we need to rollback (decrement) and reject
-    if (newCount > 3) {
-      // Rollback
-      await Counter.updateOne(
-        { eventId: event.code, userId: userId },
-        { $inc: { count: -1 } },
-      );
-      return res.status(400).json({
-        error: "Maximum 3 clock-ins reached for this event",
-      });
-    }
-
-    // Now we have an atomic counter, we can proceed with the rest
-    // But we still need to check if the code was already used for this user/event
-    // The unique index on (eventId, userId, clockInCode) will prevent duplicates,
-    // but we can also check early to give a nicer error message.
-    const codeUsed = await Result.findOne({
+    // Get total codes for this user/event
+    const totalCodes = await RaceCode.countDocuments({
       eventId: event.code,
       userId,
-      clockInCode: eventCode,
     });
-    if (codeUsed) {
-      // Rollback counter
+
+    // If newCount exceeds totalCodes, rollback and reject
+    if (newCount > totalCodes) {
+      // Rollback the counter
       await Counter.updateOne(
         { eventId: event.code, userId: userId },
         { $inc: { count: -1 } },
       );
       return res.status(400).json({
-        error: "This code has already been used for this event.",
+        error: "You have already clocked all your pigeons for this event.",
       });
     }
 
     // Calculate flight time
     const release = new Date(event.releaseTime);
     const arrival = new Date(arrivalTime);
-
     if (isNaN(release.getTime()) || isNaN(arrival.getTime())) {
-      // Rollback
       await Counter.updateOne(
         { eventId: event.code, userId: userId },
         { $inc: { count: -1 } },
       );
       return res.status(400).json({ error: "Invalid date format" });
     }
-
     const flightHours = (arrival - release) / (1000 * 60 * 60);
     if (flightHours <= 0) {
       await Counter.updateOne(
         { eventId: event.code, userId: userId },
         { $inc: { count: -1 } },
       );
-      return res.status(400).json({
-        error: "Arrival time must be after release time",
-      });
+      return res
+        .status(400)
+        .json({ error: "Arrival time must be after release time" });
     }
 
     let distanceKm;
@@ -424,48 +512,48 @@ app.post("/api/clockin", async (req, res) => {
       ((distanceKm * 1000) / (flightHours * 60)).toFixed(4),
     );
 
-    // Create result – the unique index will prevent duplicate code usage
-    try {
-      const result = await Result.create({
-        eventId: event.code,
-        userId: user.id,
-        userName: user.name,
-        clockInNumber: newCount, // now we have the atomic count
-        clockInCode: eventCode,
-        distanceKm: distanceKm.toFixed(4),
-        arrivalTime: arrival,
-        flightTimeHours: flightHours.toFixed(4),
-        speedKPH: speedKPH,
-        speedMPM: speedMPM,
-      });
+    const clockInNumber = newCount; // already atomic
 
-      await Log.create({
-        time: new Date().toLocaleString(),
-        message: `${userId} clocked in with code ${eventCode}. Distance: ${distanceKm.toFixed(4)}km, Speed: ${speedMPM.toFixed(4)} m/min`,
-      });
+    // Create result
+    const result = await Result.create({
+      eventId: event.code,
+      userId: user.id,
+      userName: user.name,
+      clockInNumber,
+      clockInCode: eventCode,
+      distanceKm: distanceKm.toFixed(4),
+      arrivalTime: arrival,
+      flightTimeHours: flightHours.toFixed(4),
+      speedKPH,
+      speedMPM,
+    });
 
-      res.json({
-        success: true,
-        result,
-        distance: distanceKm,
-        speed: speedMPM,
-      });
-    } catch (error) {
-      // If duplicate key error, it means the code was already used (race condition)
-      if (error.code === 11000) {
-        // Rollback counter
-        await Counter.updateOne(
-          { eventId: event.code, userId: userId },
-          { $inc: { count: -1 } },
-        );
-        return res.status(400).json({
-          error: "This code has already been used for this event.",
-        });
-      }
-      throw error; // other errors
-    }
+    // Mark race code as used
+    await RaceCode.updateOne(
+      { _id: raceCode._id },
+      { status: "used", usedAt: new Date() },
+    );
+
+    await Log.create({
+      time: new Date().toLocaleString(),
+      message: `${userId} clocked in with code ${eventCode}. Distance: ${distanceKm.toFixed(4)}km, Speed: ${speedMPM.toFixed(4)} m/min`,
+    });
+
+    res.json({
+      success: true,
+      result,
+      distance: distanceKm,
+      speed: speedMPM,
+      eventName: event.name,
+    });
   } catch (error) {
     console.error("Clock-in error:", error);
+    if (error.code === 11000) {
+      // Duplicate key on Result – race condition on the same code
+      return res
+        .status(400)
+        .json({ error: "This code has already been used for this event." });
+    }
     res.status(500).json({ error: "Server error during clock-in" });
   }
 });
@@ -477,7 +565,6 @@ app.get("/api/results/:eventCode", async (req, res) => {
       $or: [{ code: req.params.eventCode }, { codes: req.params.eventCode }],
     });
     if (!event) return res.json([]);
-
     const results = await Result.find({ eventId: event.code }).sort({
       speedMPM: -1,
     });
@@ -499,7 +586,7 @@ app.get("/api/logs", async (req, res) => {
   }
 });
 
-// Players
+// Players CRUD
 app.get("/api/users/players", async (req, res) => {
   try {
     const users = await User.find({ role: "player" });
@@ -525,42 +612,34 @@ app.get("/api/users/player/:id", async (req, res) => {
 app.post("/api/users/player", async (req, res) => {
   try {
     const { name, contact, lat, lng } = req.body;
-
     if (
       lat === undefined ||
       lat === null ||
       lng === undefined ||
       lng === null
     ) {
-      return res.status(400).json({
-        error: "Latitude and longitude are required",
-      });
+      return res
+        .status(400)
+        .json({ error: "Latitude and longitude are required" });
     }
-
     if (typeof lat !== "number" || typeof lng !== "number") {
-      return res.status(400).json({
-        error: "Latitude and longitude must be numbers",
-      });
+      return res
+        .status(400)
+        .json({ error: "Latitude and longitude must be numbers" });
     }
-
-    if (lat < -90 || lat > 90) {
+    if (lat < -90 || lat > 90)
       return res
         .status(400)
         .json({ error: "Latitude must be between -90 and 90" });
-    }
-    if (lng < -180 || lng > 180) {
+    if (lng < -180 || lng > 180)
       return res
         .status(400)
         .json({ error: "Longitude must be between -180 and 180" });
-    }
-
-    if (!name || name.trim().length === 0) {
+    if (!name || name.trim().length === 0)
       return res.status(400).json({ error: "Name is required" });
-    }
 
     const count = await User.countDocuments({ role: "player" });
     const newId = `P-${String(count + 1).padStart(3, "0")}`;
-
     const user = await User.create({
       id: newId,
       name: name.trim(),
@@ -570,13 +649,11 @@ app.post("/api/users/player", async (req, res) => {
       lat: parseFloat(lat.toFixed(6)),
       lng: parseFloat(lng.toFixed(6)),
     });
-
     res.json({ success: true, user });
   } catch (error) {
     console.error("Player creation error:", error);
-    if (error.code === 11000) {
+    if (error.code === 11000)
       return res.status(400).json({ error: "Duplicate user ID" });
-    }
     res.status(500).json({ error: "Server error" });
   }
 });
@@ -587,10 +664,8 @@ app.put("/api/users/player/:id", async (req, res) => {
     const { name, contact } = req.body;
     const user = await User.findOne({ id });
     if (!user) return res.status(404).json({ error: "Player not found" });
-
     if (name) user.name = name.trim();
     if (contact !== undefined) user.contact = contact;
-
     await user.save();
     res.json({ success: true, user });
   } catch (error) {
@@ -605,7 +680,7 @@ app.delete("/api/users/player/:id", async (req, res) => {
     const user = await User.findOneAndDelete({ id });
     if (!user) return res.status(404).json({ error: "Player not found" });
     await Result.deleteMany({ userId: id });
-    // Also delete counters for this user
+    await RaceCode.deleteMany({ userId: id });
     await Counter.deleteMany({ userId: id });
     res.json({ success: true });
   } catch (error) {
@@ -621,6 +696,7 @@ app.delete("/api/events/:code", async (req, res) => {
     const event = await Event.findOneAndDelete({ code });
     if (!event) return res.status(404).json({ error: "Event not found" });
     await Result.deleteMany({ eventId: code });
+    await RaceCode.deleteMany({ eventId: code });
     await Counter.deleteMany({ eventId: code });
     res.json({ success: true });
   } catch (error) {
@@ -631,7 +707,7 @@ app.delete("/api/events/:code", async (req, res) => {
 
 app.post("/api/events", async (req, res) => {
   try {
-    let { codes, name, releaseTime, lat, lng } = req.body;
+    let { name, releaseTime, lat, lng } = req.body;
 
     if (
       lat === undefined ||
@@ -639,74 +715,42 @@ app.post("/api/events", async (req, res) => {
       lng === undefined ||
       lng === null
     ) {
-      return res.status(400).json({
-        error: "Latitude and longitude are required",
-      });
+      return res
+        .status(400)
+        .json({ error: "Latitude and longitude are required" });
     }
-
     if (typeof lat !== "number" || typeof lng !== "number") {
-      return res.status(400).json({
-        error: "Latitude and longitude must be numbers",
-      });
+      return res
+        .status(400)
+        .json({ error: "Latitude and longitude must be numbers" });
     }
-
-    if (lat < -90 || lat > 90) {
+    if (lat < -90 || lat > 90)
       return res
         .status(400)
         .json({ error: "Latitude must be between -90 and 90" });
-    }
-    if (lng < -180 || lng > 180) {
+    if (lng < -180 || lng > 180)
       return res
         .status(400)
         .json({ error: "Longitude must be between -180 and 180" });
-    }
-
-    if (!name || name.trim().length === 0) {
+    if (!name || name.trim().length === 0)
       return res.status(400).json({ error: "Event name is required" });
-    }
-
-    if (!releaseTime) {
+    if (!releaseTime)
       return res.status(400).json({ error: "Release time is required" });
+
+    // Generate a dummy code (not used for clock-in)
+    let dummyCode = "EVT" + Date.now().toString(36).toUpperCase();
+    let existing = await Event.findOne({ code: dummyCode });
+    while (existing) {
+      dummyCode =
+        "EVT" +
+        Date.now().toString(36).toUpperCase() +
+        Math.random().toString(36).substring(2, 5).toUpperCase();
+      existing = await Event.findOne({ code: dummyCode });
     }
-
-    if (!Array.isArray(codes)) {
-      codes = codes ? [codes] : [];
-    }
-
-    codes = codes.map((code) => code.trim().toUpperCase()).filter(Boolean);
-
-    if (codes.length === 0) {
-      codes = await getUniqueEventCodes(3);
-    }
-
-    const invalidCodes = codes.filter((c) => !validateCodeFormat(c));
-    if (invalidCodes.length > 0) {
-      return res.status(400).json({
-        error: `Invalid code format: ${invalidCodes.join(", ")}. Use 2 digits + 3 letters (e.g., 12ABC)`,
-      });
-    }
-
-    const uniqueCodes = [...new Set(codes)];
-    if (uniqueCodes.length !== codes.length) {
-      return res
-        .status(400)
-        .json({ error: "Duplicate event codes are not allowed" });
-    }
-
-    for (const code of codes) {
-      const existing = await codeExists(code);
-      if (existing) {
-        return res
-          .status(400)
-          .json({ error: `Event code already exists: ${code}` });
-      }
-    }
-
-    const primaryCode = codes[0];
 
     const event = await Event.create({
-      code: primaryCode,
-      codes: uniqueCodes,
+      code: dummyCode,
+      codes: [dummyCode],
       name: name.trim(),
       releaseTime: new Date(releaseTime),
       status: "Active",
@@ -737,14 +781,12 @@ app.put("/api/events/:code/toggle", async (req, res) => {
 app.put("/api/users/update-password", async (req, res) => {
   try {
     const { userId, newPassword } = req.body;
-    if (!userId || !newPassword) {
+    if (!userId || !newPassword)
       return res.status(400).json({ error: "Missing required fields" });
-    }
-    if (newPassword.length < 5) {
+    if (newPassword.length < 5)
       return res
         .status(400)
         .json({ error: "Password must be at least 5 characters" });
-    }
     const user = await User.findOne({ id: userId });
     if (!user) return res.status(404).json({ error: "User not found" });
     user.password = newPassword;

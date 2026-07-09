@@ -42,14 +42,11 @@ function createGoogleMap(
     );
     return;
   }
-
   const mapElement = document.getElementById(containerId);
   if (!mapElement) {
     console.error(`Map container ${containerId} not found`);
     return;
   }
-
-  // Ensure the container is visible and has a valid height
   const rect = mapElement.getBoundingClientRect();
   if (rect.height === 0 && retries < 5) {
     console.log(
@@ -68,11 +65,7 @@ function createGoogleMap(
     );
     return;
   }
-
-  // If still zero height after 5 retries, set a fallback height
-  if (rect.height === 0) {
-    mapElement.style.height = "400px";
-  }
+  if (rect.height === 0) mapElement.style.height = "400px";
 
   const map = new google.maps.Map(mapElement, {
     center: { lat: defaultLat, lng: defaultLng },
@@ -84,9 +77,7 @@ function createGoogleMap(
       position: google.maps.ControlPosition.TOP_RIGHT,
     },
     zoomControl: true,
-    zoomControlOptions: {
-      position: google.maps.ControlPosition.RIGHT_CENTER,
-    },
+    zoomControlOptions: { position: google.maps.ControlPosition.RIGHT_CENTER },
     fullscreenControl: true,
     streetViewControl: true,
     streetViewControlOptions: {
@@ -94,13 +85,11 @@ function createGoogleMap(
     },
   });
 
-  // Add search box
   const searchBox = document.getElementById(searchBoxId);
   if (searchBox) {
     const autocomplete = new google.maps.places.Autocomplete(searchBox);
     autocomplete.bindTo("bounds", map);
     autocomplete.setFields(["geometry", "name", "formatted_address"]);
-
     autocomplete.addListener("place_changed", function () {
       const place = autocomplete.getPlace();
       if (!place.geometry) {
@@ -112,35 +101,26 @@ function createGoogleMap(
         });
         return;
       }
-
       const lat = parseFloat(place.geometry.location.lat().toFixed(6));
       const lng = parseFloat(place.geometry.location.lng().toFixed(6));
-
       map.setCenter(place.geometry.location);
       map.setZoom(17);
-
       setMarker(mapType, lat, lng, map, coordsTextId, place);
     });
   }
 
-  // Click on map to set location
   map.addListener("click", function (event) {
     const lat = parseFloat(event.latLng.lat().toFixed(6));
     const lng = parseFloat(event.latLng.lng().toFixed(6));
     setMarker(mapType, lat, lng, map, coordsTextId);
   });
 
-  // Trigger resize after a moment to ensure proper rendering
-  setTimeout(() => {
-    google.maps.event.trigger(map, "resize");
-  }, 300);
-
+  setTimeout(() => google.maps.event.trigger(map, "resize"), 300);
   return map;
 }
 
 // ===== Set Marker with Precision =====
 function setMarker(mapType, lat, lng, map, coordsTextId, place = null) {
-  // Validate coordinates
   if (lat < -90 || lat > 90 || lng < -180 || lng > 180) {
     app.showModal({
       title: "Invalid Location",
@@ -150,31 +130,22 @@ function setMarker(mapType, lat, lng, map, coordsTextId, place = null) {
     });
     return;
   }
-
-  // Remove existing marker
-  if (mapType === "player" && playerMarker) {
-    playerMarker.setMap(null);
-  }
-  if (mapType === "event" && eventMarker) {
-    eventMarker.setMap(null);
-  }
+  if (mapType === "player" && playerMarker) playerMarker.setMap(null);
+  if (mapType === "event" && eventMarker) eventMarker.setMap(null);
 
   const position = new google.maps.LatLng(lat, lng);
-
   const marker = new google.maps.Marker({
-    position: position,
-    map: map,
+    position,
+    map,
     draggable: true,
     animation: google.maps.Animation.DROP,
     title: place ? place.name : "Selected Location",
   });
 
-  // Update coordinates with 6 decimal places
   const latStr = lat.toFixed(6);
   const lngStr = lng.toFixed(6);
   document.getElementById(coordsTextId).innerText = `${latStr}, ${lngStr}`;
 
-  // Store selected coordinates
   if (mapType === "player") {
     selectedPlayerLat = lat;
     selectedPlayerLng = lng;
@@ -185,32 +156,16 @@ function setMarker(mapType, lat, lng, map, coordsTextId, place = null) {
     eventMarker = marker;
   }
 
-  // Show info window
   const content = place
-    ? `<div style="padding: 8px; max-width: 260px;">
-            <strong>📍 ${place.name || "Selected Location"}</strong><br>
-            <span style="font-size: 12px; color: #666;">
-                ${place.formatted_address || ""}<br>
-                <b style="color: #1a2a33;">${latStr}, ${lngStr}</b>
-            </span>
-        </div>`
-    : `<div style="padding: 8px;">
-            <strong>📍 Selected Location</strong><br>
-            <span style="font-size: 12px; color: #666;">
-                <b style="color: #1a2a33;">${latStr}, ${lngStr}</b>
-            </span>
-        </div>`;
-
+    ? `<div style="padding: 8px; max-width:260px;"><strong>📍 ${place.name || "Selected Location"}</strong><br><span style="font-size:12px; color:#666;">${place.formatted_address || ""}<br><b style="color:#1a2a33;">${latStr}, ${lngStr}</b></span></div>`
+    : `<div style="padding:8px;"><strong>📍 Selected Location</strong><br><span style="font-size:12px; color:#666;"><b style="color:#1a2a33;">${latStr}, ${lngStr}</b></span></div>`;
   const infoWindow = new google.maps.InfoWindow({ content });
   infoWindow.open(map, marker);
 
-  // Drag end listener for precision adjustment
   marker.addListener("dragend", function () {
     const pos = marker.getPosition();
     const newLat = parseFloat(pos.lat().toFixed(6));
     const newLng = parseFloat(pos.lng().toFixed(6));
-
-    // Validate new coordinates
     if (newLat < -90 || newLat > 90 || newLng < -180 || newLng > 180) {
       app.showModal({
         title: "Invalid Location",
@@ -220,10 +175,8 @@ function setMarker(mapType, lat, lng, map, coordsTextId, place = null) {
       });
       return;
     }
-
     document.getElementById(coordsTextId).innerText =
       `${newLat.toFixed(6)}, ${newLng.toFixed(6)}`;
-
     if (mapType === "player") {
       selectedPlayerLat = newLat;
       selectedPlayerLng = newLng;
@@ -231,15 +184,9 @@ function setMarker(mapType, lat, lng, map, coordsTextId, place = null) {
       selectedEventLat = newLat;
       selectedEventLng = newLng;
     }
-
-    infoWindow.setContent(`
-            <div style="padding: 8px;">
-                <strong>📍 Selected Location</strong><br>
-                <span style="font-size: 12px; color: #666;">
-                    <b style="color: #1a2a33;">${newLat.toFixed(6)}, ${newLng.toFixed(6)}</b>
-                </span>
-            </div>
-        `);
+    infoWindow.setContent(
+      `<div style="padding:8px;"><strong>📍 Selected Location</strong><br><span style="font-size:12px; color:#666;"><b style="color:#1a2a33;">${newLat.toFixed(6)}, ${newLng.toFixed(6)}</b></span></div>`,
+    );
     infoWindow.open(map, marker);
   });
 
@@ -254,6 +201,7 @@ const app = {
   allPlayers: [],
   allResults: {},
   selectedEventCode: null,
+  currentRegistrations: [],
 
   init() {
     const sessionStr = sessionStorage.getItem("wingsync_user");
@@ -386,33 +334,13 @@ const app = {
       style = document.createElement("style");
       style.id = styleId;
       style.textContent = `
-                @keyframes customFadeIn {
-                    from { opacity: 0; }
-                    to { opacity: 1; }
-                }
-                @keyframes customSlideUp {
-                    from { opacity: 0; transform: translateY(30px) scale(0.95); }
-                    to { opacity: 1; transform: translateY(0) scale(1); }
-                }
-                @keyframes customPulse {
-                    0% { transform: scale(0.6); opacity: 0; }
-                    50% { transform: scale(1.2); }
-                    100% { transform: scale(1); opacity: 1; }
-                }
+                @keyframes customFadeIn { from { opacity: 0; } to { opacity: 1; } }
+                @keyframes customSlideUp { from { opacity: 0; transform: translateY(30px) scale(0.95); } to { opacity: 1; transform: translateY(0) scale(1); } }
+                @keyframes customPulse { 0% { transform: scale(0.6); opacity: 0; } 50% { transform: scale(1.2); } 100% { transform: scale(1); opacity: 1; } }
                 @media (max-width: 480px) {
-                    #custom-modal > div {
-                        padding: 24px 20px !important;
-                    }
-                    #custom-modal .custom-modal-close {
-                        font-size: 24px !important;
-                        top: 8px !important;
-                        right: 12px !important;
-                    }
-                    #custom-modal .custom-modal-btn {
-                        padding: 10px 28px !important;
-                        font-size: 15px !important;
-                        width: 100%;
-                    }
+                    #custom-modal > div { padding: 24px 20px !important; }
+                    #custom-modal .custom-modal-close { font-size: 24px !important; top: 8px !important; right: 12px !important; }
+                    #custom-modal .custom-modal-btn { padding: 10px 28px !important; font-size: 15px !important; width: 100%; }
                 }
             `;
       document.head.appendChild(style);
@@ -565,15 +493,26 @@ const app = {
 
   // ========== DASHBOARD ==========
   renderDashboard() {
-    fetch(`${API_URL}/events/active`)
-      .then((res) => res.json())
-      .then((events) => {
+    // Fetch active events and registration summary in parallel
+    Promise.all([
+      fetch(`${API_URL}/events/active`).then((res) => res.json()),
+      fetch(`${API_URL}/events/registrations-summary`).then((res) =>
+        res.json(),
+      ),
+    ])
+      .then(([events, summary]) => {
+        // Build a map: eventId -> playerCount
+        const summaryMap = {};
+        summary.forEach((item) => {
+          summaryMap[item.eventId] = item.playerCount || 0;
+        });
+
         const table = document.querySelector("#active-events-table");
         const isAdmin = this.currentUser.role === "admin";
 
         let thead = "<thead><tr>";
         if (isAdmin) {
-          thead += "<th>Codes</th>";
+          thead += "<th>Players</th>"; // changed from "Codes"
         }
         thead += "<th>Event Name</th><th>Release Time</th><th>Status</th>";
         thead += "</tr></thead>";
@@ -582,15 +521,14 @@ const app = {
         events.forEach((e) => {
           tbody += "<tr>";
           if (isAdmin) {
-            const codesDisplay =
-              e.codes && e.codes.length ? e.codes.join(", ") : e.code;
-            tbody += `<td data-label="Codes">${codesDisplay}</td>`;
+            const playerCount = summaryMap[e.code] || 0;
+            tbody += `<td data-label="Players">${playerCount}</td>`;
           }
           tbody += `
-                        <td data-label="Name">${e.name}</td>
-                        <td data-label="Release">${new Date(e.releaseTime).toLocaleString()}</td>
-                        <td data-label="Status">${e.status}</td>
-                    </tr>`;
+          <td data-label="Name">${e.name}</td>
+          <td data-label="Release">${new Date(e.releaseTime).toLocaleString()}</td>
+          <td data-label="Status">${e.status}</td>
+        </tr>`;
         });
         tbody += "</tbody>";
 
@@ -606,17 +544,6 @@ const app = {
       this.showModal({
         title: "Missing Code",
         message: "Please enter an event code.",
-        icon: "❌",
-        iconColor: "#c0392b",
-      });
-      return;
-    }
-
-    const codeRegex = /^[0-9]{2}[A-Z]{3}$/;
-    if (!codeRegex.test(code)) {
-      this.showModal({
-        title: "Invalid Code",
-        message: "Code must be in format: 2 digits + 3 letters (e.g., 12ABC)",
         icon: "❌",
         iconColor: "#c0392b",
       });
@@ -644,7 +571,7 @@ const app = {
           return;
         }
 
-        const event = this.eventLookup[code] || { name: "Unknown Event" };
+        const eventName = data.eventName || "Unknown Event";
         const now = new Date();
         const formattedDate = now.toLocaleDateString("en-US", {
           year: "numeric",
@@ -660,7 +587,7 @@ const app = {
 
         this.showModal({
           title: "✅ Bird Clocked!",
-          message: `${formattedDate}  ${formattedTime}\n📋 ${event.name} (ERPC)\n📏 Air Distance: ${data.distance.toFixed(4)} KM\n⚡ Speed: ${data.speed.toFixed(4)} m/min`,
+          message: `${formattedDate}  ${formattedTime}\n📋 ${eventName} (ERPC)\n📏 Air Distance: ${data.distance.toFixed(4)} KM\n⚡ Speed: ${data.speed.toFixed(4)} m/min`,
           icon: "✅",
           iconColor: "#27ae60",
           buttonText: "OK",
@@ -810,7 +737,6 @@ const app = {
         e.codes && e.codes.some((c) => c.toLowerCase().includes(searchTerm));
       return nameMatch || codeMatch || codesMatch;
     });
-
     if (filteredEvents.length > 0) {
       this.selectedEventCode = filteredEvents[0].code;
     } else {
@@ -878,11 +804,8 @@ const app = {
       .then((logs) => {
         document.getElementById("log-list").innerHTML = logs
           .map(
-            (log) => `
-                        <li style="padding: 10px; border-bottom: 1px solid #eee;">
-                            <small>[${log.time}]</small><br>${log.message}
-                        </li>
-                    `,
+            (log) =>
+              `<li style="padding: 10px; border-bottom: 1px solid #eee;"><small>[${log.time}]</small><br>${log.message}</li>`,
           )
           .join("");
       })
@@ -958,7 +881,6 @@ const app = {
       });
       return;
     }
-
     if (!selectedPlayerLat || !selectedPlayerLng) {
       this.showModal({
         title: "Missing Location",
@@ -969,7 +891,6 @@ const app = {
       });
       return;
     }
-
     if (selectedPlayerLat < -90 || selectedPlayerLat > 90) {
       this.showModal({
         title: "Invalid Latitude",
@@ -979,7 +900,6 @@ const app = {
       });
       return;
     }
-
     if (selectedPlayerLng < -180 || selectedPlayerLng > 180) {
       this.showModal({
         title: "Invalid Longitude",
@@ -996,12 +916,7 @@ const app = {
     fetch(`${API_URL}/users/player`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        name,
-        contact,
-        lat: lat,
-        lng: lng,
-      }),
+      body: JSON.stringify({ name, contact, lat, lng }),
     })
       .then((res) => res.json())
       .then((data) => {
@@ -1124,9 +1039,7 @@ const app = {
 
   deletePlayer(playerId) {
     if (!confirm("Are you sure you want to delete this player?")) return;
-    fetch(`${API_URL}/users/player/${playerId}`, {
-      method: "DELETE",
-    })
+    fetch(`${API_URL}/users/player/${playerId}`, { method: "DELETE" })
       .then((res) => res.json())
       .then((data) => {
         if (data.success) {
@@ -1164,23 +1077,47 @@ const app = {
         this.allEvents = events;
         this.buildEventLookup(events);
 
-        let searchInput = document.getElementById("events-search-input");
-        if (!searchInput) {
-          const container = document.querySelector("#view-admin-events .card");
-          const header = container.querySelector(".dashboard-header");
-          const searchDiv = document.createElement("div");
-          searchDiv.style.cssText =
-            "margin: 10px 0 15px; display: flex; gap: 10px; flex-wrap: wrap;";
-          searchDiv.innerHTML = `
+        return fetch(`${API_URL}/events/registrations-summary`)
+          .then((res) => res.json())
+          .then((summary) => {
+            const summaryMap = {};
+            summary.forEach((item) => {
+              summaryMap[item.eventId] = item.playerCount || 0;
+            });
+            this.renderEventTable(events, summaryMap);
+          })
+          .catch((err) => {
+            console.warn(
+              "Failed to fetch registration summary, showing 0 players",
+              err,
+            );
+            const emptyMap = {};
+            this.renderEventTable(events, emptyMap);
+          });
+      })
+      .catch((err) => console.error("Events error:", err));
+  },
+
+  renderEventTable(events, summaryMap) {
+    let searchInput = document.getElementById("events-search-input");
+    if (!searchInput) {
+      const container = document.querySelector("#view-admin-events .card");
+      const header = container.querySelector(".dashboard-header");
+      const searchDiv = document.createElement("div");
+      searchDiv.style.cssText =
+        "margin: 10px 0 15px; display: flex; gap: 10px; flex-wrap: wrap;";
+      searchDiv.innerHTML = `
                         <input id="events-search-input" type="text" class="form-control" style="flex:1; min-width:200px;" placeholder="🔍 Search events by name or code..." oninput="app.filterEvents()">
                         <button class="btn btn-secondary" onclick="document.getElementById('events-search-input').value=''; app.filterEvents();">✕ Clear</button>
                     `;
-          container.insertBefore(searchDiv, header.nextSibling);
-        }
+      container.insertBefore(searchDiv, header.nextSibling);
+    }
 
-        this.filterEvents();
-      })
-      .catch((err) => console.error("Events error:", err));
+    this._eventsWithSummary = events.map((e) => ({
+      ...e,
+      playerCount: summaryMap[e.code] || 0,
+    }));
+    this.filterEvents();
   },
 
   filterEvents() {
@@ -1188,22 +1125,26 @@ const app = {
       .getElementById("events-search-input")
       .value.toLowerCase()
       .trim();
-    const filtered = this.allEvents.filter((e) => {
-      const nameMatch = e.name.toLowerCase().includes(searchTerm);
-      const codeMatch = e.code.toLowerCase().includes(searchTerm);
-      const codesMatch =
-        e.codes && e.codes.some((c) => c.toLowerCase().includes(searchTerm));
-      return nameMatch || codeMatch || codesMatch;
-    });
+    const filtered = this._eventsWithSummary
+      ? this._eventsWithSummary.filter((e) => {
+          const nameMatch = e.name.toLowerCase().includes(searchTerm);
+          const codeMatch = e.code.toLowerCase().includes(searchTerm);
+          const codesMatch =
+            e.codes &&
+            e.codes.some((c) => c.toLowerCase().includes(searchTerm));
+          return nameMatch || codeMatch || codesMatch;
+        })
+      : [];
 
     document.querySelector("#admin-events-table tbody").innerHTML = filtered
       .map(
         (e) => `
                 <tr>
-                    <td data-label="Codes">${e.codes && e.codes.length ? e.codes.join(", ") : e.code}</td>
+                    <td data-label="Players">${e.playerCount}</td>
                     <td data-label="Name">${e.name}</td>
                     <td data-label="Point">${e.lat.toFixed(6)}, ${e.lng.toFixed(6)}</td>
                     <td data-label="Actions">
+                        <button class="btn btn-primary btn-sm" onclick="app.openRegisterModal('${e.code}')">📝 Register Players</button>
                         <button class="btn btn-danger btn-sm" onclick="app.toggleEvent('${e.code}')">
                             ${e.status === "Active" ? "🔒 Close" : "🔓 Re-open"}
                         </button>
@@ -1215,10 +1156,192 @@ const app = {
       .join("");
   },
 
-  toggleEvent(code) {
-    fetch(`${API_URL}/events/${code}/toggle`, {
-      method: "PUT",
+  // ===== REGISTRATION MODAL =====
+  openRegisterModal(eventCode) {
+    this.currentEventCode = eventCode;
+    const modal = document.getElementById("modal-register-players");
+    modal.classList.add("show");
+    this.loadRegistrations(eventCode);
+  },
+
+  loadRegistrations(eventCode) {
+    fetch(`${API_URL}/events/${eventCode}/registrations`)
+      .then((res) => {
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        return res.json();
+      })
+      .then((registrations) => {
+        this.currentRegistrations = registrations;
+        this.populateRegisterModal(eventCode);
+      })
+      .catch((err) => {
+        console.error("❌ Error loading registrations:", err);
+        this.currentRegistrations = [];
+        this.populateRegisterModal(eventCode);
+        this.showModal({
+          title: "Warning",
+          message: "Could not load existing registrations. Please refresh.",
+          icon: "⚠️",
+          iconColor: "#e67e22",
+        });
+      });
+  },
+
+  populateRegisterModal(eventCode) {
+    fetch(`${API_URL}/users/players`)
+      .then((res) => {
+        if (!res.ok) throw new Error("Failed to fetch players");
+        return res.json();
+      })
+      .then((players) => {
+        const registeredIds = this.currentRegistrations
+          ? this.currentRegistrations.map((r) => r.userId)
+          : [];
+        const available = players.filter((p) => !registeredIds.includes(p.id));
+
+        const select = document.getElementById("register-player-select");
+        select.innerHTML =
+          '<option value="">-- Select Player --</option>' +
+          available
+            .map((p) => `<option value="${p.id}">${p.name} (${p.id})</option>`)
+            .join("");
+
+        this.updateRegistrationTable();
+
+        document.getElementById("register-pigeon-count").value = 1;
+        document.getElementById("register-event-code").value = eventCode;
+      })
+      .catch((err) => {
+        console.error("❌ Error loading players:", err);
+        this.showModal({
+          title: "Error",
+          message: "Could not load player list. Please refresh the page.",
+          icon: "❌",
+          iconColor: "#c0392b",
+        });
+      });
+  },
+
+  updateRegistrationTable() {
+    const tbody = document.querySelector("#registrations-table tbody");
+    if (!tbody) return;
+
+    if (this.currentRegistrations && this.currentRegistrations.length > 0) {
+      tbody.innerHTML = this.currentRegistrations
+        .map((r) => {
+          const totalCodes = r.codes.length;
+          const used = r.statuses.filter((s) => s === "used").length;
+          const unused = totalCodes - used;
+          const codeItems = r.codes
+            .map((code, idx) => {
+              const status = r.statuses[idx];
+              const badge =
+                status === "unused"
+                  ? '<span class="badge-unused">✅ Unused</span>'
+                  : '<span class="badge-used">⏳ Used</span>';
+              return `<span class="code-item">${code} ${badge}</span>`;
+            })
+            .join("");
+
+          return `
+                    <tr>
+                        <td><strong>${r.userName}</strong></td>
+                        <td>${codeItems}</td>
+                        <td>
+                            <span class="badge-total">${totalCodes} total</span>
+                            <span class="badge-unused">${unused} unused</span>
+                            <span class="badge-used">${used} used</span>
+                        </td>
+                    </tr>
+                `;
+        })
+        .join("");
+    } else {
+      tbody.innerHTML =
+        '<tr><td colspan="3" style="text-align:center; color:#999; padding:20px;">No players registered yet.</td></tr>';
+    }
+  },
+
+  registerPlayers() {
+    const eventCode = document.getElementById("register-event-code").value;
+    const userId = document.getElementById("register-player-select").value;
+    const pigeonCount = parseInt(
+      document.getElementById("register-pigeon-count").value,
+      10,
+    );
+
+    if (!userId) {
+      this.showModal({
+        title: "Incomplete",
+        message: "Please select a player.",
+        icon: "❌",
+        iconColor: "#c0392b",
+      });
+      return;
+    }
+    if (isNaN(pigeonCount) || pigeonCount < 1 || pigeonCount > 10) {
+      this.showModal({
+        title: "Invalid Count",
+        message: "Pigeon count must be between 1 and 10.",
+        icon: "❌",
+        iconColor: "#c0392b",
+      });
+      return;
+    }
+
+    const btn = document.querySelector("#modal-register-players .btn-success");
+    if (btn) {
+      btn.disabled = true;
+      btn.textContent = "⏳ Registering...";
+    }
+
+    fetch(`${API_URL}/events/${eventCode}/register-players`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ registrations: [{ userId, pigeonCount }] }),
     })
+      .then(async (res) => {
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || "Registration failed");
+        return data;
+      })
+      .then((data) => {
+        if (data.success) {
+          this.showModal({
+            title: "✅ Registration Successful",
+            message: `Generated ${pigeonCount} codes for player.\nCodes: ${data.registrations[0].codes.join(", ")}`,
+            icon: "✅",
+            iconColor: "#27ae60",
+          });
+          this.loadRegistrations(eventCode);
+        } else {
+          throw new Error(data.error || "Unknown error");
+        }
+      })
+      .catch((err) => {
+        console.error("❌ Registration error:", err);
+        this.showModal({
+          title: "Registration Failed",
+          message: err.message || "Unable to connect to the server.",
+          icon: "❌",
+          iconColor: "#c0392b",
+        });
+      })
+      .finally(() => {
+        if (btn) {
+          btn.disabled = false;
+          btn.textContent = "✅ Register Player";
+        }
+      });
+  },
+
+  closeRegisterModal() {
+    document.getElementById("modal-register-players").classList.remove("show");
+  },
+
+  // ===== TOGGLE EVENT =====
+  toggleEvent(code) {
+    fetch(`${API_URL}/events/${code}/toggle`, { method: "PUT" })
       .then((res) => res.json())
       .then((data) => {
         if (data.success) {
@@ -1252,13 +1375,11 @@ const app = {
   deleteEvent(eventCode) {
     if (
       !confirm(
-        "Are you sure you want to delete this event? All results will also be removed.",
+        "Are you sure you want to delete this event? All results and registrations will also be removed.",
       )
     )
       return;
-    fetch(`${API_URL}/events/${eventCode}`, {
-      method: "DELETE",
-    })
+    fetch(`${API_URL}/events/${eventCode}`, { method: "DELETE" })
       .then((res) => res.json())
       .then((data) => {
         if (data.success) {
@@ -1289,15 +1410,10 @@ const app = {
       });
   },
 
+  // ===== CREATE EVENT =====
   saveEvent() {
     const name = document.getElementById("modal-e-name").value.trim();
-    const code1 = document.getElementById("modal-e-code-1").value.trim();
-    const code2 = document.getElementById("modal-e-code-2").value.trim();
-    const code3 = document.getElementById("modal-e-code-3").value.trim();
     const time = document.getElementById("modal-e-time").value;
-    const codes = [code1, code2, code3]
-      .map((c) => c.toUpperCase())
-      .filter((c) => c);
 
     if (!name) {
       this.showModal({
@@ -1308,17 +1424,6 @@ const app = {
       });
       return;
     }
-
-    if (codes.length === 0) {
-      this.showModal({
-        title: "Incomplete",
-        message: "At least one event code is required.",
-        icon: "❌",
-        iconColor: "#c0392b",
-      });
-      return;
-    }
-
     if (!time) {
       this.showModal({
         title: "Incomplete",
@@ -1328,7 +1433,6 @@ const app = {
       });
       return;
     }
-
     if (!selectedEventLat || !selectedEventLng) {
       this.showModal({
         title: "Missing Location",
@@ -1339,7 +1443,6 @@ const app = {
       });
       return;
     }
-
     if (selectedEventLat < -90 || selectedEventLat > 90) {
       this.showModal({
         title: "Invalid Latitude",
@@ -1349,34 +1452,10 @@ const app = {
       });
       return;
     }
-
     if (selectedEventLng < -180 || selectedEventLng > 180) {
       this.showModal({
         title: "Invalid Longitude",
         message: "Longitude must be between -180 and 180 degrees.",
-        icon: "❌",
-        iconColor: "#c0392b",
-      });
-      return;
-    }
-
-    const uniqueCodes = [...new Set(codes)];
-    if (uniqueCodes.length !== codes.length) {
-      this.showModal({
-        title: "Duplicate Codes",
-        message: "Please use unique codes for this event.",
-        icon: "❌",
-        iconColor: "#c0392b",
-      });
-      return;
-    }
-
-    const codeRegex = /^[0-9]{2}[A-Z]{3}$/;
-    const invalidCodes = codes.filter((c) => !codeRegex.test(c));
-    if (invalidCodes.length > 0) {
-      this.showModal({
-        title: "Invalid Code Format",
-        message: `Invalid codes: ${invalidCodes.join(", ")}\nUse format: 2 digits + 3 letters (e.g., 12ABC)`,
         icon: "❌",
         iconColor: "#c0392b",
       });
@@ -1390,11 +1469,10 @@ const app = {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        codes: uniqueCodes,
         name,
         releaseTime: new Date(time).toISOString(),
-        lat: lat,
-        lng: lng,
+        lat,
+        lng,
       }),
     })
       .then((res) => res.json())
@@ -1407,7 +1485,7 @@ const app = {
           this.fetchAllEvents();
           this.showModal({
             title: "✅ Event Created",
-            message: `Event Created: ${data.event.codes?.join(", ") || data.event.code}\n📍 ${data.event.lat.toFixed(6)}, ${data.event.lng.toFixed(6)}`,
+            message: `Event Created: ${data.event.name}\n📍 ${data.event.lat.toFixed(6)}, ${data.event.lng.toFixed(6)}`,
             icon: "✅",
             iconColor: "#27ae60",
           });
@@ -1440,30 +1518,20 @@ const app = {
     document.getElementById("event-coords-text").innerText = "None selected";
   },
 
+  // ===== GENERATE EVENT CODES (deprecated) =====
   generateEventCodes() {
-    fetch(`${API_URL}/events/generate-code?count=3`)
-      .then((res) => res.json())
-      .then((data) => {
-        const codes = data.codes || [];
-        document.getElementById("modal-e-code-1").value = codes[0] || "";
-        document.getElementById("modal-e-code-2").value = codes[1] || "";
-        document.getElementById("modal-e-code-3").value = codes[2] || "";
-      })
-      .catch((err) => {
-        this.showModal({
-          title: "Error Generating Codes",
-          message: err.message || "Unable to generate codes. Please try again.",
-          icon: "❌",
-          iconColor: "#c0392b",
-        });
-      });
+    this.showModal({
+      title: "Codes Not Needed",
+      message: "Event codes are now generated per player during registration.",
+      icon: "ℹ️",
+      iconColor: "#2a7a62",
+    });
   },
 
-  // ========== GOOGLE MAPS MODALS (FIXED) ==========
+  // ========== GOOGLE MAPS MODALS ==========
   openPlayerModal() {
     const modal = document.getElementById("modal-player");
     modal.classList.add("show");
-    // Wait for modal to become visible and render
     setTimeout(() => {
       if (!playerMap) {
         playerMap = createGoogleMap(
@@ -1473,13 +1541,11 @@ const app = {
           "player",
         );
       } else {
-        // Trigger resize to re-render
         google.maps.event.trigger(playerMap, "resize");
-        // Also recenter if needed
         const center = playerMap.getCenter();
         if (center) playerMap.setCenter(center);
       }
-    }, 500); // Increased delay
+    }, 500);
   },
 
   openEventModal() {
@@ -1498,7 +1564,6 @@ const app = {
         const center = eventMap.getCenter();
         if (center) eventMap.setCenter(center);
       }
-      this.generateEventCodes();
     }, 500);
   },
 
@@ -1527,7 +1592,6 @@ const app = {
     });
 
     let locationReceived = false;
-
     const timeoutId = setTimeout(() => {
       if (!locationReceived) {
         document.getElementById("custom-modal")?.remove();
@@ -1565,7 +1629,6 @@ const app = {
         if (map) {
           map.setCenter({ lat, lng });
           map.setZoom(18);
-
           const coordsTextId =
             mapType === "player" ? "player-coords-text" : "event-coords-text";
           setMarker(mapType, lat, lng, map, coordsTextId);
@@ -1591,17 +1654,13 @@ const app = {
 
         this.showModal({
           title: "Location Error",
-          message: message,
+          message,
           icon: "❌",
           iconColor: "#c0392b",
           buttonText: "OK, I'll select manually",
         });
       },
-      {
-        enableHighAccuracy: true,
-        timeout: 15000,
-        maximumAge: 0,
-      },
+      { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 },
     );
   },
 

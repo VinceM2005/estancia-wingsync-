@@ -50,7 +50,9 @@
         <p id="login-error" style="color: red; margin-top: 10px; display: none">
           Invalid User ID or Password.
         </p>
-        <div style="margin-top: 15px; font-size: 12px; color: #999"></div>
+        <div style="margin-top: 15px; font-size: 12px; color: #999">
+          <p>Default: ADMIN / admin123 | P-001 / player123</p>
+        </div>
       </div>
     </div>
 
@@ -119,7 +121,7 @@
                 type="text"
                 id="clock-in-code"
                 class="form-control"
-                placeholder="ENTER EVENT CODE "
+                placeholder="ENTER EVENT CODE"
                 onkeyup="this.value = this.value.toUpperCase()"
               />
               <button
@@ -274,7 +276,7 @@
               <table id="admin-events-table">
                 <thead>
                   <tr>
-                    <th>Codes</th>
+                    <th>Players Joined</th>
                     <th>Name</th>
                     <th>Release Point</th>
                     <th>Actions</th>
@@ -365,7 +367,7 @@
       </div>
     </div>
 
-    <!-- Event Modal -->
+    <!-- Event Modal (updated – removed code inputs and generate button) -->
     <div id="modal-event" class="modal-overlay">
       <div class="modal-content">
         <div class="modal-header">
@@ -382,43 +384,6 @@
             class="form-control"
             placeholder="e.g., Estancia Cup 2026"
           />
-        </div>
-        <div class="form-group">
-          <label>Event Codes</label>
-          <div class="code-inputs" style="display: grid; gap: 10px">
-            <input
-              type="text"
-              id="modal-e-code-1"
-              class="form-control"
-              placeholder="Code 1 (e.g., 12ABC)"
-              onkeyup="this.value = this.value.toUpperCase()"
-            />
-            <input
-              type="text"
-              id="modal-e-code-2"
-              class="form-control"
-              placeholder="Code 2 (e.g., 34DEF)"
-              onkeyup="this.value = this.value.toUpperCase()"
-            />
-            <input
-              type="text"
-              id="modal-e-code-3"
-              class="form-control"
-              placeholder="Code 3 (e.g., 56GHI)"
-              onkeyup="this.value = this.value.toUpperCase()"
-            />
-          </div>
-          <button
-            class="btn btn-secondary"
-            type="button"
-            style="margin-top: 10px"
-            onclick="app.generateEventCodes()"
-          >
-            🎲 Generate Codes
-          </button>
-          <small style="display: block; margin-top: 8px; color: #666"
-            >Format: 2 digits + 3 letters (e.g., 12ABC)</small
-          >
         </div>
         <div class="form-group">
           <label>Release Date & Time</label>
@@ -512,6 +477,70 @@
         >
           💾 Update Player
         </button>
+      </div>
+    </div>
+
+    <!-- ===== REGISTRATION MODAL ===== -->
+    <div id="modal-register-players" class="modal-overlay">
+      <div class="modal-content" style="max-width: 700px">
+        <div class="modal-header">
+          <h3>📝 Register Players for Event</h3>
+          <button class="close-modal" onclick="app.closeRegisterModal()">
+            ×
+          </button>
+        </div>
+        <div class="form-group">
+          <label>Event Code</label>
+          <input
+            type="text"
+            id="register-event-code"
+            class="form-control"
+            disabled
+          />
+        </div>
+        <div class="form-group">
+          <label>Select Player</label>
+          <select id="register-player-select" class="form-control">
+            <option value="">-- Select Player --</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label>Number of Pigeons (max 10)</label>
+          <input
+            type="number"
+            id="register-pigeon-count"
+            class="form-control"
+            min="1"
+            max="10"
+            value="1"
+          />
+        </div>
+        <button
+          class="btn btn-success"
+          style="width: 100%"
+          onclick="app.registerPlayers()"
+        >
+          ✅ Register Player
+        </button>
+
+        <hr style="margin: 20px 0" />
+        <h4>Registered Players &amp; Codes</h4>
+        <table id="registrations-table" style="width: 100%; font-size: 14px">
+          <thead>
+            <tr>
+              <th>Player</th>
+              <th>Codes</th>
+              <th>Status</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td colspan="3" style="text-align: center; color: #999">
+                No players registered yet.
+              </td>
+            </tr>
+          </tbody>
+        </table>
       </div>
     </div>
 
