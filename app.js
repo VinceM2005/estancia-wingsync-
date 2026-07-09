@@ -9,16 +9,9 @@ let selectedPlayerLat = null,
   selectedPlayerLng = null;
 let selectedEventLat = null,
   selectedEventLng = null;
-let mapsInitialized = false;
 
 const defaultLat = 13.415;
 const defaultLng = 123.635;
-
-// ===== Google Maps Initialization =====
-function initMaps() {
-  mapsInitialized = true;
-  console.log("✅ Google Maps initialized successfully");
-}
 
 // ===== Create Google Map with Precision and Retry =====
 function createGoogleMap(
@@ -28,25 +21,40 @@ function createGoogleMap(
   mapType = "player",
   retries = 0,
 ) {
-  if (!mapsInitialized) {
-    setTimeout(
-      () =>
-        createGoogleMap(
-          containerId,
-          searchBoxId,
-          coordsTextId,
-          mapType,
-          retries + 1,
-        ),
-      500,
-    );
+  // Check if Google Maps API is loaded
+  if (typeof google === "undefined" || typeof google.maps === "undefined") {
+    if (retries < 10) {
+      console.log(`Google Maps not ready, retrying... (${retries + 1})`);
+      setTimeout(
+        () =>
+          createGoogleMap(
+            containerId,
+            searchBoxId,
+            coordsTextId,
+            mapType,
+            retries + 1,
+          ),
+        500,
+      );
+    } else {
+      console.error("Google Maps API failed to load after 10 retries.");
+      app.showModal({
+        title: "Map Error",
+        message: "Google Maps failed to load. Please refresh the page.",
+        icon: "❌",
+        iconColor: "#c0392b",
+      });
+    }
     return;
   }
+
   const mapElement = document.getElementById(containerId);
   if (!mapElement) {
     console.error(`Map container ${containerId} not found`);
     return;
   }
+
+  // Ensure the container is visible and has a valid height
   const rect = mapElement.getBoundingClientRect();
   if (rect.height === 0 && retries < 5) {
     console.log(
@@ -202,6 +210,9 @@ const app = {
   allResults: {},
   selectedEventCode: null,
   currentRegistrations: [],
+
+  // ----- NEW: auto‑refresh timer ID -----
+  refreshIntervalId: null,
 
   init() {
     const sessionStr = sessionStorage.getItem("wingsync_user");
@@ -421,6 +432,9 @@ const app = {
   },
 
   logout() {
+    // ----- NEW: stop auto‑refresh when logging out -----
+    this.stopAutoRefresh();
+
     this.currentUser = null;
     sessionStorage.removeItem("wingsync_user");
     document.getElementById("app-screen").classList.add("hidden");
@@ -469,7 +483,11 @@ const app = {
       .catch((err) => console.error("Failed to fetch events for lookup:", err));
   },
 
+  // ========== NAVIGATION (modified to control auto‑refresh) ==========
   navigate(view) {
+    // ----- NEW: stop any running refresh before switching views -----
+    this.stopAutoRefresh();
+
     document
       .querySelectorAll(".view-section")
       .forEach((el) => el.classList.add("hidden"));
@@ -485,15 +503,44 @@ const app = {
     if (view === "admin-events") this.renderEvents();
     if (view === "results") this.initResultsView();
     if (view === "logs") this.renderLogs();
+
+    // ----- NEW: start auto‑refresh for live views -----
+    if (view === "dashboard" || view === "results") {
+      this.startAutoRefresh();
+    }
   },
 
   toggleSidebar() {
     document.getElementById("sidebar").classList.toggle("open");
   },
 
+  // ========== AUTO‑REFRESH (new methods) ==========
+  startAutoRefresh() {
+    // Clear any existing interval
+    if (this.refreshIntervalId) clearInterval(this.refreshIntervalId);
+    // Refresh every 3 seconds
+    this.refreshIntervalId = setInterval(() => {
+      const currentView = document.querySelector(".view-section:not(.hidden)");
+      if (currentView) {
+        const id = currentView.id;
+        if (id === "view-results") {
+          this.renderResults(); // your existing function
+        } else if (id === "view-dashboard") {
+          this.renderDashboard(); // your existing function
+        }
+      }
+    }, 3000); // 3000 ms = 3 seconds
+  },
+
+  stopAutoRefresh() {
+    if (this.refreshIntervalId) {
+      clearInterval(this.refreshIntervalId);
+      this.refreshIntervalId = null;
+    }
+  },
+
   // ========== DASHBOARD ==========
   renderDashboard() {
-    // Fetch active events and registration summary in parallel
     Promise.all([
       fetch(`${API_URL}/events/active`).then((res) => res.json()),
       fetch(`${API_URL}/events/registrations-summary`).then((res) =>
@@ -501,7 +548,6 @@ const app = {
       ),
     ])
       .then(([events, summary]) => {
-        // Build a map: eventId -> playerCount
         const summaryMap = {};
         summary.forEach((item) => {
           summaryMap[item.eventId] = item.playerCount || 0;
@@ -512,7 +558,7 @@ const app = {
 
         let thead = "<thead><tr>";
         if (isAdmin) {
-          thead += "<th>Players</th>"; // changed from "Codes"
+          thead += "<th>Players</th>";
         }
         thead += "<th>Event Name</th><th>Release Time</th><th>Status</th>";
         thead += "</tr></thead>";
@@ -1262,6 +1308,7 @@ const app = {
     }
   },
 
+  // -------- FIXED registerPlayers function --------
   registerPlayers() {
     const eventCode = document.getElementById("register-event-code").value;
     const userId = document.getElementById("register-player-select").value;
@@ -1334,6 +1381,7 @@ const app = {
         }
       });
   },
+  // -------- end of fixed registerPlayers --------
 
   closeRegisterModal() {
     document.getElementById("modal-register-players").classList.remove("show");
