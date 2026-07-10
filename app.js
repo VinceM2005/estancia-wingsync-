@@ -1754,7 +1754,10 @@ const app = {
     if (!input) return;
     const isPassword = input.type === "password";
     input.type = isPassword ? "text" : "password";
-    toggleElement.innerText = isPassword ? "🙈" : "👁️";
+    // Toggle between eye and eye-slash icons
+    toggleElement.innerHTML = isPassword
+      ? '<i class="fas fa-eye-slash"></i>'
+      : '<i class="far fa-eye"></i>';
   },
 };
 

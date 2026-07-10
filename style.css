@@ -88,6 +88,10 @@ body {
   margin-bottom: 4px;
   color: var(--text);
 }
+.login-box label i {
+  margin-right: 6px;
+  color: var(--text-light);
+}
 
 .login-box .form-control {
   width: 100%;
@@ -114,20 +118,31 @@ body {
   font-size: 14px;
 }
 
-/* ===== BUTTONS ===== */
+/* ===== BUTTONS – Minimal & Professional ===== */
 .btn {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  padding: 10px 22px;
+  gap: 8px;
+  padding: 10px 24px;
   border: none;
   border-radius: 8px;
   font-weight: 600;
   font-size: 15px;
   cursor: pointer;
-  transition: 0.2s;
-  background: #e9edf2;
+  transition: all 0.2s ease;
+  background: #f1f4f8;
   color: var(--text);
+  font-family: inherit;
+}
+.btn:hover {
+  background: #e2e6ec;
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.06);
+}
+.btn:active {
+  transform: translateY(0);
+  box-shadow: none;
 }
 
 .btn-primary {
@@ -136,8 +151,7 @@ body {
 }
 .btn-primary:hover {
   background: var(--primary-dark);
-  transform: translateY(-1px);
-  box-shadow: 0 4px 12px rgba(42, 122, 98, 0.3);
+  box-shadow: 0 4px 16px rgba(42, 122, 98, 0.25);
 }
 
 .btn-success {
@@ -146,8 +160,7 @@ body {
 }
 .btn-success:hover {
   background: #1e8449;
-  transform: translateY(-1px);
-  box-shadow: 0 4px 12px rgba(39, 174, 96, 0.3);
+  box-shadow: 0 4px 16px rgba(39, 174, 96, 0.25);
 }
 
 .btn-danger {
@@ -156,12 +169,13 @@ body {
 }
 .btn-danger:hover {
   background: #a93226;
+  box-shadow: 0 4px 16px rgba(192, 57, 43, 0.25);
 }
 
 .btn-sm {
-  padding: 4px 10px;
+  padding: 4px 14px;
   font-size: 12px;
-  margin-right: 4px;
+  gap: 4px;
 }
 
 /* ===== APP LAYOUT ===== */
@@ -278,6 +292,11 @@ body {
   gap: 12px;
   color: #b0c4d0;
 }
+.sidebar-menu li i {
+  width: 20px;
+  text-align: center;
+  font-size: 16px;
+}
 
 .sidebar-menu li:hover {
   background: rgba(255, 255, 255, 0.06);
@@ -297,6 +316,12 @@ body {
   font-weight: 500;
   color: #b0c4d0;
   transition: 0.15s;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.sidebar-footer i {
+  font-size: 16px;
 }
 .sidebar-footer:hover {
   color: #fff;
@@ -343,6 +368,13 @@ header {
   font-size: 14px;
   color: var(--text-light);
   white-space: nowrap;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+#header-user i {
+  font-size: 20px;
+  color: var(--text-light);
 }
 
 /* ===== CONTENT AREA ===== */
@@ -382,6 +414,15 @@ header {
   flex-wrap: wrap;
   gap: 12px;
   margin-bottom: 18px;
+}
+.dashboard-header h2 {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 20px;
+}
+.dashboard-header h2 i {
+  color: var(--primary);
 }
 
 /* ===== TABLES ===== */
@@ -476,6 +517,10 @@ tr:last-child td {
   margin-bottom: 4px;
   color: var(--text);
 }
+.form-group label i {
+  margin-right: 6px;
+  color: var(--text-light);
+}
 
 .password-wrapper {
   position: relative;
@@ -494,16 +539,13 @@ tr:last-child td {
   top: 50%;
   transform: translateY(-50%);
   cursor: pointer;
-  font-size: 20px;
-  line-height: 1;
+  font-size: 18px;
   color: #888;
   transition: color 0.2s;
-  user-select: none;
   background: transparent;
   border: none;
   padding: 4px;
 }
-
 .password-toggle:hover {
   color: var(--primary);
 }
@@ -587,16 +629,23 @@ tr:last-child td {
   font-size: 22px;
   font-weight: 600;
   color: var(--text);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.modal-header h3 i {
+  color: var(--primary);
 }
 
 .close-modal {
   background: none;
   border: none;
-  font-size: 32px;
+  font-size: 28px;
   line-height: 1;
   cursor: pointer;
   color: #888;
   transition: 0.15s;
+  padding: 0 4px;
 }
 .close-modal:hover {
   color: var(--danger);
@@ -668,8 +717,6 @@ tr:last-child td {
 }
 
 /* ===== GOOGLE MAPS SPECIFIC STYLES ===== */
-
-/* Map Container */
 .map-container {
   width: 100%;
   height: 400px;
@@ -680,19 +727,16 @@ tr:last-child td {
   position: relative;
 }
 
-/* Google Maps Info Window */
 .gm-style-iw {
   padding: 8px 12px !important;
   border-radius: 8px !important;
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15) !important;
 }
-
 .gm-style-iw-d {
   overflow: hidden !important;
   max-width: 300px !important;
 }
 
-/* Autocomplete Dropdown */
 .pac-container {
   border-radius: 8px !important;
   border: 1px solid #dce3e8 !important;
@@ -701,66 +745,55 @@ tr:last-child td {
   z-index: 10000 !important;
   margin-top: 4px !important;
 }
-
 .pac-item {
   padding: 10px 14px !important;
   cursor: pointer !important;
   font-size: 14px !important;
   border-bottom: 1px solid #f0f0f0 !important;
 }
-
 .pac-item:hover {
   background-color: #f0f7f4 !important;
 }
-
 .pac-item-query {
   font-weight: 600 !important;
   color: #1a2a33 !important;
 }
-
 .pac-matched {
   font-weight: 400 !important;
   color: #5b6f82 !important;
 }
 
-/* Google Maps Controls */
 .gm-control-active {
   background: white !important;
   border-radius: 4px !important;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15) !important;
 }
-
 .gm-control-active:hover {
   background: #f5f5f5 !important;
 }
 
-/* Map Type Control */
 .gm-style-mtc {
   background: white !important;
   border-radius: 4px !important;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15) !important;
 }
-
 .gm-style-mtc button {
   padding: 6px 12px !important;
   font-size: 12px !important;
   font-weight: 500 !important;
 }
 
-/* Fullscreen Control */
 .gm-fullscreen-control {
   border-radius: 4px !important;
   background: white !important;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15) !important;
 }
 
-/* Responsive Map */
 @media (max-width: 768px) {
   .map-container {
     height: 320px;
   }
 }
-
 @media (max-width: 480px) {
   .map-container {
     height: 280px;
@@ -770,7 +803,6 @@ tr:last-child td {
   }
 }
 
-/* Search Box Styling */
 #player-search-box,
 #event-search-box {
   padding: 10px 14px;
@@ -784,20 +816,17 @@ tr:last-child td {
     box-shadow 0.2s;
   margin-bottom: 8px;
 }
-
 #player-search-box:focus,
 #event-search-box:focus {
   outline: none;
   border-color: #2a7a62;
   box-shadow: 0 0 0 3px rgba(42, 122, 98, 0.12);
 }
-
 #player-search-box::placeholder,
 #event-search-box::placeholder {
   color: #999;
 }
 
-/* Coordinate Display */
 #player-coords-text,
 #event-coords-text {
   font-family: "Courier New", monospace;
@@ -841,19 +870,16 @@ tr:last-child td {
 #registrations-table .used {
   color: var(--danger);
 }
-
 #registrations-table .unused {
   color: var(--success);
 }
 
-/* Small screen adjustments */
 @media (max-width: 480px) {
   #modal-register-players .modal-content {
     padding: 20px;
   }
 }
 
-/* Improved registration table */
 #registrations-table .code-item {
   display: inline-block;
   background: #f8fafc;
@@ -870,13 +896,11 @@ tr:last-child td {
   font-size: 11px;
   font-weight: 600;
 }
-
 #registrations-table .badge-used {
   color: var(--danger);
   font-size: 11px;
   font-weight: 600;
 }
-
 #registrations-table .badge-total {
   color: var(--text-light);
   font-size: 11px;
@@ -887,21 +911,18 @@ tr:last-child td {
 #registrations-table td:last-child {
   text-align: right;
 }
-
 #registrations-table td:first-child {
   font-weight: 600;
   width: 25%;
 }
-
 #registrations-table td:nth-child(2) {
   width: 50%;
 }
-
 #registrations-table td:nth-child(3) {
   width: 25%;
   text-align: right;
 }
-/* For the admin events table */
+
 #admin-events-table td:first-child {
   text-align: center;
   font-weight: 600;

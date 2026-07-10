@@ -5,6 +5,12 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Estancia Wingsync - Pigeon Clocking System</title>
 
+    <!-- Font Awesome 6 (free) -->
+    <link
+      rel="stylesheet"
+      href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css"
+    />
+
     <!-- Google Maps API -->
     <script
       src="https://maps.googleapis.com/maps/api/js?key=AIzaSyBrEWXV135IN7v1hM6Dwd_ynoKAK5t7TL8&libraries=places"
@@ -365,10 +371,16 @@
     <!-- ===== LOGIN SCREEN ===== -->
     <div id="login-screen">
       <div class="login-box">
+        <div style="text-align: center; margin-bottom: 8px">
+          <i
+            class="fas fa-dove"
+            style="font-size: 44px; color: var(--primary)"
+          ></i>
+        </div>
         <h2>Estancia Wingsync</h2>
         <p>Malinao, Albay Pigeon Clocking System</p>
         <div class="form-group" style="text-align: left; margin-top: 20px">
-          <label>User ID</label>
+          <label><i class="fas fa-user"></i> User ID</label>
           <input
             type="text"
             id="login-id"
@@ -378,7 +390,7 @@
           />
         </div>
         <div class="form-group" style="text-align: left">
-          <label>Password</label>
+          <label><i class="fas fa-lock"></i> Password</label>
           <div class="password-wrapper">
             <input
               type="password"
@@ -389,11 +401,14 @@
             <span
               class="password-toggle"
               onclick="app.togglePasswordVisibility('login-pass', this)"
-              >👁️</span
             >
+              <i class="far fa-eye"></i>
+            </span>
           </div>
         </div>
-        <button class="btn btn-primary" onclick="app.login()">Log In</button>
+        <button class="btn btn-primary" onclick="app.login()">
+          <i class="fas fa-sign-in-alt"></i> Log In
+        </button>
         <p id="login-error" style="color: red; margin-top: 10px; display: none">
           Invalid User ID or Password.
         </p>
@@ -422,52 +437,63 @@
             id="nav-dashboard"
             class="active"
           >
-            📊 Dashboard
+            <i class="fas fa-chart-pie"></i> Dashboard
           </li>
           <li onclick="app.navigate('profile')" id="nav-profile">
-            👤 My Profile
+            <i class="fas fa-user-circle"></i> My Profile
           </li>
           <li onclick="app.navigate('results')" id="nav-results">
-            🏆 Event Results
+            <i class="fas fa-trophy"></i> Event Results
           </li>
-          <li onclick="app.navigate('logs')" id="nav-logs">📝 App Logs</li>
+          <li onclick="app.navigate('logs')" id="nav-logs">
+            <i class="fas fa-history"></i> App Logs
+          </li>
           <li
             onclick="app.navigate('admin-players')"
             id="nav-admin-players"
             class="admin-only hidden"
           >
-            👥 Manage Players
+            <i class="fas fa-users"></i> Manage Players
           </li>
           <li
             onclick="app.navigate('admin-events')"
             id="nav-admin-events"
             class="admin-only hidden"
           >
-            📅 Manage Events
+            <i class="fas fa-calendar-alt"></i> Manage Events
           </li>
           <li
             onclick="app.navigate('sticker-generator')"
             id="nav-sticker-generator"
             class="admin-only hidden"
           >
-            🏷️ Sticker Generator
+            <i class="fas fa-tags"></i> Sticker Generator
           </li>
         </ul>
-        <div class="sidebar-footer" onclick="app.logout()">🚪 Log Out</div>
+        <div class="sidebar-footer" onclick="app.logout()">
+          <i class="fas fa-sign-out-alt"></i> Log Out
+        </div>
       </aside>
 
       <!-- Main Content -->
       <main id="main-content">
         <header>
-          <button class="menu-toggle" onclick="app.toggleSidebar()">☰</button>
+          <button class="menu-toggle" onclick="app.toggleSidebar()">
+            <i class="fas fa-bars"></i>
+          </button>
           <h3 id="header-title">Dashboard</h3>
-          <div id="header-user">Welcome, User</div>
+          <div id="header-user">
+            <i class="fas fa-user-circle"></i> Welcome, User
+          </div>
         </header>
 
         <div class="content-area">
           <!-- ===== DASHBOARD ===== -->
           <div id="view-dashboard" class="view-section">
             <div id="player-clock-in-area" class="card clock-in-box hidden">
+              <div style="font-size: 44px; color: var(--primary)">
+                <i class="fas fa-clock"></i>
+              </div>
               <h2 style="color: var(--primary)">Quick Clock In</h2>
               <p style="margin-bottom: 20px; color: #666">
                 Enter the event code to clock your pigeon's arrival
@@ -484,11 +510,11 @@
                 style="font-size: 1.2em; padding: 15px 30px"
                 onclick="app.clockIn()"
               >
-                🕒 Clock Bird Arrival
+                <i class="fas fa-check-circle"></i> Clock Bird Arrival
               </button>
             </div>
             <div class="card">
-              <h3>📋 Current Events</h3>
+              <h3><i class="fas fa-list-ul"></i> Current Events</h3>
               <table id="active-events-table">
                 <thead>
                   <tr>
@@ -505,13 +531,22 @@
           <!-- ===== PROFILE ===== -->
           <div id="view-profile" class="view-section hidden">
             <div class="card" style="max-width: 600px; margin: auto">
+              <div
+                style="
+                  text-align: center;
+                  font-size: 64px;
+                  color: var(--text-light);
+                "
+              >
+                <i class="fas fa-user-circle"></i>
+              </div>
               <h2 id="prof-name" style="text-align: center">Name</h2>
               <p style="text-align: center; color: #666; margin-bottom: 20px">
                 User ID: <span id="prof-id" style="font-weight: bold"></span>
               </p>
               <div class="form-group">
-                <label>Contact</label
-                ><input
+                <label><i class="fas fa-phone"></i> Contact</label>
+                <input
                   type="text"
                   id="prof-contact"
                   class="form-control"
@@ -519,8 +554,10 @@
                 />
               </div>
               <div class="form-group player-only hidden">
-                <label>Loft Latitude</label
-                ><input
+                <label
+                  ><i class="fas fa-map-marker-alt"></i> Loft Latitude</label
+                >
+                <input
                   type="text"
                   id="prof-lat"
                   class="form-control"
@@ -528,8 +565,10 @@
                 />
               </div>
               <div class="form-group player-only hidden">
-                <label>Loft Longitude</label
-                ><input
+                <label
+                  ><i class="fas fa-map-marker-alt"></i> Loft Longitude</label
+                >
+                <input
                   type="text"
                   id="prof-lng"
                   class="form-control"
@@ -537,7 +576,7 @@
                 />
               </div>
               <hr style="margin: 20px 0" />
-              <label>New Password</label>
+              <label><i class="fas fa-key"></i> New Password</label>
               <div class="password-wrapper">
                 <input
                   type="password"
@@ -548,11 +587,12 @@
                 <span
                   class="password-toggle"
                   onclick="app.togglePasswordVisibility('new-password', this)"
-                  >👁️</span
                 >
+                  <i class="far fa-eye"></i>
+                </span>
               </div>
               <button class="btn btn-primary" onclick="app.changePassword()">
-                Update Password
+                <i class="fas fa-save"></i> Update Password
               </button>
             </div>
           </div>
@@ -560,8 +600,9 @@
           <!-- ===== RESULTS ===== -->
           <div id="view-results" class="view-section hidden">
             <div class="card">
-              <div class="dashboard-header"><h2>🏆 Leaderboard</h2></div>
-              <!-- Auto-refresh controls will be injected here -->
+              <div class="dashboard-header">
+                <h2><i class="fas fa-trophy"></i> Leaderboard</h2>
+              </div>
               <div
                 id="event-release-info"
                 style="
@@ -590,7 +631,7 @@
           <!-- ===== LOGS ===== -->
           <div id="view-logs" class="view-section hidden">
             <div class="card">
-              <h2>📝 Logs</h2>
+              <h2><i class="fas fa-history"></i> App Logs</h2>
               <ul
                 id="log-list"
                 style="max-height: 400px; overflow-y: auto"
@@ -602,9 +643,9 @@
           <div id="view-admin-players" class="view-section hidden admin-only">
             <div class="card">
               <div class="dashboard-header">
-                <h2>👥 Manage Players</h2>
+                <h2><i class="fas fa-users"></i> Manage Players</h2>
                 <button class="btn btn-primary" onclick="app.openPlayerModal()">
-                  + Add New Player
+                  <i class="fas fa-plus"></i> Add New Player
                 </button>
               </div>
               <table id="players-table">
@@ -626,9 +667,9 @@
           <div id="view-admin-events" class="view-section hidden admin-only">
             <div class="card">
               <div class="dashboard-header">
-                <h2>📅 Manage Events</h2>
+                <h2><i class="fas fa-calendar-alt"></i> Manage Events</h2>
                 <button class="btn btn-primary" onclick="app.openEventModal()">
-                  + Create Event
+                  <i class="fas fa-plus"></i> Create Event
                 </button>
               </div>
               <table id="admin-events-table">
@@ -652,13 +693,12 @@
           >
             <div class="card">
               <div class="dashboard-header">
-                <h2>🏷️ Sticker Generator</h2>
+                <h2><i class="fas fa-tags"></i> Sticker Generator</h2>
                 <span class="sticker-count-badge" id="sticker-total-count"
                   >0 stickers</span
                 >
               </div>
 
-              <!-- Event Selector -->
               <div class="sticker-event-selector">
                 <select
                   id="sticker-event-select"
@@ -671,7 +711,6 @@
                 </div>
               </div>
 
-              <!-- Controls -->
               <div class="sticker-controls">
                 <label>
                   Sticker Width
@@ -694,27 +733,34 @@
                     class="btn-sticker-action btn-sticker-action-primary"
                     onclick="app.generateStickers()"
                   >
-                    🔄 Generate Stickers
+                    <i class="fas fa-sync-alt"></i> Generate Stickers
                   </button>
                   <button
                     class="btn-sticker-action btn-sticker-action-success"
                     onclick="app.downloadStickerPDF()"
                   >
-                    📄 Download PDF
+                    <i class="fas fa-file-pdf"></i> Download PDF
                   </button>
                   <button
                     class="btn-sticker-action btn-sticker-action-secondary"
                     onclick="window.print()"
                   >
-                    🖨️ Print
+                    <i class="fas fa-print"></i> Print
                   </button>
                 </div>
               </div>
 
-              <!-- Sticker Grid -->
               <div id="sticker-grid-container">
                 <div class="sticker-empty-state">
-                  <span class="big-icon">🏷️</span>
+                  <i
+                    class="fas fa-tags"
+                    style="
+                      font-size: 56px;
+                      display: block;
+                      margin-bottom: 12px;
+                      color: #ccc;
+                    "
+                  ></i>
                   <h3>No Stickers Generated</h3>
                   <p>
                     Register players to an event, then click "Generate Stickers"
@@ -735,14 +781,14 @@
     <div id="modal-player" class="modal-overlay">
       <div class="modal-content">
         <div class="modal-header">
-          <h3>📍 Add Player (Pinpoint Loft)</h3>
+          <h3><i class="fas fa-user-plus"></i> Add Player (Pinpoint Loft)</h3>
           <button class="close-modal" onclick="app.closeModal('modal-player')">
-            ×
+            <i class="fas fa-times"></i>
           </button>
         </div>
         <div class="form-group">
-          <label>Full Name</label
-          ><input
+          <label>Full Name</label>
+          <input
             type="text"
             id="modal-p-name"
             class="form-control"
@@ -750,8 +796,8 @@
           />
         </div>
         <div class="form-group">
-          <label>Contact Number</label
-          ><input
+          <label>Contact Number</label>
+          <input
             type="text"
             id="modal-p-contact"
             class="form-control"
@@ -759,13 +805,14 @@
           />
         </div>
         <div class="form-group">
-          <label>🔍 Search Location</label
-          ><input
+          <label><i class="fas fa-search"></i> Search Location</label>
+          <input
             type="text"
             id="player-search-box"
             class="form-control"
             placeholder="Search for a location..."
-          /><small style="display: block; margin-top: 4px; color: #666"
+          />
+          <small style="display: block; margin-top: 4px; color: #666"
             >Type an address or landmark, then select from dropdown</small
           >
         </div>
@@ -773,7 +820,7 @@
           <label>Pinpoint Player's Loft on Map</label>
           <div id="player-map" class="map-container"></div>
           <small
-            >📍 Coordinates:
+            ><i class="fas fa-location-dot"></i> Coordinates:
             <span id="player-coords-text">None selected</span></small
           >
           <div
@@ -782,10 +829,11 @@
             <button
               class="btn btn-sm btn-primary"
               onclick="app.getCurrentLocation('player')"
-              style="font-size: 11px"
+              style="font-size: 12px"
             >
-              📍 Use My Location</button
-            ><small
+              <i class="fas fa-location-dot"></i> Use My Location
+            </button>
+            <small
               style="
                 color: #888;
                 font-size: 11px;
@@ -801,7 +849,7 @@
           style="width: 100%"
           onclick="app.savePlayer()"
         >
-          💾 Save Player
+          <i class="fas fa-save"></i> Save Player
         </button>
       </div>
     </div>
@@ -810,14 +858,16 @@
     <div id="modal-event" class="modal-overlay">
       <div class="modal-content">
         <div class="modal-header">
-          <h3>📍 Create Event (Pinpoint Release)</h3>
+          <h3>
+            <i class="fas fa-calendar-plus"></i> Create Event (Pinpoint Release)
+          </h3>
           <button class="close-modal" onclick="app.closeModal('modal-event')">
-            ×
+            <i class="fas fa-times"></i>
           </button>
         </div>
         <div class="form-group">
-          <label>Event Name</label
-          ><input
+          <label>Event Name</label>
+          <input
             type="text"
             id="modal-e-name"
             class="form-control"
@@ -825,21 +875,18 @@
           />
         </div>
         <div class="form-group">
-          <label>Release Date & Time</label
-          ><input
-            type="datetime-local"
-            id="modal-e-time"
-            class="form-control"
-          />
+          <label>Release Date &amp; Time</label>
+          <input type="datetime-local" id="modal-e-time" class="form-control" />
         </div>
         <div class="form-group">
-          <label>🔍 Search Location</label
-          ><input
+          <label><i class="fas fa-search"></i> Search Location</label>
+          <input
             type="text"
             id="event-search-box"
             class="form-control"
             placeholder="Search for a location..."
-          /><small style="display: block; margin-top: 4px; color: #666"
+          />
+          <small style="display: block; margin-top: 4px; color: #666"
             >Type an address or landmark, then select from dropdown</small
           >
         </div>
@@ -847,7 +894,7 @@
           <label>Pinpoint Release Location on Map</label>
           <div id="event-map" class="map-container"></div>
           <small
-            >📍 Coordinates:
+            ><i class="fas fa-location-dot"></i> Coordinates:
             <span id="event-coords-text">None selected</span></small
           >
           <div
@@ -856,10 +903,11 @@
             <button
               class="btn btn-sm btn-primary"
               onclick="app.getCurrentLocation('event')"
-              style="font-size: 11px"
+              style="font-size: 12px"
             >
-              📍 Use My Location</button
-            ><small
+              <i class="fas fa-location-dot"></i> Use My Location
+            </button>
+            <small
               style="
                 color: #888;
                 font-size: 11px;
@@ -875,7 +923,7 @@
           style="width: 100%"
           onclick="app.saveEvent()"
         >
-          💾 Create Event
+          <i class="fas fa-save"></i> Create Event
         </button>
       </div>
     </div>
@@ -884,18 +932,18 @@
     <div id="modal-edit-player" class="modal-overlay">
       <div class="modal-content">
         <div class="modal-header">
-          <h3>✏️ Edit Player</h3>
+          <h3><i class="fas fa-user-edit"></i> Edit Player</h3>
           <button
             class="close-modal"
             onclick="app.closeModal('modal-edit-player')"
           >
-            ×
+            <i class="fas fa-times"></i>
           </button>
         </div>
         <input type="hidden" id="edit-player-id" />
         <div class="form-group">
-          <label>Full Name</label
-          ><input
+          <label>Full Name</label>
+          <input
             type="text"
             id="edit-p-name"
             class="form-control"
@@ -903,8 +951,8 @@
           />
         </div>
         <div class="form-group">
-          <label>Contact Number</label
-          ><input
+          <label>Contact Number</label>
+          <input
             type="text"
             id="edit-p-contact"
             class="form-control"
@@ -916,7 +964,7 @@
           style="width: 100%"
           onclick="app.saveEditPlayer()"
         >
-          💾 Update Player
+          <i class="fas fa-save"></i> Update Player
         </button>
       </div>
     </div>
@@ -925,14 +973,14 @@
     <div id="modal-register-players" class="modal-overlay">
       <div class="modal-content" style="max-width: 700px">
         <div class="modal-header">
-          <h3>📝 Register Players for Event</h3>
+          <h3><i class="fas fa-user-plus"></i> Register Players for Event</h3>
           <button class="close-modal" onclick="app.closeRegisterModal()">
-            ×
+            <i class="fas fa-times"></i>
           </button>
         </div>
         <div class="form-group">
-          <label>Event Code</label
-          ><input
+          <label>Event Code</label>
+          <input
             type="text"
             id="register-event-code"
             class="form-control"
@@ -940,14 +988,14 @@
           />
         </div>
         <div class="form-group">
-          <label>Select Player</label
-          ><select id="register-player-select" class="form-control">
+          <label>Select Player</label>
+          <select id="register-player-select" class="form-control">
             <option value="">-- Select Player --</option>
           </select>
         </div>
         <div class="form-group">
-          <label>Number of Pigeons (max 10)</label
-          ><input
+          <label>Number of Pigeons (max 10)</label>
+          <input
             type="number"
             id="register-pigeon-count"
             class="form-control"
@@ -961,7 +1009,7 @@
           style="width: 100%"
           onclick="app.registerPlayers()"
         >
-          ✅ Register Player
+          <i class="fas fa-check"></i> Register Player
         </button>
 
         <hr style="margin: 20px 0" />
@@ -979,7 +1027,7 @@
             class="btn-generate-stickers"
             onclick="app.navigateToStickerGenerator()"
           >
-            🏷️ Generate Stickers
+            <i class="fas fa-tags"></i> Generate Stickers
           </button>
         </div>
         <table
@@ -995,7 +1043,10 @@
           </thead>
           <tbody>
             <tr>
-              <td colspan="3" style="text-align: center; color: #999">
+              <td
+                colspan="3"
+                style="text-align: center; color: #999; padding: 20px"
+              >
                 No players registered yet.
               </td>
             </tr>
@@ -1009,11 +1060,9 @@
       // ============================================================
       //  STICKER GENERATOR MODULE  (appended to main app)
       // ============================================================
-
       (function () {
         "use strict";
 
-        // ----- Sticker state -----
         const state = {
           stickers: [],
           widthMm: 25,
@@ -1025,7 +1074,6 @@
           canvasCache: [],
         };
 
-        // ----- QR code generation using qrcodejs (reliable) -----
         function generateQRCanvas(data, sizePx) {
           return new Promise((resolve, reject) => {
             try {
@@ -1033,12 +1081,9 @@
                 reject(new Error("QRCode library not loaded"));
                 return;
               }
-              // Create a hidden container
               const container = document.createElement("div");
               container.style.cssText = "display:none;position:absolute;";
               document.body.appendChild(container);
-
-              // Generate QR code
               new QRCode(container, {
                 text: data,
                 width: sizePx,
@@ -1047,8 +1092,6 @@
                 colorLight: "#ffffff",
                 correctLevel: QRCode.CorrectLevel.H,
               });
-
-              // Find the canvas or img element
               const qrCanvas = container.querySelector("canvas");
               if (qrCanvas) {
                 const canvas = document.createElement("canvas");
@@ -1060,8 +1103,6 @@
                 resolve(canvas);
                 return;
               }
-
-              // Fallback: check for img element
               const qrImg = container.querySelector("img");
               if (qrImg) {
                 const canvas = document.createElement("canvas");
@@ -1081,7 +1122,6 @@
                 img.src = qrImg.src;
                 return;
               }
-
               document.body.removeChild(container);
               reject(new Error("QR code canvas or image not found"));
             } catch (e) {
@@ -1090,7 +1130,6 @@
           });
         }
 
-        // ----- Helper: generate Code 128 barcode on a canvas -----
         function generateBarcodeCanvas(data, widthPx, heightPx) {
           return new Promise((resolve, reject) => {
             try {
@@ -1118,7 +1157,6 @@
           });
         }
 
-        // ----- Render a single sticker (fixed layout with QR, barcode, code) -----
         async function renderStickerCanvas(
           eventName,
           playerName,
@@ -1129,23 +1167,18 @@
         ) {
           const widthPx = Math.round((widthMm / 25.4) * dpi);
           const heightPx = Math.round((heightMm / 25.4) * dpi);
-
           const canvas = document.createElement("canvas");
           canvas.width = widthPx;
           canvas.height = heightPx;
           const ctx = canvas.getContext("2d");
 
-          // White background
           ctx.fillStyle = "#ffffff";
           ctx.fillRect(0, 0, widthPx, heightPx);
 
-          // Top section (6mm) and bottom (4mm)
           const topHeightPx = Math.round((6 / 10) * heightPx);
           const bottomHeightPx = heightPx - topHeightPx;
           const marginPx = Math.round((1 / 25.4) * dpi);
 
-          // ---- TOP SECTION (6mm) ----
-          // 1. QR code: left side, vertically centered in top section
           const qrSizeMm = Math.min(4.5, widthMm * 0.3);
           const qrSizePx = Math.round((qrSizeMm / 25.4) * dpi);
           const qrX = marginPx;
@@ -1156,7 +1189,6 @@
             qrCanvas = await generateQRCanvas(code, qrSizePx);
           } catch (e) {
             console.warn("QR generation failed for", code, e);
-            // fallback placeholder
             ctx.fillStyle = "#f0f0f0";
             ctx.fillRect(qrX, qrY, qrSizePx, qrSizePx);
             ctx.fillStyle = "#999";
@@ -1169,12 +1201,10 @@
             ctx.drawImage(qrCanvas, qrX, qrY, qrSizePx, qrSizePx);
           }
 
-          // 2. Barcode: top-center, height ~1.8mm
           const barcodeHeightMm = 1.8;
           const barcodeHeightPx = Math.round((barcodeHeightMm / 25.4) * dpi);
           const barcodeTopMargin = Math.round((0.3 / 25.4) * dpi);
           const barcodeY = barcodeTopMargin;
-
           const barcodeLeft = qrX + qrSizePx + Math.round((1.5 / 25.4) * dpi);
           const barcodeWidth = widthPx - barcodeLeft - marginPx;
 
@@ -1210,7 +1240,6 @@
             );
           }
 
-          // 3. 8-digit code: centered horizontally, below barcode, still in top section
           const codeText = code;
           const codeYStart =
             barcodeY + barcodeHeightPx + Math.round((0.2 / 25.4) * dpi);
@@ -1229,7 +1258,6 @@
           const centerX = widthPx / 2;
           ctx.fillText(codeText, centerX, codeYStart);
 
-          // ---- BOTTOM SECTION (4mm) ----
           const bottomY = topHeightPx;
           const fontSizePx = Math.min(
             Math.round((2.2 / 25.4) * dpi),
@@ -1272,7 +1300,6 @@
           return canvas;
         }
 
-        // ----- Render all stickers for preview -----
         async function renderAllStickers(stickers, widthMm) {
           const container = document.getElementById("sticker-grid-container");
           if (!container) return;
@@ -1280,7 +1307,7 @@
           if (!stickers || stickers.length === 0) {
             container.innerHTML = `
                         <div class="sticker-empty-state">
-                            <span class="big-icon">🏷️</span>
+                            <i class="fas fa-tags" style="font-size:56px; display:block; margin-bottom:12px; color:#ccc;"></i>
                             <h3>No Stickers to Generate</h3>
                             <p>Register players to an event first, then click "Generate Stickers".</p>
                         </div>
@@ -1327,7 +1354,7 @@
             const dataUrl = canvas.toDataURL("image/png");
             html += `
                         <div class="sticker-preview-item">
-                            <img src="${dataUrl}" alt="Sticker ${data.code}" style="width:100%;height:auto;border-radius:3px;" />
+                            <img src="${dataUrl}" alt="Sticker ${data.code}" style="width:100%; height:auto; border-radius:3px;" />
                             <div class="sticker-player">${data.playerName}</div>
                             <div class="sticker-label">${data.code}</div>
                         </div>
@@ -1339,7 +1366,6 @@
             `${canvasItems.length} stickers`;
         }
 
-        // ----- Generate PDF using jsPDF -----
         async function generateStickerPDF(stickers, widthMm) {
           if (!stickers || stickers.length === 0) {
             app.showModal({
@@ -1395,10 +1421,8 @@
           return doc;
         }
 
-        // ----- Expose public API -----
         window.StickerGenerator = {
           state: state,
-
           async loadEventData(eventId) {
             try {
               const res = await fetch(
@@ -1434,7 +1458,6 @@
               throw e;
             }
           },
-
           async generateAndRender(eventId) {
             if (state.isGenerating) return;
             state.isGenerating = true;
@@ -1444,7 +1467,7 @@
               if (!stickers || stickers.length === 0) {
                 document.getElementById("sticker-grid-container").innerHTML = `
                                 <div class="sticker-empty-state">
-                                    <span class="big-icon">📭</span>
+                                    <i class="fas fa-inbox" style="font-size:56px; display:block; margin-bottom:12px; color:#ccc;"></i>
                                     <h3>No Registered Pigeons</h3>
                                     <p>This event has no registered pigeons. Register players first.</p>
                                 </div>
@@ -1468,7 +1491,6 @@
               state.isGenerating = false;
             }
           },
-
           async downloadPDF() {
             if (!state.stickers || state.stickers.length === 0) {
               app.showModal({
@@ -1504,7 +1526,6 @@
               });
             }
           },
-
           updateWidth(mm) {
             state.widthMm = Math.min(25, Math.max(22, parseFloat(mm) || 25));
             document.getElementById("sticker-width-display").textContent =
@@ -1515,7 +1536,6 @@
               this.generateAndRender(state.eventId);
             }
           },
-
           populateEventSelector() {
             const select = document.getElementById("sticker-event-select");
             if (!select) return;
@@ -1530,18 +1550,15 @@
             }
             if (currentVal) select.value = currentVal;
           },
-
           setEventFromCode(eventCode) {
             const select = document.getElementById("sticker-event-select");
             if (select) select.value = eventCode;
           },
-
           getSelectedEvent() {
             return document.getElementById("sticker-event-select").value;
           },
         };
 
-        // ----- Hook into app -----
         const origNavigate = app.navigate;
         app.navigate = function (view) {
           origNavigate.call(this, view);
@@ -1579,7 +1596,7 @@
           } else {
             document.getElementById("sticker-grid-container").innerHTML = `
                         <div class="sticker-empty-state">
-                            <span class="big-icon">📋</span>
+                            <i class="fas fa-list-ul" style="font-size:56px; display:block; margin-bottom:12px; color:#ccc;"></i>
                             <h3>Select an Event</h3>
                             <p>Choose an event from the dropdown to generate stickers.</p>
                         </div>
@@ -1611,7 +1628,6 @@
           StickerGenerator.downloadPDF();
         };
 
-        // ----- Override renderEvents to add sticker button -----
         const origRenderEvents = app.renderEvents;
         app.renderEvents = function () {
           origRenderEvents.call(this);
@@ -1631,7 +1647,7 @@
                     const btn = document.createElement("button");
                     btn.className =
                       "btn-sticker-action btn-sticker-action-primary btn-sm";
-                    btn.innerHTML = "🏷️ Stickers";
+                    btn.innerHTML = '<i class="fas fa-tags"></i> Stickers';
                     btn.style.marginLeft = "4px";
                     btn.onclick = () => {
                       StickerGenerator.setEventFromCode(code);
