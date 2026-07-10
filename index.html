@@ -48,18 +48,17 @@
         align-items: center;
         gap: 8px;
       }
-      .sticker-controls input[type="number"] {
-        width: 70px;
-        padding: 6px 10px;
-        border: 1px solid #dce3e8;
-        border-radius: 6px;
-        font-size: 14px;
-        text-align: center;
+      .sticker-controls input[type="range"] {
+        width: 140px;
+        accent-color: var(--primary);
+        cursor: pointer;
       }
-      .sticker-controls input[type="number"]:focus {
-        outline: none;
-        border-color: var(--primary);
-        box-shadow: 0 0 0 3px rgba(42, 122, 98, 0.12);
+      .sticker-controls .width-display {
+        font-weight: 600;
+        font-size: 15px;
+        color: var(--primary);
+        min-width: 40px;
+        text-align: center;
       }
       .sticker-controls .btn-group {
         display: flex;
@@ -337,23 +336,6 @@
       }
       .sticker-event-selector .event-info strong {
         color: var(--text);
-      }
-      .sticker-width-control {
-        display: flex;
-        align-items: center;
-        gap: 12px;
-      }
-      .sticker-width-control input[type="range"] {
-        width: 120px;
-        accent-color: var(--primary);
-        cursor: pointer;
-      }
-      .sticker-width-control .width-display {
-        font-weight: 600;
-        font-size: 15px;
-        color: var(--primary);
-        min-width: 40px;
-        text-align: center;
       }
       .sticker-badge {
         display: inline-block;
@@ -718,13 +700,13 @@
                     type="range"
                     id="sticker-width-slider"
                     min="22"
-                    max="25"
-                    value="25"
+                    max="42"
+                    value="42"
                     step="0.5"
                     oninput="app.updateStickerWidth(this.value)"
                   />
                   <span class="width-display" id="sticker-width-display"
-                    >25</span
+                    >42</span
                   >
                   mm
                 </label>
@@ -1065,7 +1047,7 @@
 
         const state = {
           stickers: [],
-          widthMm: 25,
+          widthMm: 42, // default 42mm (4.2cm)
           heightMm: 10,
           dpi: 300,
           eventId: null,
@@ -1073,6 +1055,9 @@
           isGenerating: false,
           canvasCache: [],
         };
+
+        // Fixed scratch-off width = 22mm (the area where QR, barcode and code are placed)
+        const SCRATCH_WIDTH_MM = 22;
 
         function generateQRCanvas(data, sizePx) {
           return new Promise((resolve, reject) => {
@@ -1142,7 +1127,7 @@
               canvas.height = heightPx;
               JsBarcode(canvas, data, {
                 format: "CODE128",
-                width: Math.max(1, Math.floor(widthPx / (data.length * 5))),
+                width: Math.max(1, Math.floor(widthPx / (data.length * 6))),
                 height: heightPx,
                 displayValue: false,
                 background: "#ffffff",
@@ -1172,14 +1157,21 @@
           canvas.height = heightPx;
           const ctx = canvas.getContext("2d");
 
+          // White background
           ctx.fillStyle = "#ffffff";
           ctx.fillRect(0, 0, widthPx, heightPx);
 
-          const topHeightPx = Math.round((6 / 10) * heightPx);
+          const topHeightPx = Math.round((6 / 10) * heightPx); // 6mm top section
           const bottomHeightPx = heightPx - topHeightPx;
           const marginPx = Math.round((1 / 25.4) * dpi);
 
-          const qrSizeMm = Math.min(4.5, widthMm * 0.3);
+          // Scratch-off content width in pixels (22mm fixed)
+          const scratchWidthPx = Math.round((SCRATCH_WIDTH_MM / 25.4) * dpi);
+
+          // ---- TOP SECTION (6mm) ----
+          // All content placed within scratchWidthPx from left margin
+          // 1. QR code: left side, vertically centered in the scratch area
+          const qrSizeMm = Math.min(4.5, SCRATCH_WIDTH_MM * 0.28);
           const qrSizePx = Math.round((qrSizeMm / 25.4) * dpi);
           const qrX = marginPx;
           const qrY = Math.round((topHeightPx - qrSizePx) / 2);
@@ -1201,18 +1193,21 @@
             ctx.drawImage(qrCanvas, qrX, qrY, qrSizePx, qrSizePx);
           }
 
-          const barcodeHeightMm = 1.8;
+          // 2. Barcode: placed to the right of QR, at the top of the scratch area
+          const barcodeHeightMm = 1.6;
           const barcodeHeightPx = Math.round((barcodeHeightMm / 25.4) * dpi);
-          const barcodeTopMargin = Math.round((0.3 / 25.4) * dpi);
-          const barcodeY = barcodeTopMargin;
-          const barcodeLeft = qrX + qrSizePx + Math.round((1.5 / 25.4) * dpi);
-          const barcodeWidth = widthPx - barcodeLeft - marginPx;
+          const barcodeY = marginPx;
+
+          // Gap between QR and barcode
+          const gap1 = Math.round((1.2 / 25.4) * dpi);
+          const barcodeLeft = qrX + qrSizePx + gap1;
+          const barcodeWidth = scratchWidthPx - barcodeLeft - marginPx;
 
           let bcCanvas = null;
           try {
             bcCanvas = await generateBarcodeCanvas(
               code,
-              barcodeWidth,
+              Math.max(20, barcodeWidth),
               barcodeHeightPx,
             );
           } catch (e) {
@@ -1223,7 +1218,7 @@
               bcCanvas,
               barcodeLeft,
               barcodeY,
-              barcodeWidth,
+              Math.max(20, barcodeWidth),
               barcodeHeightPx,
             );
           } else {
@@ -1240,24 +1235,45 @@
             );
           }
 
+          // 3. 8-digit code: placed below the barcode, centered horizontally
           const codeText = code;
-          const codeYStart =
-            barcodeY + barcodeHeightPx + Math.round((0.2 / 25.4) * dpi);
-          const codeAvailableHeight = topHeightPx - codeYStart - marginPx;
-          let codeFontSize = Math.min(
-            Math.round((2.2 / 25.4) * dpi),
-            codeAvailableHeight * 0.85,
-            Math.round(barcodeWidth / (codeText.length * 0.55)),
-          );
-          codeFontSize = Math.max(8, codeFontSize);
+          const gap2 = Math.round((0.8 / 25.4) * dpi);
+          const codeY = barcodeY + barcodeHeightPx + gap2;
+          const codeAvailableHeight = topHeightPx - codeY - marginPx;
+          const codeAvailableWidth = barcodeWidth;
 
-          ctx.fillStyle = "#000000";
-          ctx.font = `bold ${codeFontSize}px monospace`;
+          // Calculate optimal font size - LARGE and BOLD
+          const maxFontByHeight = codeAvailableHeight * 0.95;
+          const maxFontByWidth = codeAvailableWidth / (codeText.length * 0.6);
+          let codeFontSize = Math.min(
+            maxFontByHeight,
+            maxFontByWidth,
+            Math.round((5.0 / 25.4) * dpi),
+          );
+          // Ensure minimum 16px and maximum 48px for readability
+          codeFontSize = Math.min(48, Math.max(16, Math.round(codeFontSize)));
+
+          // Letter spacing for better readability (2-3px)
+          const letterSpacing = Math.min(
+            3,
+            Math.max(1, Math.round(codeFontSize * 0.05)),
+          );
+
           ctx.textAlign = "center";
           ctx.textBaseline = "top";
-          const centerX = widthPx / 2;
-          ctx.fillText(codeText, centerX, codeYStart);
+          ctx.fillStyle = "#000000";
+          ctx.font = `bold ${codeFontSize}px monospace`;
 
+          // Use letterSpacing for perfectly even spacing
+          ctx.letterSpacing = `${letterSpacing}px`;
+
+          const centerX = barcodeLeft + barcodeWidth / 2;
+          ctx.fillText(codeText, centerX, codeY);
+
+          // Reset letterSpacing
+          ctx.letterSpacing = "0px";
+
+          // ---- BOTTOM SECTION (4mm) ----
           const bottomY = topHeightPx;
           const fontSizePx = Math.min(
             Math.round((2.2 / 25.4) * dpi),
@@ -1273,6 +1289,7 @@
           const centerY = bottomY + bottomHeightPx / 2;
           const maxWidth = widthPx * 0.42;
 
+          // Event name (left)
           ctx.font = `${testSize}px sans-serif`;
           while (testSize > 8 && ctx.measureText(eventLabel).width > maxWidth) {
             testSize -= 1;
@@ -1283,6 +1300,7 @@
           ctx.fillStyle = "#000000";
           ctx.fillText(eventLabel, leftX, centerY);
 
+          // Player name (right)
           testSize = fontSizePx;
           ctx.font = `${testSize}px sans-serif`;
           while (
@@ -1297,6 +1315,23 @@
           ctx.fillStyle = "#000000";
           ctx.fillText(playerLabel, rightX, centerY);
 
+          // ---- ADD SOLID OUTER BORDER FOR CUTTING ----
+          ctx.strokeStyle = "#000000";
+          ctx.lineWidth = 1.0;
+          ctx.strokeRect(0, 0, widthPx, heightPx);
+
+          // ---- DASHED BORDER FOR SCRATCH-OFF AREA (guidance only) ----
+          ctx.strokeStyle = "#e0e0e0";
+          ctx.lineWidth = 0.5;
+          ctx.setLineDash([2, 3]);
+          ctx.strokeRect(
+            marginPx,
+            marginPx,
+            scratchWidthPx - marginPx,
+            topHeightPx - marginPx,
+          );
+          ctx.setLineDash([]);
+
           return canvas;
         }
 
@@ -1306,23 +1341,23 @@
 
           if (!stickers || stickers.length === 0) {
             container.innerHTML = `
-                        <div class="sticker-empty-state">
-                            <i class="fas fa-tags" style="font-size:56px; display:block; margin-bottom:12px; color:#ccc;"></i>
-                            <h3>No Stickers to Generate</h3>
-                            <p>Register players to an event first, then click "Generate Stickers".</p>
-                        </div>
-                    `;
+              <div class="sticker-empty-state">
+                <i class="fas fa-tags" style="font-size:56px; display:block; margin-bottom:12px; color:#ccc;"></i>
+                <h3>No Stickers to Generate</h3>
+                <p>Register players to an event first, then click "Generate Stickers".</p>
+              </div>
+            `;
             document.getElementById("sticker-total-count").textContent =
               "0 stickers";
             return;
           }
 
           container.innerHTML = `
-                    <div class="sticker-loading">
-                        <div class="spinner"></div>
-                        <p>Generating stickers... (${stickers.length} stickers)</p>
-                    </div>
-                `;
+            <div class="sticker-loading">
+              <div class="spinner"></div>
+              <p>Generating stickers... (${stickers.length} stickers)</p>
+            </div>
+          `;
 
           const canvasItems = [];
           const dpi = state.dpi;
@@ -1353,12 +1388,12 @@
             const data = item.data;
             const dataUrl = canvas.toDataURL("image/png");
             html += `
-                        <div class="sticker-preview-item">
-                            <img src="${dataUrl}" alt="Sticker ${data.code}" style="width:100%; height:auto; border-radius:3px;" />
-                            <div class="sticker-player">${data.playerName}</div>
-                            <div class="sticker-label">${data.code}</div>
-                        </div>
-                    `;
+              <div class="sticker-preview-item">
+                <img src="${dataUrl}" alt="Sticker ${data.code}" style="width:100%; height:auto; border-radius:3px;" />
+                <div class="sticker-player">${data.playerName}</div>
+                <div class="sticker-label">${data.code}</div>
+              </div>
+            `;
           }
           html += "</div>";
           container.innerHTML = html;
@@ -1466,12 +1501,12 @@
               const stickers = await this.loadEventData(eventId);
               if (!stickers || stickers.length === 0) {
                 document.getElementById("sticker-grid-container").innerHTML = `
-                                <div class="sticker-empty-state">
-                                    <i class="fas fa-inbox" style="font-size:56px; display:block; margin-bottom:12px; color:#ccc;"></i>
-                                    <h3>No Registered Pigeons</h3>
-                                    <p>This event has no registered pigeons. Register players first.</p>
-                                </div>
-                            `;
+                  <div class="sticker-empty-state">
+                    <i class="fas fa-inbox" style="font-size:56px; display:block; margin-bottom:12px; color:#ccc;"></i>
+                    <h3>No Registered Pigeons</h3>
+                    <p>This event has no registered pigeons. Register players first.</p>
+                  </div>
+                `;
                 document.getElementById("sticker-total-count").textContent =
                   "0 stickers";
                 state.isGenerating = false;
@@ -1527,7 +1562,7 @@
             }
           },
           updateWidth(mm) {
-            state.widthMm = Math.min(25, Math.max(22, parseFloat(mm) || 25));
+            state.widthMm = Math.min(42, Math.max(22, parseFloat(mm) || 42));
             document.getElementById("sticker-width-display").textContent =
               state.widthMm;
             document.getElementById("sticker-width-slider").value =
@@ -1559,6 +1594,7 @@
           },
         };
 
+        // Hook into app
         const origNavigate = app.navigate;
         app.navigate = function (view) {
           origNavigate.call(this, view);
@@ -1595,12 +1631,12 @@
             StickerGenerator.generateAndRender(eventCode);
           } else {
             document.getElementById("sticker-grid-container").innerHTML = `
-                        <div class="sticker-empty-state">
-                            <i class="fas fa-list-ul" style="font-size:56px; display:block; margin-bottom:12px; color:#ccc;"></i>
-                            <h3>Select an Event</h3>
-                            <p>Choose an event from the dropdown to generate stickers.</p>
-                        </div>
-                    `;
+              <div class="sticker-empty-state">
+                <i class="fas fa-list-ul" style="font-size:56px; display:block; margin-bottom:12px; color:#ccc;"></i>
+                <h3>Select an Event</h3>
+                <p>Choose an event from the dropdown to generate stickers.</p>
+              </div>
+            `;
             document.getElementById("sticker-total-count").textContent =
               "0 stickers";
           }
@@ -1628,6 +1664,7 @@
           StickerGenerator.downloadPDF();
         };
 
+        // Override renderEvents to add sticker button
         const origRenderEvents = app.renderEvents;
         app.renderEvents = function () {
           origRenderEvents.call(this);
