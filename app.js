@@ -211,7 +211,7 @@ const app = {
   selectedEventCode: null,
   currentRegistrations: [],
 
-  // ----- NEW: auto‑refresh timer ID -----
+  // ----- auto‑refresh timer ID -----
   refreshIntervalId: null,
 
   init() {
@@ -432,9 +432,7 @@ const app = {
   },
 
   logout() {
-    // ----- NEW: stop auto‑refresh when logging out -----
     this.stopAutoRefresh();
-
     this.currentUser = null;
     sessionStorage.removeItem("wingsync_user");
     document.getElementById("app-screen").classList.add("hidden");
@@ -483,9 +481,8 @@ const app = {
       .catch((err) => console.error("Failed to fetch events for lookup:", err));
   },
 
-  // ========== NAVIGATION (modified to control auto‑refresh) ==========
+  // ========== NAVIGATION ==========
   navigate(view) {
-    // ----- NEW: stop any running refresh before switching views -----
     this.stopAutoRefresh();
 
     document
@@ -504,7 +501,7 @@ const app = {
     if (view === "results") this.initResultsView();
     if (view === "logs") this.renderLogs();
 
-    // ----- NEW: start auto‑refresh for live views -----
+    // Start auto‑refresh for live views
     if (view === "dashboard" || view === "results") {
       this.startAutoRefresh();
     }
@@ -514,22 +511,20 @@ const app = {
     document.getElementById("sidebar").classList.toggle("open");
   },
 
-  // ========== AUTO‑REFRESH (new methods) ==========
+  // ========== AUTO‑REFRESH ==========
   startAutoRefresh() {
-    // Clear any existing interval
     if (this.refreshIntervalId) clearInterval(this.refreshIntervalId);
-    // Refresh every 3 seconds
     this.refreshIntervalId = setInterval(() => {
       const currentView = document.querySelector(".view-section:not(.hidden)");
       if (currentView) {
         const id = currentView.id;
         if (id === "view-results") {
-          this.renderResults(); // your existing function
+          this.renderResults();
         } else if (id === "view-dashboard") {
-          this.renderDashboard(); // your existing function
+          this.renderDashboard();
         }
       }
-    }, 3000); // 3000 ms = 3 seconds
+    }, 3000);
   },
 
   stopAutoRefresh() {
@@ -641,6 +636,12 @@ const app = {
 
         document.getElementById("clock-in-code").value = "";
         this.renderDashboard();
+
+        // If currently on results view, refresh it immediately
+        const resultsView = document.getElementById("view-results");
+        if (resultsView && !resultsView.classList.contains("hidden")) {
+          this.renderResults();
+        }
       })
       .catch((err) => {
         this.showModal({
@@ -751,6 +752,25 @@ const app = {
     if (!searchInput) {
       const container = document.querySelector("#view-results .card");
       const header = container.querySelector(".dashboard-header");
+
+      // Add auto-refresh status and refresh button
+      const infoBar = document.createElement("div");
+      infoBar.style.cssText =
+        "display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px; margin-bottom: 12px;";
+      infoBar.innerHTML = `
+                <div style="display: flex; align-items: center; gap: 10px; flex-wrap: wrap;">
+                    <span style="font-size: 13px; color: var(--text-light);">
+                        🔄 Auto-refresh <span style="color: var(--primary); font-weight: 600;">every 3s</span>
+                    </span>
+                    <button class="btn btn-sm btn-primary" onclick="app.refreshResults()">
+                        🔄 Refresh Now
+                    </button>
+                </div>
+                <div style="font-size: 13px; color: #999;" id="results-last-updated">
+                    Last updated: just now
+                </div>
+            `;
+
       const searchDiv = document.createElement("div");
       searchDiv.style.cssText =
         "margin: 10px 0 15px; display: flex; gap: 10px; flex-wrap: wrap;";
@@ -758,7 +778,10 @@ const app = {
                         <input id="result-search-input" type="text" class="form-control" style="flex:1; min-width:200px;" placeholder="🔍 Search events by name or code..." oninput="app.filterResults()">
                         <button class="btn btn-secondary" onclick="document.getElementById('result-search-input').value=''; app.filterResults();">✕ Clear</button>
                     `;
-      container.insertBefore(searchDiv, header.nextSibling);
+
+      // Insert after header
+      container.insertBefore(infoBar, header.nextSibling);
+      container.insertBefore(searchDiv, header.nextSibling.nextSibling);
     }
 
     document.getElementById("event-release-info").innerHTML = "";
@@ -788,6 +811,15 @@ const app = {
     } else {
       this.selectedEventCode = null;
     }
+    this.renderResults();
+  },
+
+  refreshResults() {
+    // Update last updated time
+    const now = new Date();
+    const timeStr = now.toLocaleTimeString();
+    const updatedEl = document.getElementById("results-last-updated");
+    if (updatedEl) updatedEl.textContent = `Last updated: ${timeStr}`;
     this.renderResults();
   },
 
@@ -839,6 +871,12 @@ const app = {
                 `,
           )
           .join("");
+        // Update timestamp
+        const updatedEl = document.getElementById("results-last-updated");
+        if (updatedEl) {
+          const now = new Date();
+          updatedEl.textContent = `Last updated: ${now.toLocaleTimeString()}`;
+        }
       })
       .catch((err) => console.error("Results error:", err));
   },
@@ -1308,7 +1346,7 @@ const app = {
     }
   },
 
-  // -------- FIXED registerPlayers function --------
+  // -------- registerPlayers --------
   registerPlayers() {
     const eventCode = document.getElementById("register-event-code").value;
     const userId = document.getElementById("register-player-select").value;
@@ -1381,7 +1419,6 @@ const app = {
         }
       });
   },
-  // -------- end of fixed registerPlayers --------
 
   closeRegisterModal() {
     document.getElementById("modal-register-players").classList.remove("show");

@@ -5,16 +5,364 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Estancia Wingsync - Pigeon Clocking System</title>
 
-    <!-- Google Maps API WITHOUT callback -->
+    <!-- Google Maps API -->
     <script
       src="https://maps.googleapis.com/maps/api/js?key=AIzaSyBrEWXV135IN7v1hM6Dwd_ynoKAK5t7TL8&libraries=places"
       async
       defer
     ></script>
 
+    <!-- QR Code (qrcodejs) + Barcode + PDF -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.6/dist/JsBarcode.all.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+
     <link rel="stylesheet" href="style.css" />
+    <style>
+      /* ===== STICKER GENERATOR STYLES ===== */
+      .sticker-generator-container {
+        padding: 20px 0;
+      }
+      .sticker-controls {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 16px;
+        align-items: center;
+        background: #f8fafc;
+        padding: 16px 20px;
+        border-radius: 10px;
+        margin-bottom: 20px;
+        border: 1px solid #e9edf2;
+      }
+      .sticker-controls label {
+        font-weight: 600;
+        font-size: 14px;
+        color: var(--text);
+        display: flex;
+        align-items: center;
+        gap: 8px;
+      }
+      .sticker-controls input[type="number"] {
+        width: 70px;
+        padding: 6px 10px;
+        border: 1px solid #dce3e8;
+        border-radius: 6px;
+        font-size: 14px;
+        text-align: center;
+      }
+      .sticker-controls input[type="number"]:focus {
+        outline: none;
+        border-color: var(--primary);
+        box-shadow: 0 0 0 3px rgba(42, 122, 98, 0.12);
+      }
+      .sticker-controls .btn-group {
+        display: flex;
+        gap: 8px;
+        flex-wrap: wrap;
+        margin-left: auto;
+      }
+      .sticker-preview-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+        gap: 12px;
+        padding: 4px 0;
+      }
+      .sticker-preview-item {
+        background: #ffffff;
+        border-radius: 6px;
+        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+        border: 1px solid #eef2f6;
+        overflow: hidden;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        padding: 6px;
+        transition: transform 0.15s;
+      }
+      .sticker-preview-item:hover {
+        transform: scale(1.02);
+        box-shadow: 0 4px 16px rgba(0, 0, 0, 0.1);
+      }
+      .sticker-preview-item canvas {
+        width: 100%;
+        height: auto;
+        border-radius: 3px;
+        image-rendering: crisp-edges;
+      }
+      .sticker-preview-item .sticker-label {
+        font-size: 10px;
+        color: #888;
+        margin-top: 4px;
+        font-family: monospace;
+        letter-spacing: 0.5px;
+      }
+      .sticker-preview-item .sticker-player {
+        font-size: 11px;
+        font-weight: 600;
+        color: var(--text);
+        margin-top: 2px;
+        text-align: center;
+        line-height: 1.2;
+      }
+      .sticker-empty-state {
+        text-align: center;
+        padding: 60px 20px;
+        color: #999;
+      }
+      .sticker-empty-state .big-icon {
+        font-size: 56px;
+        display: block;
+        margin-bottom: 12px;
+      }
+      .sticker-empty-state h3 {
+        font-size: 20px;
+        color: var(--text);
+        margin-bottom: 6px;
+      }
+      .sticker-count-badge {
+        background: var(--primary);
+        color: #fff;
+        padding: 2px 12px;
+        border-radius: 20px;
+        font-size: 13px;
+        font-weight: 600;
+        margin-left: 8px;
+      }
+      @media (max-width: 768px) {
+        .sticker-preview-grid {
+          grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+          gap: 8px;
+        }
+        .sticker-controls {
+          flex-direction: column;
+          align-items: stretch;
+        }
+        .sticker-controls .btn-group {
+          margin-left: 0;
+          justify-content: center;
+        }
+      }
+      @media (max-width: 480px) {
+        .sticker-preview-grid {
+          grid-template-columns: repeat(auto-fill, minmax(100px, 1fr));
+        }
+      }
+      @media print {
+        .sticker-controls,
+        .no-print {
+          display: none !important;
+        }
+        .sticker-preview-grid {
+          display: flex !important;
+          flex-wrap: wrap !important;
+          gap: 2mm !important;
+          justify-content: flex-start !important;
+          padding: 2mm !important;
+        }
+        .sticker-preview-item {
+          border: none !important;
+          box-shadow: none !important;
+          padding: 0 !important;
+          margin: 0 !important;
+          background: transparent !important;
+          break-inside: avoid !important;
+        }
+        .sticker-preview-item canvas {
+          width: 100% !important;
+          height: auto !important;
+        }
+        .sticker-preview-item .sticker-label,
+        .sticker-preview-item .sticker-player {
+          display: none !important;
+        }
+        body {
+          background: white !important;
+          margin: 0 !important;
+          padding: 0 !important;
+        }
+        #app-screen {
+          display: block !important;
+          height: auto !important;
+        }
+        #sidebar {
+          display: none !important;
+        }
+        #main-content {
+          margin: 0 !important;
+          padding: 0 !important;
+        }
+        header {
+          display: none !important;
+        }
+        .content-area {
+          padding: 0 !important;
+        }
+        .view-section {
+          padding: 0 !important;
+        }
+        .card {
+          box-shadow: none !important;
+          border: none !important;
+          padding: 0 !important;
+          margin: 0 !important;
+        }
+      }
+      .sticker-loading {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        padding: 60px 20px;
+        color: var(--text-light);
+      }
+      .sticker-loading .spinner {
+        width: 48px;
+        height: 48px;
+        border: 4px solid #e9edf2;
+        border-top-color: var(--primary);
+        border-radius: 50%;
+        animation: spin 0.8s linear infinite;
+        margin-bottom: 16px;
+      }
+      @keyframes spin {
+        to {
+          transform: rotate(360deg);
+        }
+      }
+      .btn-generate-stickers {
+        background: linear-gradient(135deg, #f39c12, #e67e22);
+        color: #fff;
+        font-size: 1.1em;
+        padding: 14px 28px;
+        border: none;
+        border-radius: 10px;
+        font-weight: 700;
+        cursor: pointer;
+        transition: all 0.25s;
+        display: inline-flex;
+        align-items: center;
+        gap: 10px;
+        box-shadow: 0 4px 14px rgba(243, 156, 18, 0.35);
+        width: 100%;
+        justify-content: center;
+        margin-top: 12px;
+      }
+      .btn-generate-stickers:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 6px 24px rgba(243, 156, 18, 0.45);
+        background: linear-gradient(135deg, #e67e22, #d35400);
+      }
+      .btn-generate-stickers:disabled {
+        opacity: 0.5;
+        cursor: not-allowed;
+        transform: none !important;
+        box-shadow: none !important;
+      }
+      .btn-sticker-action {
+        padding: 8px 18px;
+        border-radius: 8px;
+        font-weight: 600;
+        font-size: 13px;
+        border: none;
+        cursor: pointer;
+        transition: 0.2s;
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+      }
+      .btn-sticker-action-primary {
+        background: var(--primary);
+        color: #fff;
+      }
+      .btn-sticker-action-primary:hover {
+        background: var(--primary-dark);
+        transform: translateY(-1px);
+      }
+      .btn-sticker-action-success {
+        background: var(--success);
+        color: #fff;
+      }
+      .btn-sticker-action-success:hover {
+        background: #1e8449;
+        transform: translateY(-1px);
+      }
+      .btn-sticker-action-danger {
+        background: var(--danger);
+        color: #fff;
+      }
+      .btn-sticker-action-danger:hover {
+        background: #a93226;
+      }
+      .btn-sticker-action-secondary {
+        background: #e9edf2;
+        color: var(--text);
+      }
+      .btn-sticker-action-secondary:hover {
+        background: #d5dbe3;
+      }
+      .sticker-event-selector {
+        display: flex;
+        gap: 12px;
+        flex-wrap: wrap;
+        align-items: center;
+        margin-bottom: 16px;
+        padding: 12px 16px;
+        background: #f8fafc;
+        border-radius: 8px;
+        border: 1px solid #e9edf2;
+      }
+      .sticker-event-selector select {
+        padding: 8px 14px;
+        border-radius: 6px;
+        border: 1px solid #dce3e8;
+        font-size: 14px;
+        flex: 1;
+        min-width: 200px;
+        background: #fff;
+      }
+      .sticker-event-selector select:focus {
+        outline: none;
+        border-color: var(--primary);
+        box-shadow: 0 0 0 3px rgba(42, 122, 98, 0.12);
+      }
+      .sticker-event-selector .event-info {
+        font-size: 13px;
+        color: var(--text-light);
+      }
+      .sticker-event-selector .event-info strong {
+        color: var(--text);
+      }
+      .sticker-width-control {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+      }
+      .sticker-width-control input[type="range"] {
+        width: 120px;
+        accent-color: var(--primary);
+        cursor: pointer;
+      }
+      .sticker-width-control .width-display {
+        font-weight: 600;
+        font-size: 15px;
+        color: var(--primary);
+        min-width: 40px;
+        text-align: center;
+      }
+      .sticker-badge {
+        display: inline-block;
+        background: #f39c12;
+        color: #fff;
+        padding: 1px 10px;
+        border-radius: 12px;
+        font-size: 11px;
+        font-weight: 600;
+        margin-left: 6px;
+      }
+    </style>
   </head>
   <body>
+    <!-- ===== LOGIN SCREEN ===== -->
     <div id="login-screen">
       <div class="login-box">
         <h2>Estancia Wingsync</h2>
@@ -41,20 +389,20 @@
             <span
               class="password-toggle"
               onclick="app.togglePasswordVisibility('login-pass', this)"
+              >👁️</span
             >
-              👁️
-            </span>
           </div>
         </div>
         <button class="btn btn-primary" onclick="app.login()">Log In</button>
         <p id="login-error" style="color: red; margin-top: 10px; display: none">
           Invalid User ID or Password.
         </p>
-        <div style="margin-top: 15px; font-size: 12px; color: #999"></div>
       </div>
     </div>
 
+    <!-- ===== APP SCREEN ===== -->
     <div id="app-screen" class="hidden">
+      <!-- Sidebar -->
       <aside id="sidebar">
         <div class="sidebar-header">
           <div class="brand-container">
@@ -97,10 +445,18 @@
           >
             📅 Manage Events
           </li>
+          <li
+            onclick="app.navigate('sticker-generator')"
+            id="nav-sticker-generator"
+            class="admin-only hidden"
+          >
+            🏷️ Sticker Generator
+          </li>
         </ul>
         <div class="sidebar-footer" onclick="app.logout()">🚪 Log Out</div>
       </aside>
 
+      <!-- Main Content -->
       <main id="main-content">
         <header>
           <button class="menu-toggle" onclick="app.toggleSidebar()">☰</button>
@@ -109,6 +465,7 @@
         </header>
 
         <div class="content-area">
+          <!-- ===== DASHBOARD ===== -->
           <div id="view-dashboard" class="view-section">
             <div id="player-clock-in-area" class="card clock-in-box hidden">
               <h2 style="color: var(--primary)">Quick Clock In</h2>
@@ -145,6 +502,7 @@
             </div>
           </div>
 
+          <!-- ===== PROFILE ===== -->
           <div id="view-profile" class="view-section hidden">
             <div class="card" style="max-width: 600px; margin: auto">
               <h2 id="prof-name" style="text-align: center">Name</h2>
@@ -152,8 +510,8 @@
                 User ID: <span id="prof-id" style="font-weight: bold"></span>
               </p>
               <div class="form-group">
-                <label>Contact</label>
-                <input
+                <label>Contact</label
+                ><input
                   type="text"
                   id="prof-contact"
                   class="form-control"
@@ -161,8 +519,8 @@
                 />
               </div>
               <div class="form-group player-only hidden">
-                <label>Loft Latitude</label>
-                <input
+                <label>Loft Latitude</label
+                ><input
                   type="text"
                   id="prof-lat"
                   class="form-control"
@@ -170,8 +528,8 @@
                 />
               </div>
               <div class="form-group player-only hidden">
-                <label>Loft Longitude</label>
-                <input
+                <label>Loft Longitude</label
+                ><input
                   type="text"
                   id="prof-lng"
                   class="form-control"
@@ -190,9 +548,8 @@
                 <span
                   class="password-toggle"
                   onclick="app.togglePasswordVisibility('new-password', this)"
+                  >👁️</span
                 >
-                  👁️
-                </span>
               </div>
               <button class="btn btn-primary" onclick="app.changePassword()">
                 Update Password
@@ -200,11 +557,11 @@
             </div>
           </div>
 
+          <!-- ===== RESULTS ===== -->
           <div id="view-results" class="view-section hidden">
             <div class="card">
-              <div class="dashboard-header">
-                <h2>🏆 Leaderboard</h2>
-              </div>
+              <div class="dashboard-header"><h2>🏆 Leaderboard</h2></div>
+              <!-- Auto-refresh controls will be injected here -->
               <div
                 id="event-release-info"
                 style="
@@ -219,9 +576,9 @@
                   <tr>
                     <th>Rank</th>
                     <th>Player</th>
-                    <th>Air Distance</th>
-                    <th>Arrival Time</th>
-                    <th>Flight Time</th>
+                    <th>Air Dist</th>
+                    <th>Arrival</th>
+                    <th>Flight Hrs</th>
                     <th>Speed (m/min)</th>
                   </tr>
                 </thead>
@@ -230,6 +587,7 @@
             </div>
           </div>
 
+          <!-- ===== LOGS ===== -->
           <div id="view-logs" class="view-section hidden">
             <div class="card">
               <h2>📝 Logs</h2>
@@ -240,6 +598,7 @@
             </div>
           </div>
 
+          <!-- ===== MANAGE PLAYERS ===== -->
           <div id="view-admin-players" class="view-section hidden admin-only">
             <div class="card">
               <div class="dashboard-header">
@@ -253,7 +612,7 @@
                   <tr>
                     <th>ID</th>
                     <th>Name</th>
-                    <th>Location (Lat/Lng)</th>
+                    <th>Location</th>
                     <th>Contact</th>
                     <th>Actions</th>
                   </tr>
@@ -263,6 +622,7 @@
             </div>
           </div>
 
+          <!-- ===== MANAGE EVENTS ===== -->
           <div id="view-admin-events" class="view-section hidden admin-only">
             <div class="card">
               <div class="dashboard-header">
@@ -274,7 +634,7 @@
               <table id="admin-events-table">
                 <thead>
                   <tr>
-                    <th>Players Joined</th>
+                    <th>Players</th>
                     <th>Name</th>
                     <th>Release Point</th>
                     <th>Actions</th>
@@ -284,9 +644,92 @@
               </table>
             </div>
           </div>
+
+          <!-- ===== STICKER GENERATOR ===== -->
+          <div
+            id="view-sticker-generator"
+            class="view-section hidden admin-only"
+          >
+            <div class="card">
+              <div class="dashboard-header">
+                <h2>🏷️ Sticker Generator</h2>
+                <span class="sticker-count-badge" id="sticker-total-count"
+                  >0 stickers</span
+                >
+              </div>
+
+              <!-- Event Selector -->
+              <div class="sticker-event-selector">
+                <select
+                  id="sticker-event-select"
+                  onchange="app.loadStickersForEvent()"
+                >
+                  <option value="">-- Select Event --</option>
+                </select>
+                <div class="event-info" id="sticker-event-info">
+                  <span>Select an event to generate stickers</span>
+                </div>
+              </div>
+
+              <!-- Controls -->
+              <div class="sticker-controls">
+                <label>
+                  Sticker Width
+                  <input
+                    type="range"
+                    id="sticker-width-slider"
+                    min="22"
+                    max="25"
+                    value="25"
+                    step="0.5"
+                    oninput="app.updateStickerWidth(this.value)"
+                  />
+                  <span class="width-display" id="sticker-width-display"
+                    >25</span
+                  >
+                  mm
+                </label>
+                <div class="btn-group">
+                  <button
+                    class="btn-sticker-action btn-sticker-action-primary"
+                    onclick="app.generateStickers()"
+                  >
+                    🔄 Generate Stickers
+                  </button>
+                  <button
+                    class="btn-sticker-action btn-sticker-action-success"
+                    onclick="app.downloadStickerPDF()"
+                  >
+                    📄 Download PDF
+                  </button>
+                  <button
+                    class="btn-sticker-action btn-sticker-action-secondary"
+                    onclick="window.print()"
+                  >
+                    🖨️ Print
+                  </button>
+                </div>
+              </div>
+
+              <!-- Sticker Grid -->
+              <div id="sticker-grid-container">
+                <div class="sticker-empty-state">
+                  <span class="big-icon">🏷️</span>
+                  <h3>No Stickers Generated</h3>
+                  <p>
+                    Register players to an event, then click "Generate Stickers"
+                    to create stickers.
+                  </p>
+                </div>
+              </div>
+            </div>
+          </div>
         </div>
+        <!-- /content-area -->
       </main>
     </div>
+
+    <!-- ===== MODALS ===== -->
 
     <!-- Player Modal -->
     <div id="modal-player" class="modal-overlay">
@@ -298,8 +741,8 @@
           </button>
         </div>
         <div class="form-group">
-          <label>Full Name</label>
-          <input
+          <label>Full Name</label
+          ><input
             type="text"
             id="modal-p-name"
             class="form-control"
@@ -307,8 +750,8 @@
           />
         </div>
         <div class="form-group">
-          <label>Contact Number</label>
-          <input
+          <label>Contact Number</label
+          ><input
             type="text"
             id="modal-p-contact"
             class="form-control"
@@ -316,14 +759,13 @@
           />
         </div>
         <div class="form-group">
-          <label>🔍 Search Location</label>
-          <input
+          <label>🔍 Search Location</label
+          ><input
             type="text"
             id="player-search-box"
             class="form-control"
             placeholder="Search for a location..."
-          />
-          <small style="display: block; margin-top: 4px; color: #666"
+          /><small style="display: block; margin-top: 4px; color: #666"
             >Type an address or landmark, then select from dropdown</small
           >
         </div>
@@ -342,9 +784,8 @@
               onclick="app.getCurrentLocation('player')"
               style="font-size: 11px"
             >
-              📍 Use My Location
-            </button>
-            <small
+              📍 Use My Location</button
+            ><small
               style="
                 color: #888;
                 font-size: 11px;
@@ -375,8 +816,8 @@
           </button>
         </div>
         <div class="form-group">
-          <label>Event Name</label>
-          <input
+          <label>Event Name</label
+          ><input
             type="text"
             id="modal-e-name"
             class="form-control"
@@ -384,18 +825,21 @@
           />
         </div>
         <div class="form-group">
-          <label>Release Date & Time</label>
-          <input type="datetime-local" id="modal-e-time" class="form-control" />
+          <label>Release Date & Time</label
+          ><input
+            type="datetime-local"
+            id="modal-e-time"
+            class="form-control"
+          />
         </div>
         <div class="form-group">
-          <label>🔍 Search Location</label>
-          <input
+          <label>🔍 Search Location</label
+          ><input
             type="text"
             id="event-search-box"
             class="form-control"
             placeholder="Search for a location..."
-          />
-          <small style="display: block; margin-top: 4px; color: #666"
+          /><small style="display: block; margin-top: 4px; color: #666"
             >Type an address or landmark, then select from dropdown</small
           >
         </div>
@@ -414,9 +858,8 @@
               onclick="app.getCurrentLocation('event')"
               style="font-size: 11px"
             >
-              📍 Use My Location
-            </button>
-            <small
+              📍 Use My Location</button
+            ><small
               style="
                 color: #888;
                 font-size: 11px;
@@ -451,8 +894,8 @@
         </div>
         <input type="hidden" id="edit-player-id" />
         <div class="form-group">
-          <label>Full Name</label>
-          <input
+          <label>Full Name</label
+          ><input
             type="text"
             id="edit-p-name"
             class="form-control"
@@ -460,8 +903,8 @@
           />
         </div>
         <div class="form-group">
-          <label>Contact Number</label>
-          <input
+          <label>Contact Number</label
+          ><input
             type="text"
             id="edit-p-contact"
             class="form-control"
@@ -488,8 +931,8 @@
           </button>
         </div>
         <div class="form-group">
-          <label>Event Code</label>
-          <input
+          <label>Event Code</label
+          ><input
             type="text"
             id="register-event-code"
             class="form-control"
@@ -497,14 +940,14 @@
           />
         </div>
         <div class="form-group">
-          <label>Select Player</label>
-          <select id="register-player-select" class="form-control">
+          <label>Select Player</label
+          ><select id="register-player-select" class="form-control">
             <option value="">-- Select Player --</option>
           </select>
         </div>
         <div class="form-group">
-          <label>Number of Pigeons (max 10)</label>
-          <input
+          <label>Number of Pigeons (max 10)</label
+          ><input
             type="number"
             id="register-pigeon-count"
             class="form-control"
@@ -522,8 +965,27 @@
         </button>
 
         <hr style="margin: 20px 0" />
-        <h4>Registered Players &amp; Codes</h4>
-        <table id="registrations-table" style="width: 100%; font-size: 14px">
+        <div
+          style="
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 8px;
+          "
+        >
+          <h4 style="margin: 0">Registered Players &amp; Codes</h4>
+          <button
+            class="btn-generate-stickers"
+            onclick="app.navigateToStickerGenerator()"
+          >
+            🏷️ Generate Stickers
+          </button>
+        </div>
+        <table
+          id="registrations-table"
+          style="width: 100%; font-size: 14px; margin-top: 10px"
+        >
           <thead>
             <tr>
               <th>Player</th>
@@ -543,5 +1005,676 @@
     </div>
 
     <script src="app.js"></script>
+    <script>
+      // ============================================================
+      //  STICKER GENERATOR MODULE  (appended to main app)
+      // ============================================================
+
+      (function () {
+        "use strict";
+
+        // ----- Sticker state -----
+        const state = {
+          stickers: [],
+          widthMm: 25,
+          heightMm: 10,
+          dpi: 300,
+          eventId: null,
+          eventName: "",
+          isGenerating: false,
+          canvasCache: [],
+        };
+
+        // ----- QR code generation using qrcodejs (reliable) -----
+        function generateQRCanvas(data, sizePx) {
+          return new Promise((resolve, reject) => {
+            try {
+              if (typeof QRCode === "undefined") {
+                reject(new Error("QRCode library not loaded"));
+                return;
+              }
+              // Create a hidden container
+              const container = document.createElement("div");
+              container.style.cssText = "display:none;position:absolute;";
+              document.body.appendChild(container);
+
+              // Generate QR code
+              new QRCode(container, {
+                text: data,
+                width: sizePx,
+                height: sizePx,
+                colorDark: "#000000",
+                colorLight: "#ffffff",
+                correctLevel: QRCode.CorrectLevel.H,
+              });
+
+              // Find the canvas or img element
+              const qrCanvas = container.querySelector("canvas");
+              if (qrCanvas) {
+                const canvas = document.createElement("canvas");
+                canvas.width = sizePx;
+                canvas.height = sizePx;
+                const ctx = canvas.getContext("2d");
+                ctx.drawImage(qrCanvas, 0, 0);
+                document.body.removeChild(container);
+                resolve(canvas);
+                return;
+              }
+
+              // Fallback: check for img element
+              const qrImg = container.querySelector("img");
+              if (qrImg) {
+                const canvas = document.createElement("canvas");
+                canvas.width = sizePx;
+                canvas.height = sizePx;
+                const ctx = canvas.getContext("2d");
+                const img = new Image();
+                img.onload = function () {
+                  ctx.drawImage(img, 0, 0);
+                  document.body.removeChild(container);
+                  resolve(canvas);
+                };
+                img.onerror = function () {
+                  document.body.removeChild(container);
+                  reject(new Error("Failed to load QR code image"));
+                };
+                img.src = qrImg.src;
+                return;
+              }
+
+              document.body.removeChild(container);
+              reject(new Error("QR code canvas or image not found"));
+            } catch (e) {
+              reject(e);
+            }
+          });
+        }
+
+        // ----- Helper: generate Code 128 barcode on a canvas -----
+        function generateBarcodeCanvas(data, widthPx, heightPx) {
+          return new Promise((resolve, reject) => {
+            try {
+              if (typeof JsBarcode === "undefined") {
+                reject(new Error("JsBarcode library not loaded"));
+                return;
+              }
+              const canvas = document.createElement("canvas");
+              canvas.width = widthPx;
+              canvas.height = heightPx;
+              JsBarcode(canvas, data, {
+                format: "CODE128",
+                width: Math.max(1, Math.floor(widthPx / (data.length * 5))),
+                height: heightPx,
+                displayValue: false,
+                background: "#ffffff",
+                lineColor: "#000000",
+                margin: 0,
+                fontSize: 0,
+              });
+              resolve(canvas);
+            } catch (e) {
+              reject(e);
+            }
+          });
+        }
+
+        // ----- Render a single sticker (fixed layout with QR, barcode, code) -----
+        async function renderStickerCanvas(
+          eventName,
+          playerName,
+          code,
+          widthMm,
+          heightMm,
+          dpi,
+        ) {
+          const widthPx = Math.round((widthMm / 25.4) * dpi);
+          const heightPx = Math.round((heightMm / 25.4) * dpi);
+
+          const canvas = document.createElement("canvas");
+          canvas.width = widthPx;
+          canvas.height = heightPx;
+          const ctx = canvas.getContext("2d");
+
+          // White background
+          ctx.fillStyle = "#ffffff";
+          ctx.fillRect(0, 0, widthPx, heightPx);
+
+          // Top section (6mm) and bottom (4mm)
+          const topHeightPx = Math.round((6 / 10) * heightPx);
+          const bottomHeightPx = heightPx - topHeightPx;
+          const marginPx = Math.round((1 / 25.4) * dpi);
+
+          // ---- TOP SECTION (6mm) ----
+          // 1. QR code: left side, vertically centered in top section
+          const qrSizeMm = Math.min(4.5, widthMm * 0.3);
+          const qrSizePx = Math.round((qrSizeMm / 25.4) * dpi);
+          const qrX = marginPx;
+          const qrY = Math.round((topHeightPx - qrSizePx) / 2);
+
+          let qrCanvas = null;
+          try {
+            qrCanvas = await generateQRCanvas(code, qrSizePx);
+          } catch (e) {
+            console.warn("QR generation failed for", code, e);
+            // fallback placeholder
+            ctx.fillStyle = "#f0f0f0";
+            ctx.fillRect(qrX, qrY, qrSizePx, qrSizePx);
+            ctx.fillStyle = "#999";
+            ctx.font = `${Math.round(qrSizePx * 0.25)}px sans-serif`;
+            ctx.textAlign = "center";
+            ctx.textBaseline = "middle";
+            ctx.fillText("QR", qrX + qrSizePx / 2, qrY + qrSizePx / 2);
+          }
+          if (qrCanvas) {
+            ctx.drawImage(qrCanvas, qrX, qrY, qrSizePx, qrSizePx);
+          }
+
+          // 2. Barcode: top-center, height ~1.8mm
+          const barcodeHeightMm = 1.8;
+          const barcodeHeightPx = Math.round((barcodeHeightMm / 25.4) * dpi);
+          const barcodeTopMargin = Math.round((0.3 / 25.4) * dpi);
+          const barcodeY = barcodeTopMargin;
+
+          const barcodeLeft = qrX + qrSizePx + Math.round((1.5 / 25.4) * dpi);
+          const barcodeWidth = widthPx - barcodeLeft - marginPx;
+
+          let bcCanvas = null;
+          try {
+            bcCanvas = await generateBarcodeCanvas(
+              code,
+              barcodeWidth,
+              barcodeHeightPx,
+            );
+          } catch (e) {
+            console.warn("Barcode generation failed for", code, e);
+          }
+          if (bcCanvas) {
+            ctx.drawImage(
+              bcCanvas,
+              barcodeLeft,
+              barcodeY,
+              barcodeWidth,
+              barcodeHeightPx,
+            );
+          } else {
+            ctx.fillStyle = "#f0f0f0";
+            ctx.fillRect(barcodeLeft, barcodeY, barcodeWidth, barcodeHeightPx);
+            ctx.fillStyle = "#999";
+            ctx.font = `${Math.round(barcodeHeightPx * 0.5)}px sans-serif`;
+            ctx.textAlign = "center";
+            ctx.textBaseline = "middle";
+            ctx.fillText(
+              "Barcode",
+              barcodeLeft + barcodeWidth / 2,
+              barcodeY + barcodeHeightPx / 2,
+            );
+          }
+
+          // 3. 8-digit code: centered horizontally, below barcode, still in top section
+          const codeText = code;
+          const codeYStart =
+            barcodeY + barcodeHeightPx + Math.round((0.2 / 25.4) * dpi);
+          const codeAvailableHeight = topHeightPx - codeYStart - marginPx;
+          let codeFontSize = Math.min(
+            Math.round((2.2 / 25.4) * dpi),
+            codeAvailableHeight * 0.85,
+            Math.round(barcodeWidth / (codeText.length * 0.55)),
+          );
+          codeFontSize = Math.max(8, codeFontSize);
+
+          ctx.fillStyle = "#000000";
+          ctx.font = `bold ${codeFontSize}px monospace`;
+          ctx.textAlign = "center";
+          ctx.textBaseline = "top";
+          const centerX = widthPx / 2;
+          ctx.fillText(codeText, centerX, codeYStart);
+
+          // ---- BOTTOM SECTION (4mm) ----
+          const bottomY = topHeightPx;
+          const fontSizePx = Math.min(
+            Math.round((2.2 / 25.4) * dpi),
+            Math.round(bottomHeightPx * 0.6),
+          );
+
+          let eventLabel = eventName || "Event";
+          let playerLabel = playerName || "Player";
+
+          let testSize = fontSizePx;
+          const leftX = marginPx;
+          const rightX = widthPx - marginPx;
+          const centerY = bottomY + bottomHeightPx / 2;
+          const maxWidth = widthPx * 0.42;
+
+          ctx.font = `${testSize}px sans-serif`;
+          while (testSize > 8 && ctx.measureText(eventLabel).width > maxWidth) {
+            testSize -= 1;
+            ctx.font = `${testSize}px sans-serif`;
+          }
+          ctx.textAlign = "left";
+          ctx.textBaseline = "middle";
+          ctx.fillStyle = "#000000";
+          ctx.fillText(eventLabel, leftX, centerY);
+
+          testSize = fontSizePx;
+          ctx.font = `${testSize}px sans-serif`;
+          while (
+            testSize > 8 &&
+            ctx.measureText(playerLabel).width > maxWidth
+          ) {
+            testSize -= 1;
+            ctx.font = `${testSize}px sans-serif`;
+          }
+          ctx.textAlign = "right";
+          ctx.textBaseline = "middle";
+          ctx.fillStyle = "#000000";
+          ctx.fillText(playerLabel, rightX, centerY);
+
+          return canvas;
+        }
+
+        // ----- Render all stickers for preview -----
+        async function renderAllStickers(stickers, widthMm) {
+          const container = document.getElementById("sticker-grid-container");
+          if (!container) return;
+
+          if (!stickers || stickers.length === 0) {
+            container.innerHTML = `
+                        <div class="sticker-empty-state">
+                            <span class="big-icon">🏷️</span>
+                            <h3>No Stickers to Generate</h3>
+                            <p>Register players to an event first, then click "Generate Stickers".</p>
+                        </div>
+                    `;
+            document.getElementById("sticker-total-count").textContent =
+              "0 stickers";
+            return;
+          }
+
+          container.innerHTML = `
+                    <div class="sticker-loading">
+                        <div class="spinner"></div>
+                        <p>Generating stickers... (${stickers.length} stickers)</p>
+                    </div>
+                `;
+
+          const canvasItems = [];
+          const dpi = state.dpi;
+          const heightMm = 10;
+
+          for (let i = 0; i < stickers.length; i++) {
+            const s = stickers[i];
+            try {
+              const canvas = await renderStickerCanvas(
+                s.eventName || state.eventName || "Event",
+                s.playerName || "Player",
+                s.code,
+                widthMm,
+                heightMm,
+                dpi,
+              );
+              canvasItems.push({ canvas, data: s });
+            } catch (e) {
+              console.error("Failed to render sticker for", s, e);
+            }
+          }
+
+          state.canvasCache = canvasItems;
+
+          let html = '<div class="sticker-preview-grid">';
+          for (const item of canvasItems) {
+            const canvas = item.canvas;
+            const data = item.data;
+            const dataUrl = canvas.toDataURL("image/png");
+            html += `
+                        <div class="sticker-preview-item">
+                            <img src="${dataUrl}" alt="Sticker ${data.code}" style="width:100%;height:auto;border-radius:3px;" />
+                            <div class="sticker-player">${data.playerName}</div>
+                            <div class="sticker-label">${data.code}</div>
+                        </div>
+                    `;
+          }
+          html += "</div>";
+          container.innerHTML = html;
+          document.getElementById("sticker-total-count").textContent =
+            `${canvasItems.length} stickers`;
+        }
+
+        // ----- Generate PDF using jsPDF -----
+        async function generateStickerPDF(stickers, widthMm) {
+          if (!stickers || stickers.length === 0) {
+            app.showModal({
+              title: "No Stickers",
+              message: "Please generate stickers first.",
+              icon: "⚠️",
+              iconColor: "#e67e22",
+            });
+            return null;
+          }
+
+          const { jsPDF } = window.jspdf;
+          const heightMm = 10;
+          const dpi = state.dpi;
+          const pageWidth = 210;
+          const pageHeight = 297;
+          const margin = 10;
+          const gap = 2;
+
+          const cols = Math.floor(
+            (pageWidth - margin * 2 + gap) / (widthMm + gap),
+          );
+          const rows = Math.floor(
+            (pageHeight - margin * 2 + gap) / (heightMm + gap),
+          );
+
+          const doc = new jsPDF("p", "mm", "a4");
+          let stickerIndex = 0;
+
+          while (stickerIndex < stickers.length) {
+            if (stickerIndex > 0) doc.addPage();
+
+            for (let r = 0; r < rows && stickerIndex < stickers.length; r++) {
+              for (let c = 0; c < cols && stickerIndex < stickers.length; c++) {
+                const s = stickers[stickerIndex];
+                const x = margin + c * (widthMm + gap);
+                const y = margin + r * (heightMm + gap);
+
+                const canvas = await renderStickerCanvas(
+                  s.eventName || state.eventName || "Event",
+                  s.playerName || "Player",
+                  s.code,
+                  widthMm,
+                  heightMm,
+                  dpi,
+                );
+                const imgData = canvas.toDataURL("image/png");
+                doc.addImage(imgData, "PNG", x, y, widthMm, heightMm);
+                stickerIndex++;
+              }
+            }
+          }
+          return doc;
+        }
+
+        // ----- Expose public API -----
+        window.StickerGenerator = {
+          state: state,
+
+          async loadEventData(eventId) {
+            try {
+              const res = await fetch(
+                `${API_URL}/events/${eventId}/registrations`,
+              );
+              if (!res.ok) throw new Error("Failed to fetch registrations");
+              const registrations = await res.json();
+
+              const stickers = [];
+              for (const reg of registrations) {
+                const playerName = reg.userName || "Player";
+                for (let i = 0; i < reg.codes.length; i++) {
+                  stickers.push({
+                    playerName: playerName,
+                    code: reg.codes[i],
+                    status: reg.statuses ? reg.statuses[i] : "unused",
+                  });
+                }
+              }
+
+              const eventRes = await fetch(`${API_URL}/events/all`);
+              const events = await eventRes.json();
+              const evt = events.find((e) => e.code === eventId);
+              if (evt) {
+                state.eventName = evt.name;
+                state.eventId = eventId;
+              }
+
+              state.stickers = stickers;
+              return stickers;
+            } catch (e) {
+              console.error("Load sticker data error:", e);
+              throw e;
+            }
+          },
+
+          async generateAndRender(eventId) {
+            if (state.isGenerating) return;
+            state.isGenerating = true;
+
+            try {
+              const stickers = await this.loadEventData(eventId);
+              if (!stickers || stickers.length === 0) {
+                document.getElementById("sticker-grid-container").innerHTML = `
+                                <div class="sticker-empty-state">
+                                    <span class="big-icon">📭</span>
+                                    <h3>No Registered Pigeons</h3>
+                                    <p>This event has no registered pigeons. Register players first.</p>
+                                </div>
+                            `;
+                document.getElementById("sticker-total-count").textContent =
+                  "0 stickers";
+                state.isGenerating = false;
+                return;
+              }
+              await renderAllStickers(stickers, state.widthMm);
+            } catch (e) {
+              console.error("Generate stickers error:", e);
+              app.showModal({
+                title: "Generation Failed",
+                message:
+                  e.message || "Failed to generate stickers. Please try again.",
+                icon: "❌",
+                iconColor: "#c0392b",
+              });
+            } finally {
+              state.isGenerating = false;
+            }
+          },
+
+          async downloadPDF() {
+            if (!state.stickers || state.stickers.length === 0) {
+              app.showModal({
+                title: "No Stickers",
+                message: "Generate stickers first before downloading PDF.",
+                icon: "⚠️",
+                iconColor: "#e67e22",
+              });
+              return;
+            }
+
+            try {
+              const doc = await generateStickerPDF(
+                state.stickers,
+                state.widthMm,
+              );
+              if (doc) {
+                doc.save(`stickers_${state.eventId || "event"}.pdf`);
+                app.showModal({
+                  title: "✅ PDF Downloaded",
+                  message: `PDF with ${state.stickers.length} stickers has been generated.`,
+                  icon: "✅",
+                  iconColor: "#27ae60",
+                });
+              }
+            } catch (e) {
+              console.error("PDF generation error:", e);
+              app.showModal({
+                title: "PDF Error",
+                message: "Failed to generate PDF. Please try again.",
+                icon: "❌",
+                iconColor: "#c0392b",
+              });
+            }
+          },
+
+          updateWidth(mm) {
+            state.widthMm = Math.min(25, Math.max(22, parseFloat(mm) || 25));
+            document.getElementById("sticker-width-display").textContent =
+              state.widthMm;
+            document.getElementById("sticker-width-slider").value =
+              state.widthMm;
+            if (state.stickers && state.stickers.length > 0 && state.eventId) {
+              this.generateAndRender(state.eventId);
+            }
+          },
+
+          populateEventSelector() {
+            const select = document.getElementById("sticker-event-select");
+            if (!select) return;
+            const currentVal = select.value;
+            select.innerHTML = '<option value="">-- Select Event --</option>';
+            const events = app.allEvents || [];
+            for (const e of events) {
+              const opt = document.createElement("option");
+              opt.value = e.code;
+              opt.textContent = `${e.name} (${e.code})`;
+              select.appendChild(opt);
+            }
+            if (currentVal) select.value = currentVal;
+          },
+
+          setEventFromCode(eventCode) {
+            const select = document.getElementById("sticker-event-select");
+            if (select) select.value = eventCode;
+          },
+
+          getSelectedEvent() {
+            return document.getElementById("sticker-event-select").value;
+          },
+        };
+
+        // ----- Hook into app -----
+        const origNavigate = app.navigate;
+        app.navigate = function (view) {
+          origNavigate.call(this, view);
+          if (view === "sticker-generator") {
+            StickerGenerator.populateEventSelector();
+            const eventCode = document.getElementById(
+              "register-event-code",
+            )?.value;
+            if (eventCode) {
+              StickerGenerator.setEventFromCode(eventCode);
+              setTimeout(
+                () => StickerGenerator.generateAndRender(eventCode),
+                300,
+              );
+            }
+          }
+        };
+
+        app.navigateToStickerGenerator = function () {
+          const eventCode = document.getElementById(
+            "register-event-code",
+          )?.value;
+          if (eventCode) StickerGenerator.setEventFromCode(eventCode);
+          app.navigate("sticker-generator");
+          setTimeout(() => {
+            const code = StickerGenerator.getSelectedEvent();
+            if (code) StickerGenerator.generateAndRender(code);
+          }, 400);
+        };
+
+        app.loadStickersForEvent = function () {
+          const eventCode = StickerGenerator.getSelectedEvent();
+          if (eventCode) {
+            StickerGenerator.generateAndRender(eventCode);
+          } else {
+            document.getElementById("sticker-grid-container").innerHTML = `
+                        <div class="sticker-empty-state">
+                            <span class="big-icon">📋</span>
+                            <h3>Select an Event</h3>
+                            <p>Choose an event from the dropdown to generate stickers.</p>
+                        </div>
+                    `;
+            document.getElementById("sticker-total-count").textContent =
+              "0 stickers";
+          }
+        };
+
+        app.updateStickerWidth = function (val) {
+          StickerGenerator.updateWidth(val);
+        };
+
+        app.generateStickers = function () {
+          const eventCode = StickerGenerator.getSelectedEvent();
+          if (!eventCode) {
+            app.showModal({
+              title: "No Event Selected",
+              message: "Please select an event first.",
+              icon: "⚠️",
+              iconColor: "#e67e22",
+            });
+            return;
+          }
+          StickerGenerator.generateAndRender(eventCode);
+        };
+
+        app.downloadStickerPDF = function () {
+          StickerGenerator.downloadPDF();
+        };
+
+        // ----- Override renderEvents to add sticker button -----
+        const origRenderEvents = app.renderEvents;
+        app.renderEvents = function () {
+          origRenderEvents.call(this);
+          setTimeout(() => {
+            const rows = document.querySelectorAll(
+              "#admin-events-table tbody tr",
+            );
+            rows.forEach((row) => {
+              const actionsCell = row.querySelector("td:last-child");
+              if (actionsCell) {
+                const existingBtn = actionsCell.querySelector(
+                  ".btn-sticker-action",
+                );
+                if (!existingBtn) {
+                  const code = row.dataset.eventCode;
+                  if (code) {
+                    const btn = document.createElement("button");
+                    btn.className =
+                      "btn-sticker-action btn-sticker-action-primary btn-sm";
+                    btn.innerHTML = "🏷️ Stickers";
+                    btn.style.marginLeft = "4px";
+                    btn.onclick = () => {
+                      StickerGenerator.setEventFromCode(code);
+                      app.navigate("sticker-generator");
+                      setTimeout(
+                        () => StickerGenerator.generateAndRender(code),
+                        400,
+                      );
+                    };
+                    actionsCell.appendChild(btn);
+                  }
+                }
+              }
+            });
+          }, 100);
+        };
+
+        const origRenderEventTable = app.renderEventTable;
+        app.renderEventTable = function (events, summaryMap) {
+          origRenderEventTable.call(this, events, summaryMap);
+          setTimeout(() => {
+            const rows = document.querySelectorAll(
+              "#admin-events-table tbody tr",
+            );
+            const codes = events.map((e) => e.code);
+            rows.forEach((row, idx) => {
+              if (idx < codes.length) row.dataset.eventCode = codes[idx];
+            });
+          }, 50);
+        };
+
+        const origCloseRegister = app.closeRegisterModal;
+        app.closeRegisterModal = function () {
+          origCloseRegister.call(this);
+          const sgView = document.getElementById("view-sticker-generator");
+          if (sgView && !sgView.classList.contains("hidden")) {
+            const code = StickerGenerator.getSelectedEvent();
+            if (code) StickerGenerator.generateAndRender(code);
+          }
+        };
+
+        console.log("✅ Sticker Generator module loaded");
+      })();
+    </script>
   </body>
 </html>
