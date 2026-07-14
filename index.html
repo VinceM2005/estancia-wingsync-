@@ -4,7 +4,13 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Estancia Wingsync - Pigeon Clocking System</title>
-
+    <link rel="manifest" href="manifest.json" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta
+      name="apple-mobile-web-app-status-bar-style"
+      content="black-translucent"
+    />
+    <meta name="apple-mobile-web-app-title" content="Wingsync" />
     <!-- Font Awesome 6 (free) -->
     <link
       rel="stylesheet"
@@ -13,7 +19,7 @@
 
     <!-- Google Maps API -->
     <script
-      src="https://maps.googleapis.com/maps/api/js?key=AIzaSyBrEWXV135IN7v1hM6Dwd_ynoKAK5t7TL8&libraries=places"
+      src="https://maps.googleapis.com/maps/api/js?key=AIzaSyBrEWXV135IN7v1hM6Dwd_ynoKAK5t7TL8&libraries=places&loading=async"
       async
       defer
     ></script>
@@ -464,8 +470,18 @@
             <i class="fas fa-bars"></i>
           </button>
           <h3 id="header-title">Dashboard</h3>
-          <div id="header-user">
-            <i class="fas fa-user-circle"></i> Welcome, User
+          <div class="header-right">
+            <button
+              class="theme-toggle"
+              onclick="app.toggleTheme()"
+              title="Toggle theme"
+            >
+              <i class="fas fa-moon" id="theme-icon"></i>
+            </button>
+            <span id="server-clock">--:--:--</span>
+            <div id="header-user">
+              <i class="fas fa-user-circle"></i> Welcome, User
+            </div>
           </div>
         </header>
 
@@ -941,6 +957,50 @@
             placeholder="09..."
           />
         </div>
+        <!-- Map section for location update -->
+        <div class="form-group">
+          <label><i class="fas fa-search"></i> Search Location</label>
+          <input
+            type="text"
+            id="edit-player-search-box"
+            class="form-control"
+            placeholder="Search for a location..."
+          />
+          <small style="display: block; margin-top: 4px; color: #666"
+            >Type an address or landmark, then select from dropdown</small
+          >
+        </div>
+        <div class="form-group">
+          <label>Pinpoint Player's Loft on Map</label>
+          <div id="edit-player-map" class="map-container"></div>
+          <small
+            ><i class="fas fa-location-dot"></i> Coordinates:
+            <span id="edit-player-coords-text">None selected</span></small
+          >
+          <div
+            style="display: flex; gap: 8px; margin-top: 6px; flex-wrap: wrap"
+          >
+            <button
+              class="btn btn-sm btn-primary"
+              onclick="app.getCurrentLocation('edit-player')"
+              style="font-size: 12px"
+            >
+              <i class="fas fa-location-dot"></i> Use My Location
+            </button>
+            <small
+              style="
+                color: #888;
+                font-size: 11px;
+                display: flex;
+                align-items: center;
+              "
+              >Click map to set exact point • Drag marker to adjust</small
+            >
+          </div>
+        </div>
+        <!-- Hidden fields to store coordinates -->
+        <input type="hidden" id="edit-p-lat" />
+        <input type="hidden" id="edit-p-lng" />
         <button
           class="btn btn-success"
           style="width: 100%"
@@ -1047,7 +1107,7 @@
 
         const state = {
           stickers: [],
-          widthMm: 42, // default 42mm (4.2cm)
+          widthMm: 42,
           heightMm: 10,
           dpi: 300,
           eventId: null,
@@ -1056,7 +1116,6 @@
           canvasCache: [],
         };
 
-        // Fixed scratch-off width = 22mm (the area where QR, barcode and code are placed)
         const SCRATCH_WIDTH_MM = 22;
 
         function generateQRCanvas(data, sizePx) {
@@ -1157,20 +1216,15 @@
           canvas.height = heightPx;
           const ctx = canvas.getContext("2d");
 
-          // White background
           ctx.fillStyle = "#ffffff";
           ctx.fillRect(0, 0, widthPx, heightPx);
 
-          const topHeightPx = Math.round((6 / 10) * heightPx); // 6mm top section
+          const topHeightPx = Math.round((6 / 10) * heightPx);
           const bottomHeightPx = heightPx - topHeightPx;
           const marginPx = Math.round((1 / 25.4) * dpi);
-
-          // Scratch-off content width in pixels (22mm fixed)
           const scratchWidthPx = Math.round((SCRATCH_WIDTH_MM / 25.4) * dpi);
 
-          // ---- TOP SECTION (6mm) ----
-          // All content placed within scratchWidthPx from left margin
-          // 1. QR code: left side, vertically centered in the scratch area
+          // QR code
           const qrSizeMm = Math.min(4.5, SCRATCH_WIDTH_MM * 0.28);
           const qrSizePx = Math.round((qrSizeMm / 25.4) * dpi);
           const qrX = marginPx;
@@ -1193,12 +1247,10 @@
             ctx.drawImage(qrCanvas, qrX, qrY, qrSizePx, qrSizePx);
           }
 
-          // 2. Barcode: placed to the right of QR, at the top of the scratch area
+          // Barcode
           const barcodeHeightMm = 1.6;
           const barcodeHeightPx = Math.round((barcodeHeightMm / 25.4) * dpi);
           const barcodeY = marginPx;
-
-          // Gap between QR and barcode
           const gap1 = Math.round((1.2 / 25.4) * dpi);
           const barcodeLeft = qrX + qrSizePx + gap1;
           const barcodeWidth = scratchWidthPx - barcodeLeft - marginPx;
@@ -1235,14 +1287,13 @@
             );
           }
 
-          // 3. 8-digit code: placed below the barcode, centered horizontally
+          // Code text
           const codeText = code;
           const gap2 = Math.round((0.8 / 25.4) * dpi);
           const codeY = barcodeY + barcodeHeightPx + gap2;
           const codeAvailableHeight = topHeightPx - codeY - marginPx;
           const codeAvailableWidth = barcodeWidth;
 
-          // Calculate optimal font size - LARGE and BOLD
           const maxFontByHeight = codeAvailableHeight * 0.95;
           const maxFontByWidth = codeAvailableWidth / (codeText.length * 0.6);
           let codeFontSize = Math.min(
@@ -1250,10 +1301,7 @@
             maxFontByWidth,
             Math.round((5.0 / 25.4) * dpi),
           );
-          // Ensure minimum 16px and maximum 48px for readability
           codeFontSize = Math.min(48, Math.max(16, Math.round(codeFontSize)));
-
-          // Letter spacing for better readability (2-3px)
           const letterSpacing = Math.min(
             3,
             Math.max(1, Math.round(codeFontSize * 0.05)),
@@ -1263,17 +1311,12 @@
           ctx.textBaseline = "top";
           ctx.fillStyle = "#000000";
           ctx.font = `bold ${codeFontSize}px monospace`;
-
-          // Use letterSpacing for perfectly even spacing
           ctx.letterSpacing = `${letterSpacing}px`;
-
           const centerX = barcodeLeft + barcodeWidth / 2;
           ctx.fillText(codeText, centerX, codeY);
-
-          // Reset letterSpacing
           ctx.letterSpacing = "0px";
 
-          // ---- BOTTOM SECTION (4mm) ----
+          // Bottom section
           const bottomY = topHeightPx;
           const fontSizePx = Math.min(
             Math.round((2.2 / 25.4) * dpi),
@@ -1289,7 +1332,6 @@
           const centerY = bottomY + bottomHeightPx / 2;
           const maxWidth = widthPx * 0.42;
 
-          // Event name (left)
           ctx.font = `${testSize}px sans-serif`;
           while (testSize > 8 && ctx.measureText(eventLabel).width > maxWidth) {
             testSize -= 1;
@@ -1300,7 +1342,6 @@
           ctx.fillStyle = "#000000";
           ctx.fillText(eventLabel, leftX, centerY);
 
-          // Player name (right)
           testSize = fontSizePx;
           ctx.font = `${testSize}px sans-serif`;
           while (
@@ -1315,12 +1356,10 @@
           ctx.fillStyle = "#000000";
           ctx.fillText(playerLabel, rightX, centerY);
 
-          // ---- ADD SOLID OUTER BORDER FOR CUTTING ----
           ctx.strokeStyle = "#000000";
           ctx.lineWidth = 1.0;
           ctx.strokeRect(0, 0, widthPx, heightPx);
 
-          // ---- DASHED BORDER FOR SCRATCH-OFF AREA (guidance only) ----
           ctx.strokeStyle = "#e0e0e0";
           ctx.lineWidth = 0.5;
           ctx.setLineDash([2, 3]);
@@ -1458,6 +1497,8 @@
 
         window.StickerGenerator = {
           state: state,
+          renderAllStickers: renderAllStickers,
+          generateStickerPDF: generateStickerPDF,
           async loadEventData(eventId) {
             try {
               const res = await fetch(
@@ -1664,7 +1705,6 @@
           StickerGenerator.downloadPDF();
         };
 
-        // Override renderEvents to add sticker button
         const origRenderEvents = app.renderEvents;
         app.renderEvents = function () {
           origRenderEvents.call(this);
