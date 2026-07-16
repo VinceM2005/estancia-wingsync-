@@ -6,16 +6,21 @@
     <title>Estancia Wingsync - Pigeon Clocking System</title>
     <link rel="manifest" href="manifest.json" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="mobile-web-app-capable" content="yes" />
     <meta
       name="apple-mobile-web-app-status-bar-style"
       content="black-translucent"
     />
     <meta name="apple-mobile-web-app-title" content="Wingsync" />
+
     <!-- Font Awesome 6 (free) -->
     <link
       rel="stylesheet"
       href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css"
     />
+
+    <!-- Lucide Icons (for premium analytics feel) -->
+    <script src="https://unpkg.com/lucide@latest"></script>
 
     <!-- Google Maps API -->
     <script
@@ -353,6 +358,608 @@
         font-weight: 600;
         margin-left: 6px;
       }
+
+      /* ============================================================
+                   NEW: RACE ANALYTICS DASHBOARD STYLES
+                   ============================================================ */
+
+      /* -- Race Info Bar -- */
+      .race-info-bar {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 16px 32px;
+        padding: 14px 20px;
+        background: var(--bg);
+        border-radius: 14px;
+        margin-bottom: 24px;
+        border: 1px solid var(--border);
+      }
+
+      .race-info-item {
+        display: flex;
+        flex-direction: column;
+        gap: 0px;
+      }
+
+      .race-info-label {
+        font-size: 10px;
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+        color: var(--text-muted);
+      }
+
+      .race-info-value {
+        font-size: 15px;
+        font-weight: 600;
+        color: var(--text);
+      }
+
+      .race-info-value .coord {
+        font-weight: 400;
+        color: var(--text-light);
+        font-family: monospace;
+        font-size: 13px;
+      }
+
+      .race-status-badge {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        padding: 4px 14px;
+        border-radius: 20px;
+        font-size: 12px;
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: 0.3px;
+      }
+
+      .race-status-badge.active {
+        background: #d4edda;
+        color: #155724;
+      }
+      .race-status-badge.closed {
+        background: #f8d7da;
+        color: #721c24;
+      }
+      .race-status-badge.scheduled {
+        background: #fff3cd;
+        color: #856404;
+      }
+
+      [data-theme="dark"] .race-status-badge.active {
+        background: #1a3a2a;
+        color: #8dd9a0;
+      }
+      [data-theme="dark"] .race-status-badge.closed {
+        background: #3a1a1a;
+        color: #f5a0a0;
+      }
+      [data-theme="dark"] .race-status-badge.scheduled {
+        background: #3a331a;
+        color: #f5d98a;
+      }
+
+      /* -- Champion Card -- */
+      .champion-card {
+        background: linear-gradient(145deg, #f8fafc, #eef2f6);
+        border-radius: 16px;
+        padding: 20px 24px;
+        margin-bottom: 24px;
+        border: 1px solid var(--border);
+        position: relative;
+        overflow: hidden;
+        transition: all 0.3s ease;
+      }
+
+      .champion-card:hover {
+        box-shadow: var(--shadow-hover);
+        border-color: var(--primary-light);
+      }
+
+      .champion-card::before {
+        content: "";
+        position: absolute;
+        top: 0;
+        left: 0;
+        right: 0;
+        height: 3px;
+        background: linear-gradient(90deg, #f1c40f, #f39c12, #e67e22);
+        border-radius: 16px 16px 0 0;
+      }
+
+      [data-theme="dark"] .champion-card {
+        background: linear-gradient(145deg, #1a2332, #141d2a);
+      }
+
+      .champion-badge {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        font-size: 11px;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: 0.8px;
+        color: #b8860b;
+        background: rgba(241, 196, 15, 0.15);
+        padding: 2px 14px;
+        border-radius: 12px;
+        margin-bottom: 12px;
+      }
+
+      .champion-content {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 16px 32px;
+      }
+
+      .champion-avatar {
+        width: 60px;
+        height: 60px;
+        border-radius: 50%;
+        background: linear-gradient(135deg, #f1c40f, #f39c12);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 30px;
+        flex-shrink: 0;
+        box-shadow: 0 4px 16px rgba(241, 196, 15, 0.3);
+      }
+
+      .champion-info {
+        flex: 1;
+        min-width: 140px;
+      }
+
+      .champion-name {
+        font-size: 22px;
+        font-weight: 700;
+        color: var(--text);
+        letter-spacing: -0.3px;
+        line-height: 1.2;
+      }
+
+      .champion-code {
+        font-size: 14px;
+        color: var(--text-light);
+        font-family: monospace;
+        letter-spacing: 0.5px;
+      }
+
+      .champion-stats {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 12px 24px;
+        margin-left: auto;
+      }
+
+      .champion-stat {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        padding: 4px 8px;
+        min-width: 60px;
+      }
+
+      .champion-stat-label {
+        font-size: 9px;
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: 0.6px;
+        color: var(--text-muted);
+      }
+
+      .champion-stat-value {
+        font-size: 18px;
+        font-weight: 700;
+        color: var(--text);
+        line-height: 1.2;
+      }
+
+      .champion-stat-value .unit {
+        font-size: 11px;
+        font-weight: 400;
+        color: var(--text-muted);
+        margin-left: 2px;
+      }
+
+      /* -- Stats Grid (Race Statistics) -- */
+      .race-stats-grid {
+        display: grid;
+        grid-template-columns: repeat(5, 1fr);
+        gap: 10px;
+        margin-bottom: 20px;
+      }
+
+      .race-stat-card {
+        background: var(--card-bg);
+        border-radius: 12px;
+        padding: 12px 14px;
+        border: 1px solid var(--border);
+        transition: all 0.2s ease;
+        text-align: center;
+      }
+
+      .race-stat-card:hover {
+        transform: translateY(-2px);
+        box-shadow: var(--shadow-hover);
+        border-color: var(--primary-light);
+      }
+
+      .race-stat-card .stat-icon {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 32px;
+        height: 32px;
+        border-radius: 8px;
+        background: rgba(25, 135, 84, 0.08);
+        color: var(--primary);
+        margin-bottom: 4px;
+      }
+
+      .race-stat-card .stat-value {
+        font-size: 20px;
+        font-weight: 700;
+        color: var(--text);
+        line-height: 1.2;
+      }
+
+      .race-stat-card .stat-value .unit {
+        font-size: 11px;
+        font-weight: 400;
+        color: var(--text-muted);
+        margin-left: 1px;
+      }
+
+      .race-stat-card .stat-label {
+        font-size: 10px;
+        font-weight: 500;
+        text-transform: uppercase;
+        letter-spacing: 0.4px;
+        color: var(--text-muted);
+        margin-top: 2px;
+      }
+
+      .race-stat-card.highlight {
+        background: rgba(25, 135, 84, 0.06);
+        border-color: rgba(25, 135, 84, 0.2);
+      }
+
+      .race-stat-card.highlight .stat-value {
+        color: var(--primary);
+      }
+
+      /* -- Highlights Grid -- */
+      .highlights-grid {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 10px;
+        margin-bottom: 24px;
+      }
+
+      .highlight-item {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        padding: 10px 14px;
+        background: var(--card-bg);
+        border-radius: 12px;
+        border: 1px solid var(--border);
+        transition: all 0.2s ease;
+      }
+
+      .highlight-item:hover {
+        transform: translateY(-2px);
+        box-shadow: var(--shadow-hover);
+        border-color: var(--primary-light);
+      }
+
+      .highlight-icon {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        width: 36px;
+        height: 36px;
+        border-radius: 8px;
+        background: rgba(25, 135, 84, 0.06);
+        color: var(--primary);
+        flex-shrink: 0;
+      }
+
+      .highlight-content {
+        flex: 1;
+        min-width: 0;
+      }
+
+      .highlight-label {
+        font-size: 9px;
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+        color: var(--text-muted);
+      }
+
+      .highlight-value {
+        font-size: 14px;
+        font-weight: 600;
+        color: var(--text);
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+
+      .highlight-value .unit {
+        font-size: 11px;
+        font-weight: 400;
+        color: var(--text-muted);
+        margin-left: 2px;
+      }
+
+      /* -- Results Table Wrapper -- */
+      .results-table-wrapper {
+        margin-top: 8px;
+      }
+
+      .results-table-wrapper .search-bar {
+        display: flex;
+        gap: 10px;
+        flex-wrap: wrap;
+        margin-bottom: 16px;
+      }
+
+      .results-table-wrapper .search-bar input {
+        flex: 1;
+        min-width: 200px;
+        padding: 10px 16px;
+        border-radius: 20px;
+        border: 2px solid var(--border);
+        background: var(--input-bg);
+        color: var(--text);
+        font-size: 14px;
+        transition: 0.2s;
+      }
+
+      .results-table-wrapper .search-bar input:focus {
+        outline: none;
+        border-color: var(--primary);
+        box-shadow: 0 0 0 3px rgba(25, 135, 84, 0.12);
+      }
+
+      .results-table-wrapper .search-bar input::placeholder {
+        color: var(--text-muted);
+      }
+
+      .results-table-wrapper .table-header-actions {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        flex-wrap: wrap;
+        gap: 8px;
+        margin-bottom: 10px;
+      }
+
+      .results-table-wrapper .table-header-actions .left {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        font-size: 13px;
+        color: var(--text-light);
+      }
+
+      .results-table-wrapper .table-header-actions .left .live-dot {
+        display: inline-block;
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
+        background: #27ae60;
+        animation: pulse-dot 1.5s ease-in-out infinite;
+      }
+
+      @keyframes pulse-dot {
+        0%,
+        100% {
+          opacity: 1;
+          transform: scale(1);
+        }
+        50% {
+          opacity: 0.4;
+          transform: scale(0.8);
+        }
+      }
+
+      /* -- Responsive -- */
+      @media (max-width: 1200px) {
+        .race-stats-grid {
+          grid-template-columns: repeat(4, 1fr);
+        }
+      }
+
+      @media (max-width: 992px) {
+        .race-stats-grid {
+          grid-template-columns: repeat(3, 1fr);
+        }
+        .highlights-grid {
+          grid-template-columns: repeat(2, 1fr);
+        }
+        .champion-stats {
+          margin-left: 0;
+          width: 100%;
+          justify-content: flex-start;
+        }
+      }
+
+      @media (max-width: 768px) {
+        .race-info-bar {
+          gap: 10px 20px;
+          padding: 12px 16px;
+        }
+        .race-info-item {
+          flex: 1 1 40%;
+        }
+        .race-stats-grid {
+          grid-template-columns: repeat(2, 1fr);
+          gap: 8px;
+        }
+        .highlights-grid {
+          grid-template-columns: 1fr;
+          gap: 8px;
+        }
+        .champion-content {
+          flex-direction: column;
+          align-items: stretch;
+          text-align: center;
+        }
+        .champion-avatar {
+          margin: 0 auto;
+        }
+        .champion-stats {
+          justify-content: center;
+        }
+        .champion-stat {
+          min-width: 50px;
+        }
+        .champion-stat-value {
+          font-size: 16px;
+        }
+        .race-stat-card .stat-value {
+          font-size: 17px;
+        }
+        .highlight-value {
+          font-size: 13px;
+        }
+        .results-table-wrapper .table-header-actions {
+          flex-direction: column;
+          align-items: stretch;
+        }
+      }
+
+      @media (max-width: 480px) {
+        .race-info-bar {
+          flex-direction: column;
+          align-items: stretch;
+          gap: 6px;
+        }
+        .race-info-item {
+          flex: 1 1 auto;
+        }
+        .race-stats-grid {
+          grid-template-columns: 1fr 1fr;
+          gap: 6px;
+        }
+        .race-stat-card {
+          padding: 10px 8px;
+        }
+        .race-stat-card .stat-value {
+          font-size: 16px;
+        }
+        .highlight-item {
+          padding: 8px 12px;
+        }
+        .champion-card {
+          padding: 16px;
+        }
+        .champion-name {
+          font-size: 18px;
+        }
+        .champion-stat-value {
+          font-size: 14px;
+        }
+      }
+
+      /* dark mode overrides for new elements */
+      [data-theme="dark"] .race-stat-card.highlight {
+        background: rgba(25, 135, 84, 0.12);
+        border-color: rgba(25, 135, 84, 0.3);
+      }
+
+      [data-theme="dark"] .race-stat-card .stat-icon {
+        background: rgba(25, 135, 84, 0.15);
+      }
+
+      [data-theme="dark"] .highlight-icon {
+        background: rgba(25, 135, 84, 0.15);
+      }
+
+      [data-theme="dark"] .champion-card::before {
+        background: linear-gradient(90deg, #d4a017, #b8860b, #8b6914);
+      }
+
+      [data-theme="dark"] .champion-avatar {
+        background: linear-gradient(135deg, #d4a017, #b8860b);
+      }
+
+      /* leaderboard table enhancements */
+      #results-table .rank-gold {
+        color: #b8860b;
+        font-weight: 700;
+      }
+      #results-table .rank-silver {
+        color: #a8a8a8;
+        font-weight: 700;
+      }
+      #results-table .rank-bronze {
+        color: #cd7f32;
+        font-weight: 700;
+      }
+      #results-table .rank-number {
+        font-weight: 600;
+        color: var(--text-muted);
+      }
+      #results-table .speed-cell {
+        font-weight: 700;
+        color: var(--primary);
+        font-size: 1.05em;
+      }
+      #results-table .winner-row td {
+        background: rgba(25, 135, 84, 0.04);
+      }
+      #results-table .winner-row td:first-child {
+        border-left: 3px solid #f1c40f;
+      }
+      [data-theme="dark"] #results-table .winner-row td {
+        background: rgba(25, 135, 84, 0.08);
+      }
+
+      /* event release info in new design */
+      .race-release-info {
+        font-size: 13px;
+        color: var(--text-light);
+        text-align: center;
+        padding: 4px 0 8px;
+      }
+      .race-release-info strong {
+        color: var(--text);
+      }
+
+      /* ===== ADMIN SEARCH BARS (added) ===== */
+      .admin-search-bar {
+        display: flex;
+        gap: 10px;
+        flex-wrap: wrap;
+        margin-bottom: 16px;
+      }
+      .admin-search-bar input {
+        flex: 1;
+        min-width: 200px;
+        padding: 10px 16px;
+        border-radius: 20px;
+        border: 2px solid var(--border);
+        background: var(--input-bg);
+        color: var(--text);
+        font-size: 14px;
+        transition: 0.2s;
+      }
+      .admin-search-bar input:focus {
+        outline: none;
+        border-color: var(--primary);
+        box-shadow: 0 0 0 3px rgba(25, 135, 84, 0.12);
+      }
+      .admin-search-bar input::placeholder {
+        color: var(--text-muted);
+      }
     </style>
   </head>
   <body>
@@ -573,6 +1180,221 @@
                   disabled
                 />
               </div>
+
+              <!-- ===== PERFORMANCE SUMMARY CARD ===== -->
+              <div id="player-stats-container" class="card stats-card hidden">
+                <div class="stats-card-header">
+                  <div class="stats-card-title-wrapper">
+                    <span class="stats-card-icon">⏱️</span>
+                    <h3 class="stats-card-title">Performance Summary</h3>
+                  </div>
+                  <span class="stats-card-badge">Lifetime</span>
+                </div>
+
+                <div class="stats-grid">
+                  <!-- Birds Clocked -->
+                  <div class="stat-metric">
+                    <div class="stat-metric-icon">
+                      <svg
+                        xmlns="http://www.w3.org/2000/svg"
+                        width="20"
+                        height="20"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        stroke-width="1.8"
+                        stroke-linecap="round"
+                        stroke-linejoin="round"
+                      >
+                        <path d="M16 7h.01" />
+                        <path
+                          d="M3.4 18H12a8 8 0 0 0 8-8V7a4 4 0 0 0-7.28-2.3L2 20"
+                        />
+                        <path d="M20 7v3a8 8 0 0 1-8 8H3.4" />
+                        <path d="M6 15v1" />
+                      </svg>
+                    </div>
+                    <div class="stat-metric-content">
+                      <span class="stat-metric-label">Birds Clocked</span>
+                      <span class="stat-metric-value" id="stats-total-pigeons"
+                        >0</span
+                      >
+                    </div>
+                  </div>
+
+                  <!-- Races Entered -->
+                  <div class="stat-metric">
+                    <div class="stat-metric-icon">
+                      <svg
+                        xmlns="http://www.w3.org/2000/svg"
+                        width="20"
+                        height="20"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        stroke-width="1.8"
+                        stroke-linecap="round"
+                        stroke-linejoin="round"
+                      >
+                        <path
+                          d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"
+                        />
+                        <line x1="4" y1="22" x2="4" y2="15" />
+                      </svg>
+                    </div>
+                    <div class="stat-metric-content">
+                      <span class="stat-metric-label">Races Entered</span>
+                      <span class="stat-metric-value" id="stats-events">0</span>
+                    </div>
+                  </div>
+
+                  <!-- Race Wins (Emphasized) -->
+                  <div class="stat-metric stat-metric-highlight">
+                    <div class="stat-metric-icon stat-metric-icon-gold">
+                      <svg
+                        xmlns="http://www.w3.org/2000/svg"
+                        width="22"
+                        height="22"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        stroke-width="1.8"
+                        stroke-linecap="round"
+                        stroke-linejoin="round"
+                      >
+                        <path
+                          d="M12 2L15.09 8.26L22 9.27L17 14.14L18.18 21.02L12 17.77L5.82 21.02L7 14.14L2 9.27L8.91 8.26L12 2Z"
+                        />
+                      </svg>
+                    </div>
+                    <div class="stat-metric-content">
+                      <span class="stat-metric-label">Race Wins</span>
+                      <span
+                        class="stat-metric-value stat-metric-value-gold"
+                        id="stats-wins"
+                        >0</span
+                      >
+                    </div>
+                  </div>
+
+                  <!-- Podium Finishes -->
+                  <div class="stat-metric">
+                    <div class="stat-metric-icon">
+                      <svg
+                        xmlns="http://www.w3.org/2000/svg"
+                        width="20"
+                        height="20"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        stroke-width="1.8"
+                        stroke-linecap="round"
+                        stroke-linejoin="round"
+                      >
+                        <circle cx="12" cy="8" r="3" />
+                        <path d="M12 11v8" />
+                        <path d="M5 22h14" />
+                      </svg>
+                    </div>
+                    <div class="stat-metric-content">
+                      <span class="stat-metric-label">Podium Finishes</span>
+                      <span class="stat-metric-value" id="stats-podiums"
+                        >0</span
+                      >
+                    </div>
+                  </div>
+
+                  <!-- Average Speed -->
+                  <div class="stat-metric">
+                    <div class="stat-metric-icon">
+                      <svg
+                        xmlns="http://www.w3.org/2000/svg"
+                        width="20"
+                        height="20"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        stroke-width="1.8"
+                        stroke-linecap="round"
+                        stroke-linejoin="round"
+                      >
+                        <path
+                          d="M12 22c5.523 0 10-4.477 10-10S17.523 2 12 2 2 6.477 2 12s4.477 10 10 10z"
+                        />
+                        <path d="M12 6v6l4 2" />
+                      </svg>
+                    </div>
+                    <div class="stat-metric-content">
+                      <span class="stat-metric-label">Average Speed</span>
+                      <span class="stat-metric-value" id="stats-avg-speed"
+                        >0.00</span
+                      >
+                      <span class="stat-metric-unit">m/min</span>
+                    </div>
+                  </div>
+
+                  <!-- Top Speed (Emphasized) -->
+                  <div class="stat-metric stat-metric-highlight">
+                    <div class="stat-metric-icon stat-metric-icon-accent">
+                      <svg
+                        xmlns="http://www.w3.org/2000/svg"
+                        width="22"
+                        height="22"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        stroke-width="1.8"
+                        stroke-linecap="round"
+                        stroke-linejoin="round"
+                      >
+                        <polygon
+                          points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"
+                        />
+                      </svg>
+                    </div>
+                    <div class="stat-metric-content">
+                      <span class="stat-metric-label">Top Speed</span>
+                      <span
+                        class="stat-metric-value stat-metric-value-accent"
+                        id="stats-best-speed"
+                        >0.00</span
+                      >
+                      <span class="stat-metric-unit">m/min</span>
+                    </div>
+                  </div>
+
+                  <!-- Win Rate (Emphasized) -->
+                  <div
+                    class="stat-metric stat-metric-highlight stat-metric-full"
+                  >
+                    <div class="stat-metric-icon stat-metric-icon-accent">
+                      <svg
+                        xmlns="http://www.w3.org/2000/svg"
+                        width="22"
+                        height="22"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        stroke-width="1.8"
+                        stroke-linecap="round"
+                        stroke-linejoin="round"
+                      >
+                        <polyline points="23 6 13.5 15.5 8.5 10.5 1 18" />
+                        <polyline points="17 6 23 6 23 12" />
+                      </svg>
+                    </div>
+                    <div class="stat-metric-content">
+                      <span class="stat-metric-label">Win Rate</span>
+                      <span
+                        class="stat-metric-value stat-metric-value-accent"
+                        id="stats-win-rate"
+                        >0.0%</span
+                      >
+                    </div>
+                  </div>
+                </div>
+              </div>
+
               <hr style="margin: 20px 0" />
               <label><i class="fas fa-key"></i> New Password</label>
               <div class="password-wrapper">
@@ -595,34 +1417,514 @@
             </div>
           </div>
 
-          <!-- ===== RESULTS ===== -->
+          <!-- ===== RESULTS (RACE ANALYTICS DASHBOARD) ===== -->
           <div id="view-results" class="view-section hidden">
-            <div class="card">
-              <div class="dashboard-header">
-                <h2><i class="fas fa-trophy"></i> Leaderboard</h2>
+            <div class="card" style="padding: 24px 24px 20px">
+              <!-- ---- RACE INFORMATION BAR ---- -->
+              <div class="race-info-bar" id="race-info-bar">
+                <div class="race-info-item">
+                  <span class="race-info-label">🏁 Race</span>
+                  <span class="race-info-value" id="race-name">—</span>
+                </div>
+                <div class="race-info-item">
+                  <span class="race-info-label">📍 Release Point</span>
+                  <span class="race-info-value" id="race-release-point"
+                    ><span class="coord">—</span></span
+                  >
+                </div>
+                <div class="race-info-item">
+                  <span class="race-info-label">🕐 Release Time</span>
+                  <span class="race-info-value" id="race-release-time">—</span>
+                </div>
+                <div class="race-info-item">
+                  <span class="race-info-label">📌 Status</span>
+                  <span class="race-status-badge" id="race-status">—</span>
+                </div>
               </div>
-              <div
-                id="event-release-info"
-                style="
-                  text-align: center;
-                  margin: 10px 0;
-                  font-weight: bold;
-                  color: var(--primary);
-                "
-              ></div>
-              <table id="results-table">
-                <thead>
-                  <tr>
-                    <th>Rank</th>
-                    <th>Player</th>
-                    <th>Air Dist</th>
-                    <th>Arrival</th>
-                    <th>Flight Hrs</th>
-                    <th>Speed (m/min)</th>
-                  </tr>
-                </thead>
-                <tbody></tbody>
-              </table>
+
+              <!-- ---- CHAMPION CARD ---- -->
+              <div class="champion-card" id="champion-card">
+                <div class="champion-badge">🏆 Champion</div>
+                <div class="champion-content">
+                  <div class="champion-avatar">👑</div>
+                  <div class="champion-info">
+                    <div class="champion-name" id="champion-name">—</div>
+                    <div class="champion-code" id="champion-code">—</div>
+                  </div>
+                  <div class="champion-stats">
+                    <div class="champion-stat">
+                      <span class="champion-stat-label">Speed</span>
+                      <span class="champion-stat-value" id="champion-speed"
+                        >— <span class="unit">m/min</span></span
+                      >
+                    </div>
+                    <div class="champion-stat">
+                      <span class="champion-stat-label">Flight Time</span>
+                      <span
+                        class="champion-stat-value"
+                        id="champion-flight-time"
+                        >—</span
+                      >
+                    </div>
+                    <div class="champion-stat">
+                      <span class="champion-stat-label">Distance</span>
+                      <span class="champion-stat-value" id="champion-distance"
+                        >— <span class="unit">km</span></span
+                      >
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <!-- ---- RACE STATISTICS GRID ---- -->
+              <div class="race-stats-grid" id="race-stats-grid">
+                <!-- Birds Released -->
+                <div class="race-stat-card">
+                  <div class="stat-icon">
+                    <svg
+                      xmlns="http://www.w3.org/2000/svg"
+                      width="18"
+                      height="18"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      stroke-width="2"
+                      stroke-linecap="round"
+                      stroke-linejoin="round"
+                    >
+                      <path d="M16 7h.01" />
+                      <path
+                        d="M3.4 18H12a8 8 0 0 0 8-8V7a4 4 0 0 0-7.28-2.3L2 20"
+                      />
+                      <path d="M20 7v3a8 8 0 0 1-8 8H3.4" />
+                      <path d="M6 15v1" />
+                    </svg>
+                  </div>
+                  <div class="stat-value" id="stat-released">0</div>
+                  <div class="stat-label">Birds Released</div>
+                </div>
+                <!-- Birds Clocked -->
+                <div class="race-stat-card highlight">
+                  <div class="stat-icon">
+                    <svg
+                      xmlns="http://www.w3.org/2000/svg"
+                      width="18"
+                      height="18"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      stroke-width="2"
+                      stroke-linecap="round"
+                      stroke-linejoin="round"
+                    >
+                      <path d="M12 2v4" />
+                      <path d="M12 18v4" />
+                      <path d="M4.93 4.93l2.83 2.83" />
+                      <path d="M16.24 16.24l2.83 2.83" />
+                      <path d="M2 12h4" />
+                      <path d="M18 12h4" />
+                      <path d="M4.93 19.07l2.83-2.83" />
+                      <path d="M16.24 7.76l2.83-2.83" />
+                    </svg>
+                  </div>
+                  <div class="stat-value" id="stat-clocked">0</div>
+                  <div class="stat-label">Birds Clocked</div>
+                </div>
+                <!-- Missing Birds -->
+                <div class="race-stat-card">
+                  <div class="stat-icon">
+                    <svg
+                      xmlns="http://www.w3.org/2000/svg"
+                      width="18"
+                      height="18"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      stroke-width="2"
+                      stroke-linecap="round"
+                      stroke-linejoin="round"
+                    >
+                      <circle cx="12" cy="12" r="10" />
+                      <line x1="12" y1="8" x2="12" y2="12" />
+                      <line x1="12" y1="16" x2="12.01" y2="16" />
+                    </svg>
+                  </div>
+                  <div class="stat-value" id="stat-missing">0</div>
+                  <div class="stat-label">Missing Birds</div>
+                </div>
+                <!-- Completion Rate -->
+                <div class="race-stat-card highlight">
+                  <div class="stat-icon">
+                    <svg
+                      xmlns="http://www.w3.org/2000/svg"
+                      width="18"
+                      height="18"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      stroke-width="2"
+                      stroke-linecap="round"
+                      stroke-linejoin="round"
+                    >
+                      <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14" />
+                      <polyline points="22 4 12 14.01 9 11.01" />
+                    </svg>
+                  </div>
+                  <div class="stat-value" id="stat-completion">0%</div>
+                  <div class="stat-label">Completion Rate</div>
+                </div>
+                <!-- Participants -->
+                <div class="race-stat-card">
+                  <div class="stat-icon">
+                    <svg
+                      xmlns="http://www.w3.org/2000/svg"
+                      width="18"
+                      height="18"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      stroke-width="2"
+                      stroke-linecap="round"
+                      stroke-linejoin="round"
+                    >
+                      <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
+                      <circle cx="9" cy="7" r="4" />
+                      <path d="M23 21v-2a4 4 0 0 0-3-3.87" />
+                      <path d="M16 3.13a4 4 0 0 1 0 7.75" />
+                    </svg>
+                  </div>
+                  <div class="stat-value" id="stat-participants">0</div>
+                  <div class="stat-label">Participants</div>
+                </div>
+                <!-- Average Speed -->
+                <div class="race-stat-card">
+                  <div class="stat-icon">
+                    <svg
+                      xmlns="http://www.w3.org/2000/svg"
+                      width="18"
+                      height="18"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      stroke-width="2"
+                      stroke-linecap="round"
+                      stroke-linejoin="round"
+                    >
+                      <path
+                        d="M12 22c5.523 0 10-4.477 10-10S17.523 2 12 2 2 6.477 2 12s4.477 10 10 10z"
+                      />
+                      <path d="M12 6v6l4 2" />
+                    </svg>
+                  </div>
+                  <div class="stat-value" id="stat-avg-speed">
+                    0.00 <span class="unit">m/min</span>
+                  </div>
+                  <div class="stat-label">Average Speed</div>
+                </div>
+                <!-- Highest Speed -->
+                <div class="race-stat-card highlight">
+                  <div class="stat-icon">
+                    <svg
+                      xmlns="http://www.w3.org/2000/svg"
+                      width="18"
+                      height="18"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      stroke-width="2"
+                      stroke-linecap="round"
+                      stroke-linejoin="round"
+                    >
+                      <polygon
+                        points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"
+                      />
+                    </svg>
+                  </div>
+                  <div class="stat-value" id="stat-highest-speed">
+                    0.00 <span class="unit">m/min</span>
+                  </div>
+                  <div class="stat-label">Highest Speed</div>
+                </div>
+                <!-- Lowest Speed -->
+                <div class="race-stat-card">
+                  <div class="stat-icon">
+                    <svg
+                      xmlns="http://www.w3.org/2000/svg"
+                      width="18"
+                      height="18"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      stroke-width="2"
+                      stroke-linecap="round"
+                      stroke-linejoin="round"
+                    >
+                      <polygon
+                        points="11 22 21 10 12 10 13 2 3 14 12 14 11 22"
+                      />
+                    </svg>
+                  </div>
+                  <div class="stat-value" id="stat-lowest-speed">
+                    0.00 <span class="unit">m/min</span>
+                  </div>
+                  <div class="stat-label">Lowest Speed</div>
+                </div>
+                <!-- Average Flight Time -->
+                <div class="race-stat-card">
+                  <div class="stat-icon">
+                    <svg
+                      xmlns="http://www.w3.org/2000/svg"
+                      width="18"
+                      height="18"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      stroke-width="2"
+                      stroke-linecap="round"
+                      stroke-linejoin="round"
+                    >
+                      <circle cx="12" cy="12" r="10" />
+                      <polyline points="12 6 12 12 16 14" />
+                    </svg>
+                  </div>
+                  <div class="stat-value" id="stat-avg-flight-time">0:00</div>
+                  <div class="stat-label">Avg Flight Time</div>
+                </div>
+                <!-- Winning Margin -->
+                <div class="race-stat-card highlight">
+                  <div class="stat-icon">
+                    <svg
+                      xmlns="http://www.w3.org/2000/svg"
+                      width="18"
+                      height="18"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      stroke-width="2"
+                      stroke-linecap="round"
+                      stroke-linejoin="round"
+                    >
+                      <line x1="5" y1="12" x2="19" y2="12" />
+                      <polyline points="15 8 19 12 15 16" />
+                      <polyline points="9 16 5 12 9 8" />
+                    </svg>
+                  </div>
+                  <div class="stat-value" id="stat-winning-margin">
+                    0.00 <span class="unit">m/min</span>
+                  </div>
+                  <div class="stat-label">Winning Margin</div>
+                </div>
+              </div>
+
+              <!-- ---- LIVE HIGHLIGHTS ---- -->
+              <div class="highlights-grid" id="highlights-grid">
+                <div class="highlight-item">
+                  <div class="highlight-icon">
+                    <svg
+                      xmlns="http://www.w3.org/2000/svg"
+                      width="20"
+                      height="20"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      stroke-width="2"
+                      stroke-linecap="round"
+                      stroke-linejoin="round"
+                    >
+                      <polygon
+                        points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"
+                      />
+                    </svg>
+                  </div>
+                  <div class="highlight-content">
+                    <div class="highlight-label">Fastest Bird</div>
+                    <div class="highlight-value" id="hl-fastest-bird">—</div>
+                  </div>
+                </div>
+                <div class="highlight-item">
+                  <div class="highlight-icon">
+                    <svg
+                      xmlns="http://www.w3.org/2000/svg"
+                      width="20"
+                      height="20"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      stroke-width="2"
+                      stroke-linecap="round"
+                      stroke-linejoin="round"
+                    >
+                      <circle cx="12" cy="12" r="10" />
+                      <polyline points="12 6 12 12 8 10" />
+                    </svg>
+                  </div>
+                  <div class="highlight-content">
+                    <div class="highlight-label">First Arrival</div>
+                    <div class="highlight-value" id="hl-first-arrival">—</div>
+                  </div>
+                </div>
+                <div class="highlight-item">
+                  <div class="highlight-icon">
+                    <svg
+                      xmlns="http://www.w3.org/2000/svg"
+                      width="20"
+                      height="20"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      stroke-width="2"
+                      stroke-linecap="round"
+                      stroke-linejoin="round"
+                    >
+                      <circle cx="12" cy="12" r="10" />
+                      <polyline points="12 6 12 12 16 14" />
+                    </svg>
+                  </div>
+                  <div class="highlight-content">
+                    <div class="highlight-label">Last Arrival</div>
+                    <div class="highlight-value" id="hl-last-arrival">—</div>
+                  </div>
+                </div>
+                <div class="highlight-item">
+                  <div class="highlight-icon">
+                    <svg
+                      xmlns="http://www.w3.org/2000/svg"
+                      width="20"
+                      height="20"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      stroke-width="2"
+                      stroke-linecap="round"
+                      stroke-linejoin="round"
+                    >
+                      <path
+                        d="M12 22c5.523 0 10-4.477 10-10S17.523 2 12 2 2 6.477 2 12s4.477 10 10 10z"
+                      />
+                      <path d="M12 8v8" />
+                      <path d="M8 12h8" />
+                    </svg>
+                  </div>
+                  <div class="highlight-content">
+                    <div class="highlight-label">Longest Distance</div>
+                    <div class="highlight-value" id="hl-longest-dist">
+                      — <span class="unit">km</span>
+                    </div>
+                  </div>
+                </div>
+                <div class="highlight-item">
+                  <div class="highlight-icon">
+                    <svg
+                      xmlns="http://www.w3.org/2000/svg"
+                      width="20"
+                      height="20"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      stroke-width="2"
+                      stroke-linecap="round"
+                      stroke-linejoin="round"
+                    >
+                      <path d="M3 3l18 18" />
+                      <path d="M18 3l3 3" />
+                      <path d="M9 21l-3-3" />
+                      <path d="M3 6h3v3" />
+                      <path d="M21 18h-3v-3" />
+                    </svg>
+                  </div>
+                  <div class="highlight-content">
+                    <div class="highlight-label">Closest Finish</div>
+                    <div class="highlight-value" id="hl-closest-finish">—</div>
+                  </div>
+                </div>
+                <div class="highlight-item">
+                  <div class="highlight-icon">
+                    <svg
+                      xmlns="http://www.w3.org/2000/svg"
+                      width="20"
+                      height="20"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      stroke-width="2"
+                      stroke-linecap="round"
+                      stroke-linejoin="round"
+                    >
+                      <polygon
+                        points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"
+                      />
+                    </svg>
+                  </div>
+                  <div class="highlight-content">
+                    <div class="highlight-label">Highest Speed</div>
+                    <div class="highlight-value" id="hl-highest-speed">
+                      — <span class="unit">m/min</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <!-- ---- LEADERBOARD TABLE ---- -->
+              <div class="results-table-wrapper">
+                <div class="table-header-actions">
+                  <div class="left">
+                    <span class="live-dot"></span>
+                    <span>Live</span>
+                    <span
+                      style="color: var(--text-muted); font-weight: 400"
+                      id="results-last-updated"
+                      >Updated just now</span
+                    >
+                  </div>
+                  <div style="display: flex; gap: 6px; flex-wrap: wrap">
+                    <button
+                      class="btn btn-sm btn-secondary"
+                      onclick="app.refreshResults()"
+                    >
+                      <i class="fas fa-sync-alt"></i> Refresh
+                    </button>
+                  </div>
+                </div>
+
+                <div class="search-bar">
+                  <input
+                    id="result-search-input"
+                    type="text"
+                    placeholder="🔍 Search events by name or code..."
+                    oninput="app.filterResults()"
+                  />
+                  <button
+                    class="btn btn-sm btn-secondary"
+                    onclick="
+                      document.getElementById('result-search-input').value = '';
+                      app.filterResults();
+                    "
+                  >
+                    ✕ Clear
+                  </button>
+                </div>
+
+                <div style="overflow-x: auto">
+                  <table id="results-table">
+                    <thead>
+                      <tr>
+                        <th style="text-align: center; width: 60px">Rank</th>
+                        <th style="text-align: left">Player</th>
+                        <th style="text-align: right">Air Dist</th>
+                        <th style="text-align: right">Arrival</th>
+                        <th style="text-align: right">Flight Hrs</th>
+                        <th style="text-align: right">Speed (m/min)</th>
+                      </tr>
+                    </thead>
+                    <tbody></tbody>
+                  </table>
+                </div>
+                <div
+                  id="race-release-info"
+                  class="race-release-info"
+                  style="margin-top: 6px"
+                ></div>
+              </div>
             </div>
           </div>
 
@@ -646,6 +1948,26 @@
                   <i class="fas fa-plus"></i> Add New Player
                 </button>
               </div>
+
+              <!-- ===== ADDED SEARCH BAR FOR PLAYERS ===== -->
+              <div class="admin-search-bar">
+                <input
+                  id="players-search-input"
+                  type="text"
+                  placeholder="🔍 Search players by name or ID..."
+                  oninput="app.filterPlayers()"
+                />
+                <button
+                  class="btn btn-sm btn-secondary"
+                  onclick="
+                    document.getElementById('players-search-input').value = '';
+                    app.filterPlayers();
+                  "
+                >
+                  ✕ Clear
+                </button>
+              </div>
+
               <table id="players-table">
                 <thead>
                   <tr>
@@ -670,6 +1992,26 @@
                   <i class="fas fa-plus"></i> Create Event
                 </button>
               </div>
+
+              <!-- ===== ADDED SEARCH BAR FOR EVENTS ===== -->
+              <div class="admin-search-bar">
+                <input
+                  id="events-search-input"
+                  type="text"
+                  placeholder="🔍 Search events by name or code..."
+                  oninput="app.filterEvents()"
+                />
+                <button
+                  class="btn btn-sm btn-secondary"
+                  onclick="
+                    document.getElementById('events-search-input').value = '';
+                    app.filterEvents();
+                  "
+                >
+                  ✕ Clear
+                </button>
+              </div>
+
               <table id="admin-events-table">
                 <thead>
                   <tr>
@@ -1287,7 +2629,7 @@
             );
           }
 
-          // Code text
+          // CODE TEXT
           const codeText = code;
           const gap2 = Math.round((0.8 / 25.4) * dpi);
           const codeY = barcodeY + barcodeHeightPx + gap2;
@@ -1307,14 +2649,29 @@
             Math.max(1, Math.round(codeFontSize * 0.05)),
           );
 
-          ctx.textAlign = "center";
+          ctx.textAlign = "left";
           ctx.textBaseline = "top";
           ctx.fillStyle = "#000000";
           ctx.font = `bold ${codeFontSize}px monospace`;
-          ctx.letterSpacing = `${letterSpacing}px`;
+
+          let totalWidth = 0;
+          const charWidths = [];
+          for (let i = 0; i < codeText.length; i++) {
+            const char = codeText[i];
+            const metrics = ctx.measureText(char);
+            const w = metrics.width;
+            charWidths.push(w);
+            totalWidth += w;
+          }
+          totalWidth += (codeText.length - 1) * letterSpacing;
+
           const centerX = barcodeLeft + barcodeWidth / 2;
-          ctx.fillText(codeText, centerX, codeY);
-          ctx.letterSpacing = "0px";
+          let currentX = centerX - totalWidth / 2;
+
+          for (let i = 0; i < codeText.length; i++) {
+            ctx.fillText(codeText[i], currentX, codeY);
+            currentX += charWidths[i] + letterSpacing;
+          }
 
           // Bottom section
           const bottomY = topHeightPx;
@@ -1380,23 +2737,23 @@
 
           if (!stickers || stickers.length === 0) {
             container.innerHTML = `
-              <div class="sticker-empty-state">
-                <i class="fas fa-tags" style="font-size:56px; display:block; margin-bottom:12px; color:#ccc;"></i>
-                <h3>No Stickers to Generate</h3>
-                <p>Register players to an event first, then click "Generate Stickers".</p>
-              </div>
-            `;
+                                <div class="sticker-empty-state">
+                                    <i class="fas fa-tags" style="font-size:56px; display:block; margin-bottom:12px; color:#ccc;"></i>
+                                    <h3>No Stickers to Generate</h3>
+                                    <p>Register players to an event first, then click "Generate Stickers".</p>
+                                </div>
+                            `;
             document.getElementById("sticker-total-count").textContent =
               "0 stickers";
             return;
           }
 
           container.innerHTML = `
-            <div class="sticker-loading">
-              <div class="spinner"></div>
-              <p>Generating stickers... (${stickers.length} stickers)</p>
-            </div>
-          `;
+                            <div class="sticker-loading">
+                                <div class="spinner"></div>
+                                <p>Generating stickers... (${stickers.length} stickers)</p>
+                            </div>
+                        `;
 
           const canvasItems = [];
           const dpi = state.dpi;
@@ -1421,21 +2778,40 @@
 
           state.canvasCache = canvasItems;
 
-          let html = '<div class="sticker-preview-grid">';
+          const grid = document.createElement("div");
+          grid.className = "sticker-preview-grid";
+
           for (const item of canvasItems) {
             const canvas = item.canvas;
             const data = item.data;
             const dataUrl = canvas.toDataURL("image/png");
-            html += `
-              <div class="sticker-preview-item">
-                <img src="${dataUrl}" alt="Sticker ${data.code}" style="width:100%; height:auto; border-radius:3px;" />
-                <div class="sticker-player">${data.playerName}</div>
-                <div class="sticker-label">${data.code}</div>
-              </div>
-            `;
+
+            const wrapper = document.createElement("div");
+            wrapper.className = "sticker-preview-item";
+
+            const img = document.createElement("img");
+            img.src = dataUrl;
+            img.alt = `Sticker ${data.code}`;
+            img.style.width = "100%";
+            img.style.height = "auto";
+            img.style.borderRadius = "3px";
+            wrapper.appendChild(img);
+
+            const playerDiv = document.createElement("div");
+            playerDiv.className = "sticker-player";
+            playerDiv.textContent = data.playerName;
+            wrapper.appendChild(playerDiv);
+
+            const codeDiv = document.createElement("div");
+            codeDiv.className = "sticker-label";
+            codeDiv.textContent = data.code;
+            wrapper.appendChild(codeDiv);
+
+            grid.appendChild(wrapper);
           }
-          html += "</div>";
-          container.innerHTML = html;
+
+          container.innerHTML = "";
+          container.appendChild(grid);
           document.getElementById("sticker-total-count").textContent =
             `${canvasItems.length} stickers`;
         }
@@ -1501,7 +2877,7 @@
           generateStickerPDF: generateStickerPDF,
           async loadEventData(eventId) {
             try {
-              const res = await fetch(
+              const res = await fetchWithAuth(
                 `${API_URL}/events/${eventId}/registrations`,
               );
               if (!res.ok) throw new Error("Failed to fetch registrations");
@@ -1519,7 +2895,7 @@
                 }
               }
 
-              const eventRes = await fetch(`${API_URL}/events/all`);
+              const eventRes = await fetchWithAuth(`${API_URL}/events/all`);
               const events = await eventRes.json();
               const evt = events.find((e) => e.code === eventId);
               if (evt) {
@@ -1542,12 +2918,12 @@
               const stickers = await this.loadEventData(eventId);
               if (!stickers || stickers.length === 0) {
                 document.getElementById("sticker-grid-container").innerHTML = `
-                  <div class="sticker-empty-state">
-                    <i class="fas fa-inbox" style="font-size:56px; display:block; margin-bottom:12px; color:#ccc;"></i>
-                    <h3>No Registered Pigeons</h3>
-                    <p>This event has no registered pigeons. Register players first.</p>
-                  </div>
-                `;
+                                        <div class="sticker-empty-state">
+                                            <i class="fas fa-inbox" style="font-size:56px; display:block; margin-bottom:12px; color:#ccc;"></i>
+                                            <h3>No Registered Pigeons</h3>
+                                            <p>This event has no registered pigeons. Register players first.</p>
+                                        </div>
+                                    `;
                 document.getElementById("sticker-total-count").textContent =
                   "0 stickers";
                 state.isGenerating = false;
@@ -1672,12 +3048,12 @@
             StickerGenerator.generateAndRender(eventCode);
           } else {
             document.getElementById("sticker-grid-container").innerHTML = `
-              <div class="sticker-empty-state">
-                <i class="fas fa-list-ul" style="font-size:56px; display:block; margin-bottom:12px; color:#ccc;"></i>
-                <h3>Select an Event</h3>
-                <p>Choose an event from the dropdown to generate stickers.</p>
-              </div>
-            `;
+                                <div class="sticker-empty-state">
+                                    <i class="fas fa-list-ul" style="font-size:56px; display:block; margin-bottom:12px; color:#ccc;"></i>
+                                    <h3>Select an Event</h3>
+                                    <p>Choose an event from the dropdown to generate stickers.</p>
+                                </div>
+                            `;
             document.getElementById("sticker-total-count").textContent =
               "0 stickers";
           }

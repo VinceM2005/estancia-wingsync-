@@ -1463,3 +1463,260 @@ tr:hover td {
 #log-list li:hover {
   background: var(--bg);
 }
+
+/* ===== PERFORMANCE SUMMARY CARD ===== */
+.stats-card {
+  max-width: 820px;
+  margin: 20px auto;
+  padding: 24px 28px;
+  border-radius: 16px;
+  border: 1px solid var(--border);
+  background: var(--card-bg);
+  box-shadow: var(--shadow);
+  transition:
+    box-shadow 0.25s ease,
+    border-color 0.25s ease;
+}
+
+.stats-card:hover {
+  box-shadow: var(--shadow-hover);
+  border-color: var(--primary-light);
+}
+
+/* --- Header --- */
+.stats-card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 20px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--border);
+}
+
+.stats-card-title-wrapper {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.stats-card-icon {
+  font-size: 18px;
+  color: var(--text-muted);
+}
+
+.stats-card-title {
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--text);
+  margin: 0;
+  letter-spacing: -0.2px;
+}
+
+.stats-card-badge {
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--text-light);
+  background: var(--bg);
+  padding: 3px 12px;
+  border-radius: 20px;
+  border: 1px solid var(--border);
+  letter-spacing: 0.2px;
+  text-transform: uppercase;
+}
+
+/* --- Grid --- */
+.stats-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 12px 20px;
+}
+
+/* --- Metric Item --- */
+.stat-metric {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  transition:
+    background 0.15s ease,
+    transform 0.15s ease;
+  cursor: default;
+  border: 1px solid transparent;
+}
+
+.stat-metric:hover {
+  background: var(--bg);
+  transform: translateY(-1px);
+  border-color: var(--border);
+}
+
+.stat-metric-highlight {
+  border-color: var(--border);
+  background: var(--bg);
+}
+
+.stat-metric-highlight:hover {
+  background: var(--input-bg);
+  border-color: var(--primary-light);
+}
+
+.stat-metric-full {
+  grid-column: 1 / -1;
+  justify-self: center;
+  width: 100%;
+  max-width: 320px;
+}
+
+/* --- Icon --- */
+.stat-metric-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 38px;
+  height: 38px;
+  flex-shrink: 0;
+  border-radius: 8px;
+  background: var(--bg);
+  color: var(--text-muted);
+  transition:
+    background 0.2s,
+    color 0.2s;
+}
+
+.stat-metric:hover .stat-metric-icon {
+  background: var(--input-bg);
+  color: var(--text);
+}
+
+.stat-metric-icon-gold {
+  background: #fef9e7;
+  color: #d4a017;
+}
+
+.stat-metric-icon-accent {
+  background: #e8f5e9;
+  color: #198754;
+}
+
+.stat-metric:hover .stat-metric-icon-gold {
+  background: #fdf2d0;
+  color: #b8860b;
+}
+
+.stat-metric:hover .stat-metric-icon-accent {
+  background: #d4edda;
+  color: #0e6b3a;
+}
+
+/* --- Content --- */
+.stat-metric-content {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.stat-metric-label {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-light);
+  letter-spacing: 0.15px;
+  text-transform: none;
+}
+
+.stat-metric-value {
+  font-size: 28px;
+  font-weight: 600;
+  color: var(--text);
+  line-height: 1.2;
+  letter-spacing: -0.3px;
+}
+
+.stat-metric-value-gold {
+  color: #b8860b;
+}
+
+.stat-metric-value-accent {
+  color: #198754;
+}
+
+.stat-metric-unit {
+  font-size: 12px;
+  font-weight: 400;
+  color: var(--text-muted);
+  margin-left: 2px;
+}
+
+/* --- Responsive --- */
+@media (max-width: 1024px) {
+  .stats-grid {
+    grid-template-columns: repeat(2, 1fr);
+    gap: 10px 16px;
+  }
+  .stat-metric-full {
+    grid-column: span 2;
+    max-width: none;
+  }
+  .stat-metric-value {
+    font-size: 26px;
+  }
+}
+
+@media (max-width: 600px) {
+  .stats-card {
+    padding: 16px 16px 20px;
+    border-radius: 12px;
+  }
+  .stats-card-header {
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+  .stats-card-title {
+    font-size: 16px;
+  }
+  .stats-grid {
+    grid-template-columns: 1fr 1fr;
+    gap: 6px 12px;
+  }
+  .stat-metric {
+    padding: 8px 10px;
+    gap: 10px;
+  }
+  .stat-metric-icon {
+    width: 32px;
+    height: 32px;
+  }
+  .stat-metric-value {
+    font-size: 22px;
+  }
+  .stat-metric-label {
+    font-size: 11px;
+  }
+  .stat-metric-full {
+    grid-column: span 2;
+  }
+  .stat-metric-highlight {
+    border-color: transparent;
+    background: transparent;
+  }
+  .stat-metric-highlight:hover {
+    background: var(--bg);
+  }
+}
+
+@media (max-width: 400px) {
+  .stat-metric-icon {
+    width: 28px;
+    height: 28px;
+  }
+  .stat-metric-icon svg {
+    width: 16px;
+    height: 16px;
+  }
+  .stat-metric-value {
+    font-size: 19px;
+  }
+  .stat-metric-label {
+    font-size: 10px;
+  }
+}

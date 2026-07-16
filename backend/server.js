@@ -33,7 +33,7 @@ app.use(express.json({ limit: "10mb" }));
 // ===== RATE LIMITING =====
 const globalLimiter = rateLimit({
   windowMs: 60 * 1000,
-  max: 100,
+  max: 200,
   message: "Too many requests from this IP, please try again later.",
   standardHeaders: true,
   legacyHeaders: false,
@@ -46,9 +46,24 @@ const loginLimiter = rateLimit({
   message: "Too many login attempts, please try again later.",
 });
 
+const registrationLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 20,
+  message: "Too many registration attempts, please try again later.",
+});
+const clockinLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 30,
+  message: "Too many clock‑in attempts, please try again later.",
+});
+
 // ===== CONNECT TO MONGODB =====
 mongoose
-  .connect(process.env.MONGO_URI)
+  .connect(process.env.MONGO_URI, {
+    serverSelectionTimeoutMS: 5000,
+    socketTimeoutMS: 45000,
+    family: 4,
+  })
   .then(async () => {
     console.log("✅ Connected to MongoDB Atlas");
     await seedDatabase();
@@ -60,8 +75,7 @@ const UserSchema = new mongoose.Schema({
   id: { type: String, required: true, unique: true },
   name: { type: String, required: true },
   role: { type: String, default: "player", enum: ["admin", "player"] },
-  password: { type: String, required: true },
-  passwordHash: { type: String },
+  passwordHash: { type: String, required: true },
   contact: { type: String },
   lat: {
     type: Number,
@@ -116,9 +130,9 @@ const ResultSchema = new mongoose.Schema({
   userName: { type: String, required: true },
   clockInNumber: { type: Number, required: true },
   clockInCode: { type: String, required: true },
-  distanceKm: { type: String, required: true },
+  distanceKm: { type: Number, required: true },
   arrivalTime: { type: Date, required: true },
-  flightTimeHours: { type: String, required: true },
+  flightTimeHours: { type: Number, required: true },
   speedKPH: { type: Number, required: true },
   speedMPM: { type: Number, required: true },
 });
@@ -162,7 +176,6 @@ async function seedDatabase() {
           id: "ADMIN",
           name: "System Admin",
           role: "admin",
-          password: "admin123",
           passwordHash: adminPass,
           lat: 13.415,
           lng: 123.635,
@@ -171,7 +184,6 @@ async function seedDatabase() {
           id: "P-001",
           name: "Dela Cruz, Juan M.",
           role: "player",
-          password: "player123",
           passwordHash: playerPass,
           contact: "09123456789",
           lat: 13.412345,
@@ -181,7 +193,6 @@ async function seedDatabase() {
           id: "P-002",
           name: "Penduko, Pedro T.",
           role: "player",
-          password: "player123",
           passwordHash: playerPass,
           contact: "09987654321",
           lat: 13.418765,
@@ -220,6 +231,14 @@ function authenticateToken(req, res, next) {
   });
 }
 
+// ===== ADMIN MIDDLEWARE (NEW) =====
+const requireAdmin = (req, res, next) => {
+  if (req.user.role !== "admin") {
+    return res.status(403).json({ error: "Admin access required." });
+  }
+  next();
+};
+
 // ===== VALIDATION RULES =====
 const validateLogin = [
   body("id").notEmpty().withMessage("User ID is required"),
@@ -249,17 +268,7 @@ app.post("/api/login", loginLimiter, validateLogin, async (req, res) => {
     if (!user) {
       return res.status(401).json({ error: "Invalid credentials" });
     }
-    let passwordMatch = false;
-    if (user.passwordHash) {
-      passwordMatch = await bcrypt.compare(password, user.passwordHash);
-    } else {
-      passwordMatch = user.password === password;
-      if (passwordMatch) {
-        user.passwordHash = await hashPassword(password);
-        await user.save();
-        console.log(`🔐 Upgraded password for user ${id}`);
-      }
-    }
+    const passwordMatch = await bcrypt.compare(password, user.passwordHash);
     if (!passwordMatch) {
       return res.status(401).json({ error: "Invalid credentials" });
     }
@@ -286,7 +295,9 @@ app.post("/api/login", loginLimiter, validateLogin, async (req, res) => {
     });
   } catch (error) {
     console.error("Login error:", error);
-    res.status(500).json({ error: "Server error" });
+    res
+      .status(500)
+      .json({ error: "An internal error occurred. Please try again later." });
   }
 });
 
@@ -312,6 +323,7 @@ app.get("/api/time", async (req, res) => {
 });
 
 // ===== PROTECTED ROUTES =====
+// All routes under /api require authentication (authenticateToken)
 app.use("/api", authenticateToken);
 
 // GET active events
@@ -323,7 +335,9 @@ app.get("/api/events/active", async (req, res) => {
     res.json(events);
   } catch (error) {
     console.error("Active events error:", error);
-    res.status(500).json({ error: "Server error" });
+    res
+      .status(500)
+      .json({ error: "An internal error occurred. Please try again later." });
   }
 });
 
@@ -334,7 +348,9 @@ app.get("/api/events/all", async (req, res) => {
     res.json(events);
   } catch (error) {
     console.error("All events error:", error);
-    res.status(500).json({ error: "Server error" });
+    res
+      .status(500)
+      .json({ error: "An internal error occurred. Please try again later." });
   }
 });
 
@@ -360,7 +376,9 @@ app.get("/api/events/registrations-summary", async (req, res) => {
     res.json(summary);
   } catch (error) {
     console.error("Registrations summary error:", error);
-    res.status(500).json({ error: "Server error" });
+    res
+      .status(500)
+      .json({ error: "An internal error occurred. Please try again later." });
   }
 });
 
@@ -400,13 +418,16 @@ app.get("/api/events/:eventId/registrations", async (req, res) => {
     res.json(registrations);
   } catch (error) {
     console.error("Get registrations error:", error);
-    res.status(500).json({ error: "Server error" });
+    res
+      .status(500)
+      .json({ error: "An internal error occurred. Please try again later." });
   }
 });
 
-// REGISTER PLAYERS
+// ===== REGISTER PLAYERS (WITH TRANSACTION) =====
 app.post(
   "/api/events/:eventId/register-players",
+  registrationLimiter,
   [
     body("registrations")
       .isArray({ min: 1 })
@@ -419,30 +440,47 @@ app.post(
       .withMessage("Pigeon count must be between 1 and 10"),
   ],
   async (req, res) => {
+    const session = await mongoose.startSession();
+    session.startTransaction();
+
     try {
       const errors = validationResult(req);
       if (!errors.isEmpty()) {
+        await session.abortTransaction();
+        session.endSession();
         return res.status(400).json({ error: errors.array()[0].msg });
       }
       const { eventId } = req.params;
       const { registrations } = matchedData(req);
-      const event = await Event.findOne({ code: eventId });
-      if (!event) return res.status(404).json({ error: "Event not found" });
-      if (event.status !== "Active")
+      const event = await Event.findOne({ code: eventId }).session(session);
+      if (!event) {
+        await session.abortTransaction();
+        session.endSession();
+        return res.status(404).json({ error: "Event not found" });
+      }
+      if (event.status !== "Active") {
+        await session.abortTransaction();
+        session.endSession();
         return res.status(400).json({ error: "Event is not active" });
+      }
 
       const results = [];
       for (const reg of registrations) {
         const { userId, pigeonCount } = reg;
-        const user = await User.findOne({ id: userId });
-        if (!user)
+        const user = await User.findOne({ id: userId }).session(session);
+        if (!user) {
+          await session.abortTransaction();
+          session.endSession();
           return res.status(400).json({ error: `User ${userId} not found` });
+        }
 
         const existingCount = await RaceCode.countDocuments({
           eventId,
           userId,
-        });
+        }).session(session);
         if (existingCount > 0) {
+          await session.abortTransaction();
+          session.endSession();
           return res.status(400).json({
             error: `Player ${user.name} already registered for this event`,
           });
@@ -451,56 +489,83 @@ app.post(
         const generatedCodes = [];
         for (let i = 0; i < pigeonCount; i++) {
           const code = await getUniqueRaceCode();
-          if (!code) throw new Error("Failed to generate unique race code");
-          await RaceCode.create({ eventId, userId, code, status: "unused" });
+          await RaceCode.create([{ eventId, userId, code, status: "unused" }], {
+            session,
+          });
           generatedCodes.push(code);
         }
         results.push({ userId, userName: user.name, codes: generatedCodes });
       }
 
-      await Log.create({
-        time: new Date().toLocaleString(),
-        message: `Registered players for event ${event.name}`,
-      });
+      await Log.create(
+        [
+          {
+            time: new Date().toLocaleString(),
+            message: `Registered ${registrations.length} player(s) for event ${event.name}`,
+          },
+        ],
+        { session },
+      );
 
+      await session.commitTransaction();
+      session.endSession();
       res.json({ success: true, registrations: results });
     } catch (error) {
+      await session.abortTransaction();
+      session.endSession();
       console.error("Register players error:", error);
-      res.status(500).json({ error: "Server error: " + error.message });
+      res
+        .status(500)
+        .json({ error: "An internal error occurred. Please try again later." });
     }
   },
 );
 
-// CLOCK IN
+// ===== CLOCK IN (WITH TRANSACTION) =====
 app.post(
   "/api/clockin",
+  clockinLimiter,
   [
     body("userId").notEmpty().withMessage("User ID required"),
     body("eventCode").notEmpty().withMessage("Event code required"),
   ],
   async (req, res) => {
+    const session = await mongoose.startSession();
+    session.startTransaction();
+
     try {
       const errors = validationResult(req);
       if (!errors.isEmpty()) {
+        await session.abortTransaction();
+        session.endSession();
         return res.status(400).json({ error: errors.array()[0].msg });
       }
       const { userId, eventCode } = matchedData(req);
-      const arrivalTime = new Date(); // server time
+      const arrivalTime = new Date();
 
-      const user = await User.findOne({ id: userId });
-      if (!user) return res.status(400).json({ error: "Invalid user" });
+      const user = await User.findOne({ id: userId }).session(session);
+      if (!user) {
+        await session.abortTransaction();
+        session.endSession();
+        return res.status(400).json({ error: "Invalid user" });
+      }
       if (user.lat == null || user.lng == null) {
+        await session.abortTransaction();
+        session.endSession();
         return res.status(400).json({
           error: "Player loft coordinates missing. Please update profile.",
         });
       }
 
+      // 1. Atomically mark the race code as "used" – but we may revert later.
       const raceCode = await RaceCode.findOneAndUpdate(
         { code: eventCode, status: "unused" },
         { status: "used", usedAt: new Date() },
-        { returnDocument: "after" },
+        { returnDocument: "after", session },
       );
       if (!raceCode) {
+        await session.abortTransaction();
+        session.endSession();
         return res
           .status(400)
           .json({ error: "Invalid or already used race code." });
@@ -509,76 +574,105 @@ app.post(
         await RaceCode.updateOne(
           { _id: raceCode._id },
           { status: "unused", usedAt: null },
+          { session },
         );
+        await session.abortTransaction();
+        session.endSession();
         return res
           .status(400)
           .json({ error: "This code does not belong to you." });
       }
 
-      const event = await Event.findOne({ code: raceCode.eventId });
+      const event = await Event.findOne({ code: raceCode.eventId }).session(
+        session,
+      );
       if (!event) {
         await RaceCode.updateOne(
           { _id: raceCode._id },
           { status: "unused", usedAt: null },
+          { session },
         );
+        await session.abortTransaction();
+        session.endSession();
         return res.status(400).json({ error: "Event not found" });
       }
       if (event.status !== "Active") {
         await RaceCode.updateOne(
           { _id: raceCode._id },
           { status: "unused", usedAt: null },
+          { session },
         );
+        await session.abortTransaction();
+        session.endSession();
         return res.status(400).json({ error: "Event is not active" });
       }
 
-      const counter = await Counter.findOneAndUpdate(
-        { eventId: event.code, userId: userId },
-        { $inc: { count: 1 } },
-        { upsert: true, returnDocument: "after" },
-      );
-      const newCount = counter.count;
-
+      // Get total codes for this user/event
       const totalCodes = await RaceCode.countDocuments({
         eventId: event.code,
         userId,
-      });
-      if (newCount > totalCodes) {
-        await Counter.updateOne(
-          { eventId: event.code, userId: userId },
-          { $inc: { count: -1 } },
-        );
+      }).session(session);
+
+      // Find or create counter
+      let counter = await Counter.findOne({
+        eventId: event.code,
+        userId: userId,
+      }).session(session);
+
+      if (!counter) {
+        counter = new Counter({
+          eventId: event.code,
+          userId: userId,
+          count: 0,
+        });
+        await counter.save({ session });
+      }
+
+      // Check if the player has already clocked all pigeons
+      if (counter.count >= totalCodes) {
         await RaceCode.updateOne(
           { _id: raceCode._id },
           { status: "unused", usedAt: null },
+          { session },
         );
+        await session.abortTransaction();
+        session.endSession();
         return res.status(400).json({
           error: "You have already clocked all your pigeons for this event.",
         });
       }
 
+      // Increment the counter
+      counter.count += 1;
+      await counter.save({ session });
+      const newCount = counter.count;
+
+      // Validate time
       const release = new Date(event.releaseTime);
       const arrival = new Date(arrivalTime);
       if (isNaN(release.getTime()) || isNaN(arrival.getTime())) {
-        await Counter.updateOne(
-          { eventId: event.code, userId: userId },
-          { $inc: { count: -1 } },
-        );
+        counter.count -= 1;
+        await counter.save({ session });
         await RaceCode.updateOne(
           { _id: raceCode._id },
           { status: "unused", usedAt: null },
+          { session },
         );
+        await session.abortTransaction();
+        session.endSession();
         return res.status(400).json({ error: "Invalid date format" });
       }
       const flightHours = (arrival - release) / (1000 * 60 * 60);
       if (flightHours <= 0) {
-        await Counter.updateOne(
-          { eventId: event.code, userId: userId },
-          { $inc: { count: -1 } },
-        );
+        counter.count -= 1;
+        await counter.save({ session });
         await RaceCode.updateOne(
           { _id: raceCode._id },
           { status: "unused", usedAt: null },
+          { session },
         );
+        await session.abortTransaction();
+        session.endSession();
         return res
           .status(400)
           .json({ error: "Arrival time must be after release time" });
@@ -593,14 +687,15 @@ app.post(
           event.lng,
         );
       } catch (err) {
-        await Counter.updateOne(
-          { eventId: event.code, userId: userId },
-          { $inc: { count: -1 } },
-        );
+        counter.count -= 1;
+        await counter.save({ session });
         await RaceCode.updateOne(
           { _id: raceCode._id },
           { status: "unused", usedAt: null },
+          { session },
         );
+        await session.abortTransaction();
+        session.endSession();
         return res.status(400).json({ error: "Error calculating distance" });
       }
 
@@ -609,39 +704,57 @@ app.post(
         ((distanceKm * 1000) / (flightHours * 60)).toFixed(4),
       );
 
-      const result = await Result.create({
-        eventId: event.code,
-        userId: user.id,
-        userName: user.name,
-        clockInNumber: newCount,
-        clockInCode: eventCode,
-        distanceKm: distanceKm.toFixed(4),
-        arrivalTime: arrival,
-        flightTimeHours: flightHours.toFixed(4),
-        speedKPH,
-        speedMPM,
-      });
+      const result = await Result.create(
+        [
+          {
+            eventId: event.code,
+            userId: user.id,
+            userName: user.name,
+            clockInNumber: newCount,
+            clockInCode: eventCode,
+            distanceKm: distanceKm,
+            arrivalTime: arrival,
+            flightTimeHours: flightHours,
+            speedKPH,
+            speedMPM,
+          },
+        ],
+        { session },
+      );
 
-      await Log.create({
-        time: new Date().toLocaleString(),
-        message: `${userId} clocked in with code ${eventCode}. Distance: ${distanceKm.toFixed(4)}km, Speed: ${speedMPM.toFixed(4)} m/min`,
-      });
+      await Log.create(
+        [
+          {
+            time: new Date().toLocaleString(),
+            message: `${userId} clocked in with code ${eventCode}. Distance: ${distanceKm.toFixed(4)}km, Speed: ${speedMPM.toFixed(4)} m/min`,
+          },
+        ],
+        { session },
+      );
+
+      await session.commitTransaction();
+      session.endSession();
 
       res.json({
         success: true,
-        result,
+        result: result[0],
         distance: distanceKm,
         speed: speedMPM,
         eventName: event.name,
       });
     } catch (error) {
+      await session.abortTransaction();
+      session.endSession();
       console.error("Clock-in error:", error);
       if (error.code === 11000) {
         return res
           .status(400)
           .json({ error: "This code has already been used for this event." });
       }
-      res.status(500).json({ error: "Server error during clock-in" });
+      res.status(500).json({
+        error:
+          "An internal error occurred during clock-in. Please try again later.",
+      });
     }
   },
 );
@@ -653,13 +766,15 @@ app.get("/api/results/:eventCode", async (req, res) => {
       $or: [{ code: req.params.eventCode }, { codes: req.params.eventCode }],
     });
     if (!event) return res.json([]);
-    const results = await Result.find({ eventId: event.code }).sort({
-      speedMPM: -1,
-    });
+    const results = await Result.find({ eventId: event.code })
+      .sort({ speedMPM: -1 })
+      .lean();
     res.json(results);
   } catch (error) {
     console.error("Results error:", error);
-    res.status(500).json({ error: "Server error" });
+    res
+      .status(500)
+      .json({ error: "An internal error occurred. Please try again later." });
   }
 });
 
@@ -670,67 +785,85 @@ app.get("/api/logs", async (req, res) => {
     res.json(logs);
   } catch (error) {
     console.error("Logs error:", error);
-    res.status(500).json({ error: "Server error" });
+    res
+      .status(500)
+      .json({ error: "An internal error occurred. Please try again later." });
   }
 });
 
-// ===== PLAYERS CRUD =====
+// ===== PLAYERS CRUD (SECURED WITH requireAdmin) =====
 app.get("/api/users/players", async (req, res) => {
   try {
-    const users = await User.find({ role: "player" });
+    const users = await User.find({ role: "player" }).select("-passwordHash");
     res.json(users);
   } catch (error) {
     console.error("Players error:", error);
-    res.status(500).json({ error: "Server error" });
+    res
+      .status(500)
+      .json({ error: "An internal error occurred. Please try again later." });
   }
 });
 
 app.get("/api/users/player/:id", async (req, res) => {
   try {
-    const user = await User.findOne({ id: req.params.id });
+    const user = await User.findOne({ id: req.params.id }).select(
+      "-passwordHash",
+    );
     if (!user) return res.status(404).json({ error: "Player not found" });
     res.json(user);
   } catch (error) {
     console.error("Player fetch error:", error);
-    res.status(500).json({ error: "Server error" });
+    res
+      .status(500)
+      .json({ error: "An internal error occurred. Please try again later." });
   }
 });
 
-app.post("/api/users/player", validatePlayerCreation, async (req, res) => {
-  try {
-    const errors = validationResult(req);
-    if (!errors.isEmpty()) {
-      return res.status(400).json({ error: errors.array()[0].msg });
+// SECURE: CREATE PLAYER (Admin only)
+app.post(
+  "/api/users/player",
+  requireAdmin,
+  validatePlayerCreation,
+  async (req, res) => {
+    try {
+      const errors = validationResult(req);
+      if (!errors.isEmpty()) {
+        return res.status(400).json({ error: errors.array()[0].msg });
+      }
+      const { name, contact, lat, lng } = matchedData(req);
+
+      const count = await User.countDocuments({ role: "player" });
+      const newId = `P-${String(count + 1).padStart(3, "0")}`;
+      const defaultPassword = "player123";
+      const hashed = await hashPassword(defaultPassword);
+
+      const user = await User.create({
+        id: newId,
+        name: name.trim(),
+        role: "player",
+        passwordHash: hashed,
+        contact: contact || "",
+        lat: parseFloat(lat.toFixed(6)),
+        lng: parseFloat(lng.toFixed(6)),
+      });
+      const userResponse = user.toObject();
+      delete userResponse.passwordHash;
+      res.json({ success: true, user: userResponse });
+    } catch (error) {
+      console.error("Player creation error:", error);
+      if (error.code === 11000)
+        return res.status(400).json({ error: "Duplicate user ID" });
+      res
+        .status(500)
+        .json({ error: "An internal error occurred. Please try again later." });
     }
-    const { name, contact, lat, lng } = matchedData(req);
+  },
+);
 
-    const count = await User.countDocuments({ role: "player" });
-    const newId = `P-${String(count + 1).padStart(3, "0")}`;
-    const defaultPassword = "player123";
-    const hashed = await hashPassword(defaultPassword);
-
-    const user = await User.create({
-      id: newId,
-      name: name.trim(),
-      role: "player",
-      password: defaultPassword,
-      passwordHash: hashed,
-      contact: contact || "",
-      lat: parseFloat(lat.toFixed(6)),
-      lng: parseFloat(lng.toFixed(6)),
-    });
-    res.json({ success: true, user });
-  } catch (error) {
-    console.error("Player creation error:", error);
-    if (error.code === 11000)
-      return res.status(400).json({ error: "Duplicate user ID" });
-    res.status(500).json({ error: "Server error" });
-  }
-});
-
-// ===== UPDATED PUT: accept lat/lng =====
+// SECURE: UPDATE PLAYER (Admin only)
 app.put(
   "/api/users/player/:id",
+  requireAdmin,
   [
     body("name")
       .optional()
@@ -764,31 +897,56 @@ app.put(
       if (lng !== undefined) user.lng = parseFloat(lng.toFixed(6));
 
       await user.save();
-      res.json({ success: true, user });
+
+      await Log.create({
+        time: new Date().toLocaleString(),
+        message: `Admin updated player ${id}`,
+      });
+
+      const userResponse = user.toObject();
+      delete userResponse.passwordHash;
+      res.json({ success: true, user: userResponse });
     } catch (error) {
       console.error("Player update error:", error);
-      res.status(500).json({ error: "Server error" });
+      res
+        .status(500)
+        .json({ error: "An internal error occurred. Please try again later." });
     }
   },
 );
 
-app.delete("/api/users/player/:id", async (req, res) => {
+// SECURE: DELETE PLAYER (Admin only)
+app.delete("/api/users/player/:id", requireAdmin, async (req, res) => {
   try {
     const { id } = req.params;
+    if (req.user.id === id && req.user.role === "admin") {
+      return res
+        .status(400)
+        .json({ error: "You cannot delete your own account." });
+    }
     const user = await User.findOneAndDelete({ id });
     if (!user) return res.status(404).json({ error: "Player not found" });
     await Result.deleteMany({ userId: id });
     await RaceCode.deleteMany({ userId: id });
     await Counter.deleteMany({ userId: id });
+
+    await Log.create({
+      time: new Date().toLocaleString(),
+      message: `Admin deleted player ${id}`,
+    });
+
     res.json({ success: true });
   } catch (error) {
     console.error("Player delete error:", error);
-    res.status(500).json({ error: "Server error" });
+    res
+      .status(500)
+      .json({ error: "An internal error occurred. Please try again later." });
   }
 });
 
-// ===== EVENT MANAGEMENT =====
-app.delete("/api/events/:code", async (req, res) => {
+// ===== EVENT MANAGEMENT (SECURED WITH requireAdmin) =====
+// SECURE: DELETE EVENT (Admin only)
+app.delete("/api/events/:code", requireAdmin, async (req, res) => {
   try {
     const { code } = req.params;
     const event = await Event.findOneAndDelete({ code });
@@ -796,15 +954,25 @@ app.delete("/api/events/:code", async (req, res) => {
     await Result.deleteMany({ eventId: code });
     await RaceCode.deleteMany({ eventId: code });
     await Counter.deleteMany({ eventId: code });
+
+    await Log.create({
+      time: new Date().toLocaleString(),
+      message: `Admin deleted event ${event.name} (${code})`,
+    });
+
     res.json({ success: true });
   } catch (error) {
     console.error("Event delete error:", error);
-    res.status(500).json({ error: "Server error" });
+    res
+      .status(500)
+      .json({ error: "An internal error occurred. Please try again later." });
   }
 });
 
+// SECURE: CREATE EVENT (Admin only)
 app.post(
   "/api/events",
+  requireAdmin,
   [
     body("name").trim().notEmpty().withMessage("Event name required"),
     body("releaseTime").isISO8601().withMessage("Valid release time required"),
@@ -838,28 +1006,45 @@ app.post(
         lat: parseFloat(lat.toFixed(6)),
         lng: parseFloat(lng.toFixed(6)),
       });
+
+      await Log.create({
+        time: new Date().toLocaleString(),
+        message: `Admin created event ${event.name} (${event.code})`,
+      });
+
       res.json({ success: true, event });
     } catch (error) {
       console.error("Event creation error:", error);
-      res.status(500).json({ error: "Server error" });
+      res
+        .status(500)
+        .json({ error: "An internal error occurred. Please try again later." });
     }
   },
 );
 
-app.put("/api/events/:code/toggle", async (req, res) => {
+// SECURE: TOGGLE EVENT (Admin only)
+app.put("/api/events/:code/toggle", requireAdmin, async (req, res) => {
   try {
     const event = await Event.findOne({ code: req.params.code });
     if (!event) return res.status(404).json({ error: "Not found" });
     event.status = event.status === "Active" ? "Closed" : "Active";
     await event.save();
+
+    await Log.create({
+      time: new Date().toLocaleString(),
+      message: `Admin toggled event ${event.name} (${event.code}) to ${event.status}`,
+    });
+
     res.json({ success: true, event });
   } catch (error) {
     console.error("Event toggle error:", error);
-    res.status(500).json({ error: "Server error" });
+    res
+      .status(500)
+      .json({ error: "An internal error occurred. Please try again later." });
   }
 });
 
-// ===== UPDATE PASSWORD =====
+// ===== UPDATE PASSWORD (with ownership check) =====
 app.put(
   "/api/users/update-password",
   [
@@ -875,15 +1060,30 @@ app.put(
         return res.status(400).json({ error: errors.array()[0].msg });
       }
       const { userId, newPassword } = matchedData(req);
+
+      // 🔐 Verify that the requester is either the owner or an admin
+      if (req.user.id !== userId && req.user.role !== "admin") {
+        return res
+          .status(403)
+          .json({ error: "You can only change your own password." });
+      }
+
       const user = await User.findOne({ id: userId });
       if (!user) return res.status(404).json({ error: "User not found" });
       user.passwordHash = await hashPassword(newPassword);
-      user.password = newPassword;
       await user.save();
+
+      await Log.create({
+        time: new Date().toLocaleString(),
+        message: `User ${userId} updated password`,
+      });
+
       res.json({ success: true });
     } catch (error) {
       console.error("Password update error:", error);
-      res.status(500).json({ error: "Server error" });
+      res
+        .status(500)
+        .json({ error: "An internal error occurred. Please try again later." });
     }
   },
 );
@@ -924,14 +1124,94 @@ async function getUniqueRaceCode() {
   let code,
     exists = true,
     attempts = 0;
-  while (exists && attempts < 50) {
+  while (exists && attempts < 100) {
     code = generateRaceCode();
     const found = await RaceCode.findOne({ code });
     if (!found) exists = false;
     attempts++;
   }
+  if (exists) {
+    throw new Error("Could not generate a unique race code after 100 attempts");
+  }
   return code;
 }
+
+// ===== PLAYER STATS =====
+app.get("/api/users/player/:id/stats", authenticateToken, async (req, res) => {
+  try {
+    const { id } = req.params;
+    // Allow users to view only their own stats, or admins to view any
+    if (req.user.id !== id && req.user.role !== "admin") {
+      return res.status(403).json({ error: "Forbidden" });
+    }
+
+    const user = await User.findOne({ id });
+    if (!user) return res.status(404).json({ error: "Player not found" });
+
+    // 1. Get all results for this user
+    const results = await Result.find({ userId: id });
+    if (results.length === 0) {
+      return res.json({
+        userId: id,
+        userName: user.name,
+        totalPigeons: 0,
+        eventsParticipated: 0,
+        wins: 0,
+        podiums: 0,
+        averageSpeed: 0,
+        bestSpeed: 0,
+        winRate: 0,
+      });
+    }
+
+    // 2. Basic stats
+    const totalPigeons = results.length;
+    const eventIds = [...new Set(results.map((r) => r.eventId))];
+    const eventsParticipated = eventIds.length;
+    const speeds = results.map((r) => r.speedMPM);
+    const averageSpeed = speeds.reduce((a, b) => a + b, 0) / speeds.length;
+    const bestSpeed = Math.max(...speeds);
+
+    // 3. Calculate Wins (1st place) and Podiums (Top 3)
+    let wins = 0;
+    let podiums = 0;
+
+    for (const eventId of eventIds) {
+      // Get all results for this event, sorted by speed (descending)
+      const eventResults = await Result.find({ eventId })
+        .sort({ speedMPM: -1 })
+        .lean();
+
+      if (eventResults.length === 0) continue;
+
+      // Find this user's rank in this event
+      const userIndex = eventResults.findIndex((r) => r.userId === id);
+
+      if (userIndex === 0) wins++; // 1st place
+      if (userIndex >= 0 && userIndex < 3) podiums++; // Top 3
+    }
+
+    const winRate =
+      eventsParticipated > 0 ? (wins / eventsParticipated) * 100 : 0;
+
+    res.json({
+      userId: id,
+      userName: user.name,
+      totalPigeons,
+      eventsParticipated,
+      wins,
+      podiums,
+      averageSpeed: parseFloat(averageSpeed.toFixed(4)),
+      bestSpeed: parseFloat(bestSpeed.toFixed(4)),
+      winRate: parseFloat(winRate.toFixed(1)),
+    });
+  } catch (error) {
+    console.error("Player stats error:", error);
+    res
+      .status(500)
+      .json({ error: "An internal error occurred. Please try again later." });
+  }
+});
 
 // ===== START SERVER =====
 const PORT = process.env.PORT || 5000;

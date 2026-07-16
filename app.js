@@ -15,6 +15,14 @@ function fetchWithAuth(url, options = {}) {
   return fetch(url, {
     ...options,
     headers,
+  }).then((res) => {
+    if (res.status === 401) {
+      sessionStorage.removeItem("wingsync_token");
+      sessionStorage.removeItem("wingsync_user");
+      window.location.reload();
+      throw new Error("Session expired. Please log in again.");
+    }
+    return res;
   });
 }
 
@@ -25,6 +33,12 @@ function formatFlightHours(hours) {
   const m = Math.floor((totalSeconds % 3600) / 60);
   const s = totalSeconds % 60;
   return `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`;
+}
+
+// ===== Helper: Safely parse numeric values =====
+function toNumber(value) {
+  const num = parseFloat(value);
+  return isNaN(num) ? 0 : num;
 }
 
 // ===== Maps Variables =====
@@ -39,6 +53,20 @@ let selectedEditPlayerLat = null,
 
 const defaultLat = 13.415;
 const defaultLng = 123.635;
+
+// ===== Helper: Parse coordinate string =====
+function parseCoordinates(input) {
+  const trimmed = input.trim();
+  const match = trimmed.match(/^([-+]?\d+\.\d+)\s*,\s*([-+]?\d+\.\d+)$/);
+  if (match) {
+    const lat = parseFloat(match[1]);
+    const lng = parseFloat(match[2]);
+    if (lat >= -90 && lat <= 90 && lng >= -180 && lng <= 180) {
+      return { lat, lng };
+    }
+  }
+  return null;
+}
 
 // ===== Create Google Map =====
 function createGoogleMap(
@@ -120,6 +148,7 @@ function createGoogleMap(
 
   const searchBox = document.getElementById(searchBoxId);
   if (searchBox) {
+    // --- Autocomplete for places (addresses, landmarks) ---
     const autocomplete = new google.maps.places.Autocomplete(searchBox);
     autocomplete.bindTo("bounds", map);
     autocomplete.setFields(["geometry", "name", "formatted_address"]);
@@ -139,6 +168,43 @@ function createGoogleMap(
       map.setCenter(place.geometry.location);
       map.setZoom(17);
       setMarker(mapType, lat, lng, map, coordsTextId, place);
+    });
+
+    // --- NEW: Coordinate search (e.g., "13.339362, 123.660293") ---
+    searchBox.addEventListener("keydown", function (e) {
+      if (e.key === "Enter") {
+        e.preventDefault(); // Prevent form submission
+        const val = searchBox.value.trim();
+        const coords = parseCoordinates(val);
+        if (coords) {
+          const { lat, lng } = coords;
+          map.setCenter({ lat, lng });
+          map.setZoom(17);
+          setMarker(mapType, lat, lng, map, coordsTextId);
+          // Optionally clear the search box after setting
+          // searchBox.value = '';
+        } else {
+          // If not coordinates, let the autocomplete handle it (but we already prevented default)
+          // We can trigger the autocomplete's place_changed by simulating a selection? Not needed.
+          // Just let the user know?
+          // We'll do nothing; the Enter might trigger the autocomplete if a place is selected,
+          // but since we prevented default, the autocomplete won't fire.
+          // We can instead call the autocomplete's getPlace() if there is a selection.
+          // But we'll let the user click the dropdown item instead.
+        }
+      }
+    });
+
+    // Optional: also listen to blur to catch pasted coordinates
+    searchBox.addEventListener("blur", function () {
+      const val = searchBox.value.trim();
+      const coords = parseCoordinates(val);
+      if (coords) {
+        const { lat, lng } = coords;
+        map.setCenter({ lat, lng });
+        map.setZoom(17);
+        setMarker(mapType, lat, lng, map, coordsTextId);
+      }
     });
   }
 
@@ -248,10 +314,16 @@ const app = {
   allResults: {},
   selectedEventCode: null,
   currentRegistrations: [],
+  registrationCounts: {}, // eventId -> total pigeon count
 
   refreshIntervalId: null,
   serverTimeOffset: 0,
   clockIntervalId: null,
+
+  // Cache timestamp for events refresh
+  _lastEventsFetch: 0,
+  // Flag to prevent overlapping renderResults() calls
+  _isRendering: false,
 
   init() {
     this.loadTheme();
@@ -546,12 +618,16 @@ const app = {
       adminEls.forEach((el) => el.classList.remove("hidden"));
       playerEls.forEach((el) => el.classList.add("hidden"));
       document.getElementById("player-clock-in-area").classList.add("hidden");
+      // Hide performance summary for admin
+      document.getElementById("player-stats-container").classList.add("hidden");
     } else {
       adminEls.forEach((el) => el.classList.add("hidden"));
       playerEls.forEach((el) => el.classList.remove("hidden"));
       document
         .getElementById("player-clock-in-area")
         .classList.remove("hidden");
+      // Load stats for player
+      this.loadPlayerStats();
     }
 
     if (document.getElementById("server-clock")) {
@@ -564,8 +640,9 @@ const app = {
     this.fetchAllEvents();
   },
 
+  // === Fetch all events and update lookup (returns promise) ===
   fetchAllEvents() {
-    fetchWithAuth(`${API_URL}/events/all`)
+    return fetchWithAuth(`${API_URL}/events/all`)
       .then((res) => {
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         return res.json();
@@ -582,11 +659,32 @@ const app = {
             });
           }
         });
+        this._lastEventsFetch = Date.now();
       })
       .catch((err) => {
         console.error("Failed to fetch events for lookup:", err);
         this.allEvents = [];
         this.eventLookup = {};
+      });
+  },
+
+  // === Fetch registration counts (pigeon count per event) ===
+  fetchRegistrationCounts() {
+    return fetchWithAuth(`${API_URL}/events/registrations-summary`)
+      .then((res) => {
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        return res.json();
+      })
+      .then((summary) => {
+        if (!Array.isArray(summary)) summary = [];
+        this.registrationCounts = {};
+        summary.forEach((item) => {
+          this.registrationCounts[item.eventId] = item.pigeonCount || 0;
+        });
+      })
+      .catch((err) => {
+        console.warn("Failed to fetch registration counts:", err);
+        this.registrationCounts = {};
       });
   },
 
@@ -650,7 +748,7 @@ const app = {
           this.renderDashboard();
         }
       }
-    }, 3000);
+    }, 5000);
   },
 
   stopAutoRefresh() {
@@ -675,6 +773,12 @@ const app = {
         if (!Array.isArray(events)) events = [];
         if (!Array.isArray(summary)) summary = [];
 
+        // Store registration counts (pigeon count per event)
+        this.registrationCounts = {};
+        summary.forEach((item) => {
+          this.registrationCounts[item.eventId] = item.pigeonCount || 0;
+        });
+
         const summaryMap = {};
         summary.forEach((item) => {
           summaryMap[item.eventId] = item.playerCount || 0;
@@ -683,29 +787,54 @@ const app = {
         const table = document.querySelector("#active-events-table");
         const isAdmin = this.currentUser.role === "admin";
 
-        let thead = "<thead><tr>";
+        // Build header
+        const thead = document.createElement("thead");
+        const headerRow = document.createElement("tr");
         if (isAdmin) {
-          thead += "<th>Players</th>";
+          const thPlayers = document.createElement("th");
+          thPlayers.textContent = "Players";
+          headerRow.appendChild(thPlayers);
         }
-        thead += "<th>Event Name</th><th>Release Time</th><th>Status</th>";
-        thead += "</tr></thead>";
+        const thName = document.createElement("th");
+        thName.textContent = "Event Name";
+        headerRow.appendChild(thName);
+        const thRelease = document.createElement("th");
+        thRelease.textContent = "Release Time";
+        headerRow.appendChild(thRelease);
+        const thStatus = document.createElement("th");
+        thStatus.textContent = "Status";
+        headerRow.appendChild(thStatus);
+        thead.appendChild(headerRow);
+        table.innerHTML = "";
+        table.appendChild(thead);
 
-        let tbody = "<tbody>";
+        const tbody = document.createElement("tbody");
         events.forEach((e) => {
-          tbody += "<tr>";
+          const row = document.createElement("tr");
           if (isAdmin) {
-            const playerCount = summaryMap[e.code] || 0;
-            tbody += `<td data-label="Players">${playerCount}</td>`;
+            const tdPlayers = document.createElement("td");
+            tdPlayers.setAttribute("data-label", "Players");
+            tdPlayers.textContent = summaryMap[e.code] || 0;
+            row.appendChild(tdPlayers);
           }
-          tbody += `
-          <td data-label="Name">${e.name}</td>
-          <td data-label="Release">${new Date(e.releaseTime).toLocaleString()}</td>
-          <td data-label="Status">${e.status}</td>
-        </tr>`;
-        });
-        tbody += "</tbody>";
+          const tdName = document.createElement("td");
+          tdName.setAttribute("data-label", "Name");
+          tdName.textContent = e.name;
+          row.appendChild(tdName);
 
-        table.innerHTML = thead + tbody;
+          const tdRelease = document.createElement("td");
+          tdRelease.setAttribute("data-label", "Release");
+          tdRelease.textContent = new Date(e.releaseTime).toLocaleString();
+          row.appendChild(tdRelease);
+
+          const tdStatus = document.createElement("td");
+          tdStatus.setAttribute("data-label", "Status");
+          tdStatus.textContent = e.status;
+          row.appendChild(tdStatus);
+
+          tbody.appendChild(row);
+        });
+        table.appendChild(tbody);
       })
       .catch((err) => {
         console.error("Dashboard error:", err);
@@ -797,6 +926,41 @@ const app = {
     }
   },
 
+  loadPlayerStats() {
+    const userId = this.currentUser.id;
+    fetchWithAuth(`${API_URL}/users/player/${userId}/stats`)
+      .then((res) => {
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        return res.json();
+      })
+      .then((stats) => {
+        // Update the stats card in the profile view
+        document.getElementById("stats-total-pigeons").textContent =
+          stats.totalPigeons;
+        document.getElementById("stats-events").textContent =
+          stats.eventsParticipated;
+        document.getElementById("stats-wins").textContent = stats.wins;
+        document.getElementById("stats-podiums").textContent = stats.podiums;
+        document.getElementById("stats-avg-speed").textContent =
+          stats.averageSpeed.toFixed(2);
+        document.getElementById("stats-best-speed").textContent =
+          stats.bestSpeed.toFixed(2);
+        document.getElementById("stats-win-rate").textContent =
+          stats.winRate.toFixed(1) + "%";
+
+        // Show the stats container
+        document
+          .getElementById("player-stats-container")
+          .classList.remove("hidden");
+      })
+      .catch((err) => {
+        console.error("Failed to load player stats:", err);
+        document
+          .getElementById("player-stats-container")
+          .classList.add("hidden");
+      });
+  },
+
   changePassword() {
     const newPass = document.getElementById("new-password").value;
     if (newPass.length < 5) {
@@ -853,25 +1017,27 @@ const app = {
   },
 
   initResultsView() {
-    if (this.allEvents.length === 0) {
-      fetchWithAuth(`${API_URL}/events/all`)
-        .then((res) => {
-          if (!res.ok) throw new Error(`HTTP ${res.status}`);
-          return res.json();
-        })
-        .then((events) => {
-          if (!Array.isArray(events)) events = [];
-          this.allEvents = events;
-          this.buildEventLookup(events);
-          this.setupResultsView();
-        })
+    // Fetch events if needed, then fetch registration counts and setup the view
+    const loadData = () => {
+      return this.fetchAllEvents()
+        .then(() => this.fetchRegistrationCounts())
+        .then(() => this.setupResultsView())
         .catch((err) => {
           console.error("Results init error:", err);
           this.allEvents = [];
           this.setupResultsView();
         });
+    };
+
+    if (this.allEvents.length === 0) {
+      loadData();
     } else {
-      this.setupResultsView();
+      // If events already exist, still ensure registration counts are loaded
+      if (Object.keys(this.registrationCounts).length === 0) {
+        this.fetchRegistrationCounts().then(() => this.setupResultsView());
+      } else {
+        this.setupResultsView();
+      }
     }
   },
 
@@ -888,41 +1054,8 @@ const app = {
   },
 
   setupResultsView() {
-    let searchInput = document.getElementById("result-search-input");
-    if (!searchInput) {
-      const container = document.querySelector("#view-results .card");
-      const header = container.querySelector(".dashboard-header");
-
-      const infoBar = document.createElement("div");
-      infoBar.style.cssText =
-        "display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px; margin-bottom: 12px;";
-      infoBar.innerHTML = `
-                <div style="display: flex; align-items: center; gap: 10px; flex-wrap: wrap;">
-                    <span style="font-size: 13px; color: var(--text-light);">
-                        🔄 Auto-refresh <span style="color: var(--primary); font-weight: 600;">every 3s</span>
-                    </span>
-                    <button class="btn btn-sm btn-primary" onclick="app.refreshResults()">
-                        🔄 Refresh Now
-                    </button>
-                </div>
-                <div style="font-size: 13px; color: #999;" id="results-last-updated">
-                    Last updated: just now
-                </div>
-            `;
-
-      const searchDiv = document.createElement("div");
-      searchDiv.style.cssText =
-        "margin: 10px 0 15px; display: flex; gap: 10px; flex-wrap: wrap;";
-      searchDiv.innerHTML = `
-                        <input id="result-search-input" type="text" class="form-control" style="flex:1; min-width:200px;" placeholder="🔍 Search events by name or code..." oninput="app.filterResults()">
-                        <button class="btn btn-secondary" onclick="document.getElementById('result-search-input').value=''; app.filterResults();">✕ Clear</button>
-                    `;
-
-      container.insertBefore(infoBar, header.nextSibling);
-      container.insertBefore(searchDiv, header.nextSibling.nextSibling);
-    }
-
-    document.getElementById("event-release-info").innerHTML = "";
+    // No dynamic search bar creation – we use the static one in HTML.
+    // Just set the initial event and render.
     if (this.allEvents.length > 0) {
       this.selectedEventCode = this.allEvents[0].code;
       this.renderResults();
@@ -960,69 +1093,291 @@ const app = {
     this.renderResults();
   },
 
-  renderResults() {
-    const releaseInfoDiv = document.getElementById("event-release-info");
-    const tbody = document.querySelector("#results-table tbody");
+  // ===== renderResults with fixed const bug + rendering lock =====
+  async renderResults() {
+    // Prevent overlapping requests
+    if (this._isRendering) return;
+    this._isRendering = true;
 
-    if (!this.selectedEventCode) {
+    try {
+      const tbody = document.querySelector("#results-table tbody");
+
+      if (!this.selectedEventCode) {
+        tbody.innerHTML = "";
+        // Clear all analytics sections
+        this.clearAnalyticsSections();
+        this._isRendering = false;
+        return;
+      }
+
+      // Refresh event data if older than 10 seconds
+      if (Date.now() - this._lastEventsFetch > 10000) {
+        await this.fetchAllEvents();
+      }
+
+      const event = this.eventLookup[this.selectedEventCode];
+      // Populate Race Information Bar
+      if (event) {
+        document.getElementById("race-name").textContent = event.name;
+        document.getElementById("race-release-point").innerHTML =
+          `<span class="coord">${event.lat.toFixed(6)}, ${event.lng.toFixed(6)}</span>`;
+        document.getElementById("race-release-time").textContent = new Date(
+          event.releaseTime,
+        ).toLocaleString();
+
+        const statusBadge = document.getElementById("race-status");
+        const status = event.status.toLowerCase();
+        statusBadge.textContent = event.status;
+        statusBadge.className = `race-status-badge ${status}`;
+      } else {
+        // Clear info bar if no event
+        document.getElementById("race-name").textContent = "—";
+        document.getElementById("race-release-point").innerHTML =
+          '<span class="coord">—</span>';
+        document.getElementById("race-release-time").textContent = "—";
+        document.getElementById("race-status").textContent = "—";
+        document.getElementById("race-status").className = "race-status-badge";
+      }
+
+      const res = await fetchWithAuth(
+        `${API_URL}/results/${this.selectedEventCode}`,
+      );
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      // FIX: Use 'let' so we can reassign if needed
+      let results = await res.json();
+      if (!Array.isArray(results)) results = [];
+
+      // Clear tbody
       tbody.innerHTML = "";
-      releaseInfoDiv.innerHTML =
-        '<p style="text-align:center; color:#999; padding:20px;">No events found. Create an event to see results.</p>';
-      return;
-    }
+      if (results.length === 0) {
+        const tr = document.createElement("tr");
+        const td = document.createElement("td");
+        td.colSpan = 6;
+        td.style.textAlign = "center";
+        td.style.color = "#999";
+        td.style.padding = "20px";
+        td.textContent = "No results yet for this event.";
+        tr.appendChild(td);
+        tbody.appendChild(tr);
+        // Clear analytics
+        this.clearAnalyticsSections();
+        this._isRendering = false;
+        return;
+      }
 
-    const event = this.eventLookup[this.selectedEventCode];
-    if (event) {
-      releaseInfoDiv.innerHTML = `
-                <div style="text-align:center; margin-bottom: 10px;">
-                    <div style="font-size: 20px; font-weight: 700; color: #1a2a33;">${event.name}</div>
-                    <div style="font-size: 14px; color: #5b6f82; margin-top: 4px;">📅 Release Time: <strong>${new Date(event.releaseTime).toLocaleString()}</strong></div>
-                    <div style="font-size: 13px; color: #888; margin-top: 2px;">📍 Release Point: ${event.lat.toFixed(6)}, ${event.lng.toFixed(6)}</div>
-                </div>
-            `;
-    } else {
-      releaseInfoDiv.innerHTML = "";
-    }
+      // ---- Safely convert values ----
+      const safeResults = results.map((r) => ({
+        ...r,
+        distanceKm: toNumber(r.distanceKm),
+        speedMPM: toNumber(r.speedMPM),
+        flightTimeHours: toNumber(r.flightTimeHours),
+        arrivalTime: new Date(r.arrivalTime),
+      }));
 
-    fetchWithAuth(`${API_URL}/results/${this.selectedEventCode}`)
-      .then((res) => {
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        return res.json();
-      })
-      .then((results) => {
-        if (!Array.isArray(results)) results = [];
-        if (results.length === 0) {
-          tbody.innerHTML =
-            '<tr><td colspan="6" style="text-align:center; color:#999; padding:20px;">No results yet for this event.</td></tr>';
-          return;
+      // ---- Populate Champion Card ----
+      const winner = safeResults[0];
+      document.getElementById("champion-name").textContent = winner.userName;
+      document.getElementById("champion-code").textContent = winner.clockInCode;
+      document.getElementById("champion-speed").innerHTML =
+        `${winner.speedMPM.toFixed(2)} <span class="unit">m/min</span>`;
+      document.getElementById("champion-flight-time").textContent =
+        formatFlightHours(winner.flightTimeHours);
+      document.getElementById("champion-distance").innerHTML =
+        `${winner.distanceKm.toFixed(2)} <span class="unit">km</span>`;
+
+      // ---- Race Statistics ----
+      const clocked = safeResults.length;
+      const totalRegistered =
+        this.registrationCounts[this.selectedEventCode] || 0;
+      const missing = Math.max(0, totalRegistered - clocked);
+      const completionRate =
+        totalRegistered > 0 ? (clocked / totalRegistered) * 100 : 0;
+      const participants = new Set(safeResults.map((r) => r.userId)).size;
+      const speeds = safeResults.map((r) => r.speedMPM);
+      const avgSpeed =
+        speeds.length > 0
+          ? speeds.reduce((a, b) => a + b, 0) / speeds.length
+          : 0;
+      const highest = speeds.length > 0 ? Math.max(...speeds) : 0;
+      const lowest = speeds.length > 0 ? Math.min(...speeds) : 0;
+      const avgFlight =
+        safeResults.length > 0
+          ? safeResults.reduce((a, b) => a + b.flightTimeHours, 0) /
+            safeResults.length
+          : 0;
+      const winningMargin =
+        safeResults.length > 1
+          ? safeResults[0].speedMPM - safeResults[1].speedMPM
+          : 0;
+
+      document.getElementById("stat-released").textContent = totalRegistered;
+      document.getElementById("stat-clocked").textContent = clocked;
+      document.getElementById("stat-missing").textContent = missing;
+      document.getElementById("stat-completion").textContent =
+        completionRate.toFixed(1) + "%";
+      document.getElementById("stat-participants").textContent = participants;
+      document.getElementById("stat-avg-speed").innerHTML =
+        `${avgSpeed.toFixed(2)} <span class="unit">m/min</span>`;
+      document.getElementById("stat-highest-speed").innerHTML =
+        `${highest.toFixed(2)} <span class="unit">m/min</span>`;
+      document.getElementById("stat-lowest-speed").innerHTML =
+        `${lowest.toFixed(2)} <span class="unit">m/min</span>`;
+      document.getElementById("stat-avg-flight-time").textContent =
+        formatFlightHours(avgFlight);
+      document.getElementById("stat-winning-margin").innerHTML =
+        `${winningMargin.toFixed(2)} <span class="unit">m/min</span>`;
+
+      // ---- Live Highlights ----
+      const fastest =
+        safeResults.length > 0
+          ? safeResults.reduce((a, b) => (a.speedMPM > b.speedMPM ? a : b))
+          : null;
+      const firstArrival =
+        safeResults.length > 0
+          ? safeResults.reduce((a, b) =>
+              a.arrivalTime < b.arrivalTime ? a : b,
+            )
+          : null;
+      const lastArrival =
+        safeResults.length > 0
+          ? safeResults.reduce((a, b) =>
+              a.arrivalTime > b.arrivalTime ? a : b,
+            )
+          : null;
+      const longestDist =
+        safeResults.length > 0
+          ? safeResults.reduce((a, b) => (a.distanceKm > b.distanceKm ? a : b))
+          : null;
+      const closestFinish =
+        safeResults.length > 1
+          ? safeResults[0].speedMPM - safeResults[1].speedMPM
+          : 0;
+      const highestSpeed = fastest;
+
+      document.getElementById("hl-fastest-bird").textContent = fastest
+        ? `${fastest.userName} (${fastest.speedMPM.toFixed(2)} m/min)`
+        : "—";
+      document.getElementById("hl-first-arrival").textContent = firstArrival
+        ? `${firstArrival.userName} (${firstArrival.arrivalTime.toLocaleTimeString()})`
+        : "—";
+      document.getElementById("hl-last-arrival").textContent = lastArrival
+        ? `${lastArrival.userName} (${lastArrival.arrivalTime.toLocaleTimeString()})`
+        : "—";
+      document.getElementById("hl-longest-dist").innerHTML = longestDist
+        ? `${longestDist.distanceKm.toFixed(2)} <span class="unit">km</span>`
+        : "—";
+      document.getElementById("hl-closest-finish").textContent =
+        closestFinish > 0 ? `${closestFinish.toFixed(2)} m/min` : "—";
+      document.getElementById("hl-highest-speed").innerHTML = highestSpeed
+        ? `${highestSpeed.speedMPM.toFixed(2)} <span class="unit">m/min</span>`
+        : "—";
+
+      // ---- Populate Table ----
+      safeResults.forEach((r, i) => {
+        const tr = document.createElement("tr");
+        // Rank
+        const tdRank = document.createElement("td");
+        tdRank.setAttribute("data-label", "Rank");
+        let rankClass = "";
+        if (i === 0) {
+          tdRank.textContent = "🥇";
+          rankClass = "rank-gold";
+        } else if (i === 1) {
+          tdRank.textContent = "🥈";
+          rankClass = "rank-silver";
+        } else if (i === 2) {
+          tdRank.textContent = "🥉";
+          rankClass = "rank-bronze";
+        } else {
+          tdRank.textContent = i + 1;
+          rankClass = "rank-number";
         }
-        tbody.innerHTML = results
-          .map(
-            (r, i) => `
-                    <tr>
-                        <td data-label="Rank">${i === 0 ? "🥇" : i === 1 ? "🥈" : i === 2 ? "🥉" : i + 1}</td>
-                        <td data-label="Player">${r.userName}</td>
-                        <td data-label="Air Dist">${r.distanceKm} km</td>
-                        <td data-label="Arr">${new Date(r.arrivalTime).toLocaleTimeString()}</td>
-                        <td data-label="Flight Hrs">${formatFlightHours(r.flightTimeHours)}</td>
-                        <td data-label="Speed m/min" style="color:var(--primary); font-weight: 700; font-size: 1.1em;">
-                            ${r.speedMPM.toFixed(4)}
-                        </td>
-                    </tr>
-                `,
-          )
-          .join("");
-        const updatedEl = document.getElementById("results-last-updated");
-        if (updatedEl) {
-          const now = new Date();
-          updatedEl.textContent = `Last updated: ${now.toLocaleTimeString()}`;
-        }
-      })
-      .catch((err) => {
-        console.error("Results error:", err);
+        tdRank.className = rankClass;
+        tr.appendChild(tdRank);
+        // Player
+        const tdPlayer = document.createElement("td");
+        tdPlayer.setAttribute("data-label", "Player");
+        tdPlayer.textContent = r.userName;
+        tr.appendChild(tdPlayer);
+        // Air Dist
+        const tdDist = document.createElement("td");
+        tdDist.setAttribute("data-label", "Air Dist");
+        tdDist.textContent = r.distanceKm + " km";
+        tr.appendChild(tdDist);
+        // Arrival
+        const tdArr = document.createElement("td");
+        tdArr.setAttribute("data-label", "Arr");
+        tdArr.textContent = r.arrivalTime.toLocaleTimeString();
+        tr.appendChild(tdArr);
+        // Flight Hours
+        const tdFlight = document.createElement("td");
+        tdFlight.setAttribute("data-label", "Flight Hrs");
+        tdFlight.textContent = formatFlightHours(r.flightTimeHours);
+        tr.appendChild(tdFlight);
+        // Speed
+        const tdSpeed = document.createElement("td");
+        tdSpeed.setAttribute("data-label", "Speed m/min");
+        tdSpeed.className = "speed-cell";
+        tdSpeed.textContent = r.speedMPM.toFixed(4);
+        tr.appendChild(tdSpeed);
+
+        if (i === 0) tr.className = "winner-row";
+        tbody.appendChild(tr);
+      });
+
+      const updatedEl = document.getElementById("results-last-updated");
+      if (updatedEl) {
+        const now = new Date();
+        updatedEl.textContent = `Last updated: ${now.toLocaleTimeString()}`;
+      }
+    } catch (err) {
+      console.error("Results error:", err);
+      const tbody = document.querySelector("#results-table tbody");
+      if (tbody) {
         tbody.innerHTML =
           '<tr><td colspan="6" style="text-align:center; color:#999; padding:20px;">Error loading results.</td></tr>';
-      });
+      }
+      this.clearAnalyticsSections();
+    } finally {
+      this._isRendering = false;
+    }
+  },
+
+  clearAnalyticsSections() {
+    // Reset champion
+    document.getElementById("champion-name").textContent = "—";
+    document.getElementById("champion-code").textContent = "—";
+    document.getElementById("champion-speed").innerHTML =
+      '— <span class="unit">m/min</span>';
+    document.getElementById("champion-flight-time").textContent = "—";
+    document.getElementById("champion-distance").innerHTML =
+      '— <span class="unit">km</span>';
+
+    // Reset stats
+    document.getElementById("stat-released").textContent = "0";
+    document.getElementById("stat-clocked").textContent = "0";
+    document.getElementById("stat-missing").textContent = "0";
+    document.getElementById("stat-completion").textContent = "0%";
+    document.getElementById("stat-participants").textContent = "0";
+    document.getElementById("stat-avg-speed").innerHTML =
+      '0.00 <span class="unit">m/min</span>';
+    document.getElementById("stat-highest-speed").innerHTML =
+      '0.00 <span class="unit">m/min</span>';
+    document.getElementById("stat-lowest-speed").innerHTML =
+      '0.00 <span class="unit">m/min</span>';
+    document.getElementById("stat-avg-flight-time").textContent = "0:00";
+    document.getElementById("stat-winning-margin").innerHTML =
+      '0.00 <span class="unit">m/min</span>';
+
+    // Reset highlights
+    document.getElementById("hl-fastest-bird").textContent = "—";
+    document.getElementById("hl-first-arrival").textContent = "—";
+    document.getElementById("hl-last-arrival").textContent = "—";
+    document.getElementById("hl-longest-dist").innerHTML =
+      '— <span class="unit">km</span>';
+    document.getElementById("hl-closest-finish").textContent = "—";
+    document.getElementById("hl-highest-speed").innerHTML =
+      '— <span class="unit">m/min</span>';
   },
 
   renderLogs() {
@@ -1033,12 +1388,21 @@ const app = {
       })
       .then((logs) => {
         if (!Array.isArray(logs)) logs = [];
-        document.getElementById("log-list").innerHTML = logs
-          .map(
-            (log) =>
-              `<li style="padding: 10px; border-bottom: 1px solid #eee;"><small>[${log.time}]</small><br>${log.message}</li>`,
-          )
-          .join("");
+        const list = document.getElementById("log-list");
+        list.innerHTML = "";
+        logs.forEach((log) => {
+          const li = document.createElement("li");
+          li.style.padding = "10px";
+          li.style.borderBottom = "1px solid #eee";
+          const small = document.createElement("small");
+          small.textContent = `[${log.time}]`;
+          li.appendChild(small);
+          li.appendChild(document.createElement("br"));
+          const textSpan = document.createElement("span");
+          textSpan.textContent = log.message;
+          li.appendChild(textSpan);
+          list.appendChild(li);
+        });
       })
       .catch((err) => console.error("Logs error:", err));
   },
@@ -1052,21 +1416,7 @@ const app = {
       .then((users) => {
         if (!Array.isArray(users)) users = [];
         this.allPlayers = users;
-
-        let searchInput = document.getElementById("players-search-input");
-        if (!searchInput) {
-          const container = document.querySelector("#view-admin-players .card");
-          const header = container.querySelector(".dashboard-header");
-          const searchDiv = document.createElement("div");
-          searchDiv.style.cssText =
-            "margin: 10px 0 15px; display: flex; gap: 10px; flex-wrap: wrap;";
-          searchDiv.innerHTML = `
-                        <input id="players-search-input" type="text" class="form-control" style="flex:1; min-width:200px;" placeholder="🔍 Search players by name or ID..." oninput="app.filterPlayers()">
-                        <button class="btn btn-secondary" onclick="document.getElementById('players-search-input').value=''; app.filterPlayers();">✕ Clear</button>
-                    `;
-          container.insertBefore(searchDiv, header.nextSibling);
-        }
-
+        // No dynamic search bar creation – use static one.
         this.filterPlayers();
       })
       .catch((err) => {
@@ -1088,22 +1438,46 @@ const app = {
       return nameMatch || idMatch || contactMatch;
     });
 
-    document.querySelector("#players-table tbody").innerHTML = filtered
-      .map(
-        (u) => `
-                <tr>
-                    <td data-label="ID">${u.id}</td>
-                    <td data-label="Name">${u.name}</td>
-                    <td data-label="Lat/Lng">${u.lat.toFixed(6)}, ${u.lng.toFixed(6)}</td>
-                    <td data-label="Contact">${u.contact}</td>
-                    <td data-label="Actions">
-                        <button class="btn btn-primary btn-sm" onclick="app.openEditPlayerModal('${u.id}')">✏️ Edit</button>
-                        <button class="btn btn-danger btn-sm" onclick="app.deletePlayer('${u.id}')">🗑️ Delete</button>
-                    </td>
-                </tr>
-            `,
-      )
-      .join("");
+    const tbody = document.querySelector("#players-table tbody");
+    tbody.innerHTML = "";
+    filtered.forEach((u) => {
+      const tr = document.createElement("tr");
+      // ID
+      const tdId = document.createElement("td");
+      tdId.setAttribute("data-label", "ID");
+      tdId.textContent = u.id;
+      tr.appendChild(tdId);
+      // Name
+      const tdName = document.createElement("td");
+      tdName.setAttribute("data-label", "Name");
+      tdName.textContent = u.name;
+      tr.appendChild(tdName);
+      // Lat/Lng
+      const tdLoc = document.createElement("td");
+      tdLoc.setAttribute("data-label", "Lat/Lng");
+      tdLoc.textContent = `${u.lat.toFixed(6)}, ${u.lng.toFixed(6)}`;
+      tr.appendChild(tdLoc);
+      // Contact
+      const tdContact = document.createElement("td");
+      tdContact.setAttribute("data-label", "Contact");
+      tdContact.textContent = u.contact;
+      tr.appendChild(tdContact);
+      // Actions
+      const tdActions = document.createElement("td");
+      tdActions.setAttribute("data-label", "Actions");
+      const editBtn = document.createElement("button");
+      editBtn.className = "btn btn-primary btn-sm";
+      editBtn.textContent = "✏️ Edit";
+      editBtn.onclick = () => app.openEditPlayerModal(u.id);
+      tdActions.appendChild(editBtn);
+      const delBtn = document.createElement("button");
+      delBtn.className = "btn btn-danger btn-sm";
+      delBtn.textContent = "🗑️ Delete";
+      delBtn.onclick = () => app.deletePlayer(u.id);
+      tdActions.appendChild(delBtn);
+      tr.appendChild(tdActions);
+      tbody.appendChild(tr);
+    });
   },
 
   savePlayer() {
@@ -1432,20 +1806,7 @@ const app = {
   },
 
   renderEventTable(events, summaryMap) {
-    let searchInput = document.getElementById("events-search-input");
-    if (!searchInput) {
-      const container = document.querySelector("#view-admin-events .card");
-      const header = container.querySelector(".dashboard-header");
-      const searchDiv = document.createElement("div");
-      searchDiv.style.cssText =
-        "margin: 10px 0 15px; display: flex; gap: 10px; flex-wrap: wrap;";
-      searchDiv.innerHTML = `
-                        <input id="events-search-input" type="text" class="form-control" style="flex:1; min-width:200px;" placeholder="🔍 Search events by name or code..." oninput="app.filterEvents()">
-                        <button class="btn btn-secondary" onclick="document.getElementById('events-search-input').value=''; app.filterEvents();">✕ Clear</button>
-                    `;
-      container.insertBefore(searchDiv, header.nextSibling);
-    }
-
+    // No dynamic search bar – use static one.
     this._eventsWithSummary = events.map((e) => ({
       ...e,
       playerCount: summaryMap[e.code] || 0,
@@ -1469,24 +1830,49 @@ const app = {
         })
       : [];
 
-    document.querySelector("#admin-events-table tbody").innerHTML = filtered
-      .map(
-        (e) => `
-                <tr>
-                    <td data-label="Players">${e.playerCount}</td>
-                    <td data-label="Name">${e.name}</td>
-                    <td data-label="Point">${e.lat.toFixed(6)}, ${e.lng.toFixed(6)}</td>
-                    <td data-label="Actions">
-                        <button class="btn btn-primary btn-sm" onclick="app.openRegisterModal('${e.code}')">📝 Register Players</button>
-                        <button class="btn btn-danger btn-sm" onclick="app.toggleEvent('${e.code}')">
-                            ${e.status === "Active" ? "🔒 Close" : "🔓 Re-open"}
-                        </button>
-                        <button class="btn btn-danger btn-sm" onclick="app.deleteEvent('${e.code}')">🗑️ Delete</button>
-                    </td>
-                </tr>
-            `,
-      )
-      .join("");
+    const tbody = document.querySelector("#admin-events-table tbody");
+    tbody.innerHTML = "";
+    filtered.forEach((e) => {
+      const tr = document.createElement("tr");
+      // Players
+      const tdPlayers = document.createElement("td");
+      tdPlayers.setAttribute("data-label", "Players");
+      tdPlayers.textContent = e.playerCount;
+      tr.appendChild(tdPlayers);
+      // Name
+      const tdName = document.createElement("td");
+      tdName.setAttribute("data-label", "Name");
+      tdName.textContent = e.name;
+      tr.appendChild(tdName);
+      // Point
+      const tdPoint = document.createElement("td");
+      tdPoint.setAttribute("data-label", "Point");
+      tdPoint.textContent = `${e.lat.toFixed(6)}, ${e.lng.toFixed(6)}`;
+      tr.appendChild(tdPoint);
+      // Actions
+      const tdActions = document.createElement("td");
+      tdActions.setAttribute("data-label", "Actions");
+      // Register button
+      const regBtn = document.createElement("button");
+      regBtn.className = "btn btn-primary btn-sm";
+      regBtn.textContent = "📝 Register Players";
+      regBtn.onclick = () => app.openRegisterModal(e.code);
+      tdActions.appendChild(regBtn);
+      // Toggle button
+      const toggleBtn = document.createElement("button");
+      toggleBtn.className = "btn btn-danger btn-sm";
+      toggleBtn.textContent = e.status === "Active" ? "🔒 Close" : "🔓 Re-open";
+      toggleBtn.onclick = () => app.toggleEvent(e.code);
+      tdActions.appendChild(toggleBtn);
+      // Delete button
+      const delBtn = document.createElement("button");
+      delBtn.className = "btn btn-danger btn-sm";
+      delBtn.textContent = "🗑️ Delete";
+      delBtn.onclick = () => app.deleteEvent(e.code);
+      tdActions.appendChild(delBtn);
+      tr.appendChild(tdActions);
+      tbody.appendChild(tr);
+    });
   },
 
   openRegisterModal(eventCode) {
@@ -1555,43 +1941,71 @@ const app = {
       });
   },
 
+  // ========== FIXED: XSS-safe registration table ==========
   updateRegistrationTable() {
     const tbody = document.querySelector("#registrations-table tbody");
     if (!tbody) return;
 
+    tbody.innerHTML = "";
     if (this.currentRegistrations && this.currentRegistrations.length > 0) {
-      tbody.innerHTML = this.currentRegistrations
-        .map((r) => {
-          const totalCodes = r.codes.length;
-          const used = r.statuses.filter((s) => s === "used").length;
-          const unused = totalCodes - used;
-          const codeItems = r.codes
-            .map((code, idx) => {
-              const status = r.statuses[idx];
-              const badge =
-                status === "unused"
-                  ? '<span class="badge-unused">✅ Unused</span>'
-                  : '<span class="badge-used">⏳ Used</span>';
-              return `<span class="code-item">${code} ${badge}</span>`;
-            })
-            .join("");
+      this.currentRegistrations.forEach((r) => {
+        const tr = document.createElement("tr");
 
-          return `
-                    <tr>
-                        <td><strong>${r.userName}</strong></td>
-                        <td>${codeItems}</td>
-                        <td>
-                            <span class="badge-total">${totalCodes} total</span>
-                            <span class="badge-unused">${unused} unused</span>
-                            <span class="badge-used">${used} used</span>
-                        </td>
-                    </tr>
-                `;
-        })
-        .join("");
+        // Player name – safe with textContent
+        const tdPlayer = document.createElement("td");
+        const strong = document.createElement("strong");
+        strong.textContent = r.userName;
+        tdPlayer.appendChild(strong);
+        tr.appendChild(tdPlayer);
+
+        // Codes and badges – build with DOM methods
+        const tdCodes = document.createElement("td");
+        r.codes.forEach((code, idx) => {
+          const status = r.statuses[idx];
+          const span = document.createElement("span");
+          span.className = "code-item";
+
+          const codeSpan = document.createElement("span");
+          codeSpan.textContent = code;
+          span.appendChild(codeSpan);
+          span.appendChild(document.createTextNode(" "));
+
+          const badge = document.createElement("span");
+          badge.className = status === "unused" ? "badge-unused" : "badge-used";
+          badge.textContent = status === "unused" ? "✅ Unused" : "⏳ Used";
+          span.appendChild(badge);
+
+          tdCodes.appendChild(span);
+          if (idx < r.codes.length - 1) {
+            tdCodes.appendChild(document.createTextNode(" "));
+          }
+        });
+        tr.appendChild(tdCodes);
+
+        // Status summary
+        const tdStatus = document.createElement("td");
+        const total = r.codes.length;
+        const used = r.statuses.filter((s) => s === "used").length;
+        const unused = total - used;
+        tdStatus.innerHTML = `
+          <span class="badge-total">${total} total</span>
+          <span class="badge-unused">${unused} unused</span>
+          <span class="badge-used">${used} used</span>
+        `;
+        tr.appendChild(tdStatus);
+
+        tbody.appendChild(tr);
+      });
     } else {
-      tbody.innerHTML =
-        '<tr><td colspan="3" style="text-align:center; color:#999; padding:20px;">No players registered yet.</td></tr>';
+      const tr = document.createElement("tr");
+      const td = document.createElement("td");
+      td.colSpan = 3;
+      td.style.textAlign = "center";
+      td.style.color = "#999";
+      td.style.padding = "20px";
+      td.textContent = "No players registered yet.";
+      tr.appendChild(td);
+      tbody.appendChild(tr);
     }
   },
 
@@ -1897,6 +2311,19 @@ const app = {
   },
 
   closeModal(id) {
+    if (id === "modal-edit-player") {
+      if (editPlayerMarker) {
+        editPlayerMarker.setMap(null);
+        editPlayerMarker = null;
+      }
+      if (editPlayerMap) {
+        const container = document.getElementById("edit-player-map");
+        if (container) container.innerHTML = "";
+        editPlayerMap = null;
+      }
+      selectedEditPlayerLat = null;
+      selectedEditPlayerLng = null;
+    }
     document.getElementById(id).classList.remove("show");
   },
 
@@ -2095,5 +2522,4 @@ if ("serviceWorker" in navigator) {
     );
 }
 
-// Initialize app
 window.onload = () => app.init();
