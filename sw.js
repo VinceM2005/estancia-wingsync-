@@ -1,4 +1,4 @@
-const CACHE_NAME = "wingsync-v2";
+const CACHE_NAME = "wingsync-v3";
 const urlsToCache = ["/index.html", "/app.js", "/style.css", "/manifest.json"];
 
 self.addEventListener("install", (event) => {
