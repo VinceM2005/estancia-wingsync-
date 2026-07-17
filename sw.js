@@ -1,4 +1,4 @@
-const CACHE_NAME = "wingsync-v7"; // was v6 Increment on every deployment
+const CACHE_NAME = "wingsync-v8"; // Increment on every deployment
 const urlsToCache = ["/index.html", "/app.js", "/style.css", "/manifest.json"];
 
 self.addEventListener("install", (event) => {
@@ -34,6 +34,14 @@ self.addEventListener("activate", (event) => {
 });
 
 self.addEventListener("fetch", (event) => {
+  const url = new URL(event.request.url);
+
+  // Skip API calls – never cache them
+  if (url.pathname.startsWith("/api/")) {
+    event.respondWith(fetch(event.request));
+    return;
+  }
+
   // Ignore chrome-extension requests
   if (event.request.url.startsWith("chrome-extension://")) {
     return;
