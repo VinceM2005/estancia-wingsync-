@@ -311,11 +311,14 @@ const app = {
   _lastEventsFetch: 0,
   _isRendering: false,
 
+  // ---- Profile stats refresh interval ----
+  _profileStatsInterval: null,
+
   init() {
     this.loadTheme();
-    this.setupVisibilityListener(); // ADD THIS LINE
+    this.setupVisibilityListener();
     this.syncServerTime();
-    setInterval(() => this.syncServerTime(), 30000); // reduced to 30s
+    setInterval(() => this.syncServerTime(), 30000);
 
     const sessionStr = sessionStorage.getItem("wingsync_user");
     const token = sessionStorage.getItem("wingsync_token");
@@ -327,7 +330,8 @@ const app = {
     this.initStickerGenerator();
   },
 
-  // ===== STICKER GENERATOR (merged from external script) =====
+  // ===== STICKER GENERATOR =====
+  // (unchanged, kept as is)
   initStickerGenerator() {
     const state = {
       stickers: [],
@@ -894,7 +898,7 @@ const app = {
     };
   },
 
-  // ===== VISIBILITY LISTENER (NEW) =====
+  // ===== VISIBILITY LISTENER (UPDATED) =====
   setupVisibilityListener() {
     document.addEventListener("visibilitychange", () => {
       if (!document.hidden) {
@@ -908,6 +912,7 @@ const app = {
           else if (id === "view-results") this.renderResults();
           else if (id === "view-admin-events") this.renderEvents();
           else if (id === "view-admin-players") this.renderPlayers();
+          else if (id === "view-profile") this.loadPlayerStats(); // <-- added
         }
         this.updateClockDisplay();
       }
@@ -1189,6 +1194,10 @@ const app = {
       clearInterval(this.clockIntervalId);
       this.clockIntervalId = null;
     }
+    if (this._profileStatsInterval) {
+      clearInterval(this._profileStatsInterval);
+      this._profileStatsInterval = null;
+    }
     this.currentUser = null;
     sessionStorage.removeItem("wingsync_user");
     sessionStorage.removeItem("wingsync_token");
@@ -1271,8 +1280,14 @@ const app = {
       });
   },
 
+  // ===== NAVIGATE (UPDATED) =====
   navigate(view) {
     this.stopAutoRefresh();
+    if (this._profileStatsInterval) {
+      clearInterval(this._profileStatsInterval);
+      this._profileStatsInterval = null;
+    }
+
     document
       .querySelectorAll(".view-section")
       .forEach((el) => el.classList.add("hidden"));
@@ -1288,9 +1303,25 @@ const app = {
     if (view === "admin-events") this.renderEvents();
     if (view === "results") this.initResultsView();
     if (view === "logs") this.renderLogs();
+    if (view === "profile") {
+      this.loadProfile();
+      this.loadPlayerStats(); // Refresh stats on navigation
+      // Also start a periodic refresh for stats when on profile
+      this._profileStatsInterval = setInterval(() => {
+        // Only refresh if still on profile view
+        const currentView = document.querySelector(
+          ".view-section:not(.hidden)",
+        );
+        if (currentView && currentView.id === "view-profile") {
+          this.loadPlayerStats();
+        } else {
+          clearInterval(this._profileStatsInterval);
+          this._profileStatsInterval = null;
+        }
+      }, 30000); // every 30 seconds
+    }
     if (view === "sticker-generator") {
       this.populateStickerSelector(this.allEvents);
-      // If there's a selected event in the register modal, pre-select it
       const regCode = document.getElementById("register-event-code")?.value;
       if (regCode) {
         const select = document.getElementById("sticker-event-select");
@@ -1480,9 +1511,10 @@ const app = {
           hour12: true,
         });
 
+        // CHANGED: (ERPC) -> (MPFRC)
         this.showModal({
           title: "✅ Bird Clocked!",
-          message: `${formattedDate}  ${formattedTime}\n📋 ${eventName} (ERPC)\n📏 Air Distance: ${data.distance.toFixed(4)} KM\n⚡ Speed: ${data.speed.toFixed(4)} m/min`,
+          message: `${formattedDate}  ${formattedTime}\n📋 ${eventName} (MPFRC)\n📏 Air Distance: ${data.distance.toFixed(4)} KM\n⚡ Speed: ${data.speed.toFixed(4)} m/min`,
           icon: "✅",
           iconColor: "#27ae60",
           buttonText: "OK",
@@ -1874,7 +1906,8 @@ const app = {
 
         const tdDist = document.createElement("td");
         tdDist.setAttribute("data-label", "Air Dist");
-        tdDist.textContent = r.distanceKm + " km";
+        // CHANGED: format distance to 2 decimal places
+        tdDist.textContent = r.distanceKm.toFixed(2) + " km";
         tr.appendChild(tdDist);
 
         const tdArr = document.createElement("td");
