@@ -148,7 +148,6 @@ function createGoogleMap(
 
   const searchBox = document.getElementById(searchBoxId);
   if (searchBox) {
-    // --- Autocomplete for places (addresses, landmarks) ---
     const autocomplete = new google.maps.places.Autocomplete(searchBox);
     autocomplete.bindTo("bounds", map);
     autocomplete.setFields(["geometry", "name", "formatted_address"]);
@@ -170,10 +169,10 @@ function createGoogleMap(
       setMarker(mapType, lat, lng, map, coordsTextId, place);
     });
 
-    // --- NEW: Coordinate search (e.g., "13.339362, 123.660293") ---
+    // Coordinate search on Enter
     searchBox.addEventListener("keydown", function (e) {
       if (e.key === "Enter") {
-        e.preventDefault(); // Prevent form submission
+        e.preventDefault();
         const val = searchBox.value.trim();
         const coords = parseCoordinates(val);
         if (coords) {
@@ -181,21 +180,10 @@ function createGoogleMap(
           map.setCenter({ lat, lng });
           map.setZoom(17);
           setMarker(mapType, lat, lng, map, coordsTextId);
-          // Optionally clear the search box after setting
-          // searchBox.value = '';
-        } else {
-          // If not coordinates, let the autocomplete handle it (but we already prevented default)
-          // We can trigger the autocomplete's place_changed by simulating a selection? Not needed.
-          // Just let the user know?
-          // We'll do nothing; the Enter might trigger the autocomplete if a place is selected,
-          // but since we prevented default, the autocomplete won't fire.
-          // We can instead call the autocomplete's getPlace() if there is a selection.
-          // But we'll let the user click the dropdown item instead.
         }
       }
     });
 
-    // Optional: also listen to blur to catch pasted coordinates
     searchBox.addEventListener("blur", function () {
       const val = searchBox.value.trim();
       const coords = parseCoordinates(val);
@@ -305,7 +293,7 @@ function setMarker(mapType, lat, lng, map, coordsTextId, place = null) {
   return marker;
 }
 
-// ===== Main App =====
+// ===== MAIN APP =====
 const app = {
   currentUser: null,
   eventLookup: {},
@@ -314,15 +302,13 @@ const app = {
   allResults: {},
   selectedEventCode: null,
   currentRegistrations: [],
-  registrationCounts: {}, // eventId -> total pigeon count
+  registrationCounts: {},
+  _eventsWithSummary: [], // FIXED: initialized as empty array
 
   refreshIntervalId: null,
   serverTimeOffset: 0,
   clockIntervalId: null,
-
-  // Cache timestamp for events refresh
   _lastEventsFetch: 0,
-  // Flag to prevent overlapping renderResults() calls
   _isRendering: false,
 
   init() {
@@ -336,9 +322,579 @@ const app = {
       this.currentUser = JSON.parse(sessionStr);
       this.showApp();
     }
+
+    // Sticker generator initialization (moved inside app)
+    this.initStickerGenerator();
   },
 
-  // ========== SERVER TIME SYNC ==========
+  // ===== STICKER GENERATOR (merged from external script) =====
+  initStickerGenerator() {
+    const state = {
+      stickers: [],
+      widthMm: 42,
+      heightMm: 10,
+      dpi: 300,
+      eventId: null,
+      eventName: "",
+      isGenerating: false,
+      canvasCache: [],
+    };
+
+    const SCRATCH_WIDTH_MM = 22;
+
+    const generateQRCanvas = (data, sizePx) => {
+      return new Promise((resolve, reject) => {
+        try {
+          if (typeof QRCode === "undefined") {
+            reject(new Error("QRCode library not loaded"));
+            return;
+          }
+          const container = document.createElement("div");
+          container.style.cssText = "display:none;position:absolute;";
+          document.body.appendChild(container);
+          new QRCode(container, {
+            text: data,
+            width: sizePx,
+            height: sizePx,
+            colorDark: "#000000",
+            colorLight: "#ffffff",
+            correctLevel: QRCode.CorrectLevel.H,
+          });
+          const qrCanvas = container.querySelector("canvas");
+          if (qrCanvas) {
+            const canvas = document.createElement("canvas");
+            canvas.width = sizePx;
+            canvas.height = sizePx;
+            const ctx = canvas.getContext("2d");
+            ctx.drawImage(qrCanvas, 0, 0);
+            document.body.removeChild(container);
+            resolve(canvas);
+            return;
+          }
+          const qrImg = container.querySelector("img");
+          if (qrImg) {
+            const canvas = document.createElement("canvas");
+            canvas.width = sizePx;
+            canvas.height = sizePx;
+            const ctx = canvas.getContext("2d");
+            const img = new Image();
+            img.onload = function () {
+              ctx.drawImage(img, 0, 0);
+              document.body.removeChild(container);
+              resolve(canvas);
+            };
+            img.onerror = function () {
+              document.body.removeChild(container);
+              reject(new Error("Failed to load QR code image"));
+            };
+            img.src = qrImg.src;
+            return;
+          }
+          document.body.removeChild(container);
+          reject(new Error("QR code canvas or image not found"));
+        } catch (e) {
+          reject(e);
+        }
+      });
+    };
+
+    const generateBarcodeCanvas = (data, widthPx, heightPx) => {
+      return new Promise((resolve, reject) => {
+        try {
+          if (typeof JsBarcode === "undefined") {
+            reject(new Error("JsBarcode library not loaded"));
+            return;
+          }
+          const canvas = document.createElement("canvas");
+          canvas.width = widthPx;
+          canvas.height = heightPx;
+          JsBarcode(canvas, data, {
+            format: "CODE128",
+            width: Math.max(1, Math.floor(widthPx / (data.length * 6))),
+            height: heightPx,
+            displayValue: false,
+            background: "#ffffff",
+            lineColor: "#000000",
+            margin: 0,
+            fontSize: 0,
+          });
+          resolve(canvas);
+        } catch (e) {
+          reject(e);
+        }
+      });
+    };
+
+    const renderStickerCanvas = async (
+      eventName,
+      playerName,
+      code,
+      widthMm,
+      heightMm,
+      dpi,
+    ) => {
+      const widthPx = Math.round((widthMm / 25.4) * dpi);
+      const heightPx = Math.round((heightMm / 25.4) * dpi);
+      const canvas = document.createElement("canvas");
+      canvas.width = widthPx;
+      canvas.height = heightPx;
+      const ctx = canvas.getContext("2d");
+
+      ctx.fillStyle = "#ffffff";
+      ctx.fillRect(0, 0, widthPx, heightPx);
+
+      const topHeightPx = Math.round((6 / 10) * heightPx);
+      const bottomHeightPx = heightPx - topHeightPx;
+      const marginPx = Math.round((1 / 25.4) * dpi);
+      const scratchWidthPx = Math.round((SCRATCH_WIDTH_MM / 25.4) * dpi);
+
+      // QR code
+      const qrSizeMm = Math.min(4.5, SCRATCH_WIDTH_MM * 0.28);
+      const qrSizePx = Math.round((qrSizeMm / 25.4) * dpi);
+      const qrX = marginPx;
+      const qrY = Math.round((topHeightPx - qrSizePx) / 2);
+
+      let qrCanvas = null;
+      try {
+        qrCanvas = await generateQRCanvas(code, qrSizePx);
+      } catch (e) {
+        console.warn("QR generation failed for", code, e);
+        ctx.fillStyle = "#f0f0f0";
+        ctx.fillRect(qrX, qrY, qrSizePx, qrSizePx);
+        ctx.fillStyle = "#999";
+        ctx.font = `${Math.round(qrSizePx * 0.25)}px sans-serif`;
+        ctx.textAlign = "center";
+        ctx.textBaseline = "middle";
+        ctx.fillText("QR", qrX + qrSizePx / 2, qrY + qrSizePx / 2);
+      }
+      if (qrCanvas) {
+        ctx.drawImage(qrCanvas, qrX, qrY, qrSizePx, qrSizePx);
+      }
+
+      // Barcode
+      const barcodeHeightMm = 1.6;
+      const barcodeHeightPx = Math.round((barcodeHeightMm / 25.4) * dpi);
+      const barcodeY = marginPx;
+      const gap1 = Math.round((1.2 / 25.4) * dpi);
+      const barcodeLeft = qrX + qrSizePx + gap1;
+      const barcodeWidth = scratchWidthPx - barcodeLeft - marginPx;
+
+      let bcCanvas = null;
+      try {
+        bcCanvas = await generateBarcodeCanvas(
+          code,
+          Math.max(20, barcodeWidth),
+          barcodeHeightPx,
+        );
+      } catch (e) {
+        console.warn("Barcode generation failed for", code, e);
+      }
+      if (bcCanvas) {
+        ctx.drawImage(
+          bcCanvas,
+          barcodeLeft,
+          barcodeY,
+          Math.max(20, barcodeWidth),
+          barcodeHeightPx,
+        );
+      } else {
+        ctx.fillStyle = "#f0f0f0";
+        ctx.fillRect(barcodeLeft, barcodeY, barcodeWidth, barcodeHeightPx);
+        ctx.fillStyle = "#999";
+        ctx.font = `${Math.round(barcodeHeightPx * 0.5)}px sans-serif`;
+        ctx.textAlign = "center";
+        ctx.textBaseline = "middle";
+        ctx.fillText(
+          "Barcode",
+          barcodeLeft + barcodeWidth / 2,
+          barcodeY + barcodeHeightPx / 2,
+        );
+      }
+
+      // CODE TEXT
+      const codeText = code;
+      const gap2 = Math.round((0.8 / 25.4) * dpi);
+      const codeY = barcodeY + barcodeHeightPx + gap2;
+      const codeAvailableHeight = topHeightPx - codeY - marginPx;
+      const codeAvailableWidth = barcodeWidth;
+
+      const maxFontByHeight = codeAvailableHeight * 0.95;
+      const maxFontByWidth = codeAvailableWidth / (codeText.length * 0.6);
+      let codeFontSize = Math.min(
+        maxFontByHeight,
+        maxFontByWidth,
+        Math.round((5.0 / 25.4) * dpi),
+      );
+      codeFontSize = Math.min(48, Math.max(16, Math.round(codeFontSize)));
+      const letterSpacing = Math.min(
+        3,
+        Math.max(1, Math.round(codeFontSize * 0.05)),
+      );
+
+      ctx.textAlign = "left";
+      ctx.textBaseline = "top";
+      ctx.fillStyle = "#000000";
+      ctx.font = `bold ${codeFontSize}px monospace`;
+
+      let totalWidth = 0;
+      const charWidths = [];
+      for (let i = 0; i < codeText.length; i++) {
+        const char = codeText[i];
+        const metrics = ctx.measureText(char);
+        const w = metrics.width;
+        charWidths.push(w);
+        totalWidth += w;
+      }
+      totalWidth += (codeText.length - 1) * letterSpacing;
+
+      const centerX = barcodeLeft + barcodeWidth / 2;
+      let currentX = centerX - totalWidth / 2;
+
+      for (let i = 0; i < codeText.length; i++) {
+        ctx.fillText(codeText[i], currentX, codeY);
+        currentX += charWidths[i] + letterSpacing;
+      }
+
+      // Bottom section
+      const bottomY = topHeightPx;
+      const fontSizePx = Math.min(
+        Math.round((2.2 / 25.4) * dpi),
+        Math.round(bottomHeightPx * 0.6),
+      );
+
+      let eventLabel = eventName || "Event";
+      let playerLabel = playerName || "Player";
+
+      let testSize = fontSizePx;
+      const leftX = marginPx;
+      const rightX = widthPx - marginPx;
+      const centerY = bottomY + bottomHeightPx / 2;
+      const maxWidth = widthPx * 0.42;
+
+      ctx.font = `${testSize}px sans-serif`;
+      while (testSize > 8 && ctx.measureText(eventLabel).width > maxWidth) {
+        testSize -= 1;
+        ctx.font = `${testSize}px sans-serif`;
+      }
+      ctx.textAlign = "left";
+      ctx.textBaseline = "middle";
+      ctx.fillStyle = "#000000";
+      ctx.fillText(eventLabel, leftX, centerY);
+
+      testSize = fontSizePx;
+      ctx.font = `${testSize}px sans-serif`;
+      while (testSize > 8 && ctx.measureText(playerLabel).width > maxWidth) {
+        testSize -= 1;
+        ctx.font = `${testSize}px sans-serif`;
+      }
+      ctx.textAlign = "right";
+      ctx.textBaseline = "middle";
+      ctx.fillStyle = "#000000";
+      ctx.fillText(playerLabel, rightX, centerY);
+
+      ctx.strokeStyle = "#000000";
+      ctx.lineWidth = 1.0;
+      ctx.strokeRect(0, 0, widthPx, heightPx);
+
+      ctx.strokeStyle = "#e0e0e0";
+      ctx.lineWidth = 0.5;
+      ctx.setLineDash([2, 3]);
+      ctx.strokeRect(
+        marginPx,
+        marginPx,
+        scratchWidthPx - marginPx,
+        topHeightPx - marginPx,
+      );
+      ctx.setLineDash([]);
+
+      return canvas;
+    };
+
+    const renderAllStickers = async (stickers, widthMm) => {
+      const container = document.getElementById("sticker-grid-container");
+      if (!container) return;
+
+      if (!stickers || stickers.length === 0) {
+        container.innerHTML = `
+          <div class="sticker-empty-state">
+            <i class="fas fa-tags" style="font-size:56px; display:block; margin-bottom:12px; color:#ccc;"></i>
+            <h3>No Stickers to Generate</h3>
+            <p>Register players to an event first, then click "Generate Stickers".</p>
+          </div>
+        `;
+        document.getElementById("sticker-total-count").textContent =
+          "0 stickers";
+        return;
+      }
+
+      container.innerHTML = `
+        <div class="sticker-loading">
+          <div class="spinner"></div>
+          <p>Generating stickers... (${stickers.length} stickers)</p>
+        </div>
+      `;
+
+      const canvasItems = [];
+      const dpi = state.dpi;
+      const heightMm = 10;
+
+      for (let i = 0; i < stickers.length; i++) {
+        const s = stickers[i];
+        try {
+          const canvas = await renderStickerCanvas(
+            s.eventName || state.eventName || "Event",
+            s.playerName || "Player",
+            s.code,
+            widthMm,
+            heightMm,
+            dpi,
+          );
+          canvasItems.push({ canvas, data: s });
+        } catch (e) {
+          console.error("Failed to render sticker for", s, e);
+        }
+      }
+
+      state.canvasCache = canvasItems;
+
+      const grid = document.createElement("div");
+      grid.className = "sticker-preview-grid";
+
+      for (const item of canvasItems) {
+        const canvas = item.canvas;
+        const data = item.data;
+        const dataUrl = canvas.toDataURL("image/png");
+
+        const wrapper = document.createElement("div");
+        wrapper.className = "sticker-preview-item";
+
+        const img = document.createElement("img");
+        img.src = dataUrl;
+        img.alt = `Sticker ${data.code}`;
+        img.style.width = "100%";
+        img.style.height = "auto";
+        img.style.borderRadius = "3px";
+        wrapper.appendChild(img);
+
+        const playerDiv = document.createElement("div");
+        playerDiv.className = "sticker-player";
+        playerDiv.textContent = data.playerName;
+        wrapper.appendChild(playerDiv);
+
+        const codeDiv = document.createElement("div");
+        codeDiv.className = "sticker-label";
+        codeDiv.textContent = data.code;
+        wrapper.appendChild(codeDiv);
+
+        grid.appendChild(wrapper);
+      }
+
+      container.innerHTML = "";
+      container.appendChild(grid);
+      document.getElementById("sticker-total-count").textContent =
+        `${canvasItems.length} stickers`;
+    };
+
+    const generateStickerPDF = async (stickers, widthMm) => {
+      if (!stickers || stickers.length === 0) {
+        app.showModal({
+          title: "No Stickers",
+          message: "Please generate stickers first.",
+          icon: "⚠️",
+          iconColor: "#e67e22",
+        });
+        return null;
+      }
+
+      const { jsPDF } = window.jspdf;
+      const heightMm = 10;
+      const dpi = state.dpi;
+      const pageWidth = 210;
+      const pageHeight = 297;
+      const margin = 10;
+      const gap = 2;
+
+      const cols = Math.floor((pageWidth - margin * 2 + gap) / (widthMm + gap));
+      const rows = Math.floor(
+        (pageHeight - margin * 2 + gap) / (heightMm + gap),
+      );
+
+      const doc = new jsPDF("p", "mm", "a4");
+      let stickerIndex = 0;
+
+      while (stickerIndex < stickers.length) {
+        if (stickerIndex > 0) doc.addPage();
+
+        for (let r = 0; r < rows && stickerIndex < stickers.length; r++) {
+          for (let c = 0; c < cols && stickerIndex < stickers.length; c++) {
+            const s = stickers[stickerIndex];
+            const x = margin + c * (widthMm + gap);
+            const y = margin + r * (heightMm + gap);
+
+            const canvas = await renderStickerCanvas(
+              s.eventName || state.eventName || "Event",
+              s.playerName || "Player",
+              s.code,
+              widthMm,
+              heightMm,
+              dpi,
+            );
+            const imgData = canvas.toDataURL("image/png");
+            doc.addImage(imgData, "PNG", x, y, widthMm, heightMm);
+            stickerIndex++;
+          }
+        }
+      }
+      return doc;
+    };
+
+    // --- Expose sticker functions on app ---
+    this._stickerState = state;
+
+    this.loadStickersForEvent = async function () {
+      const select = document.getElementById("sticker-event-select");
+      const eventCode = select ? select.value : "";
+      if (!eventCode) {
+        document.getElementById("sticker-grid-container").innerHTML = `
+          <div class="sticker-empty-state">
+            <i class="fas fa-list-ul" style="font-size:56px; display:block; margin-bottom:12px; color:#ccc;"></i>
+            <h3>Select an Event</h3>
+            <p>Choose an event from the dropdown to generate stickers.</p>
+          </div>
+        `;
+        document.getElementById("sticker-total-count").textContent =
+          "0 stickers";
+        return;
+      }
+
+      try {
+        const res = await fetchWithAuth(
+          `${API_URL}/events/${eventCode}/registrations`,
+        );
+        if (!res.ok) throw new Error("Failed to fetch registrations");
+        const registrations = await res.json();
+
+        const stickers = [];
+        for (const reg of registrations) {
+          const playerName = reg.userName || "Player";
+          for (let i = 0; i < reg.codes.length; i++) {
+            stickers.push({
+              playerName: playerName,
+              code: reg.codes[i],
+              status: reg.statuses ? reg.statuses[i] : "unused",
+            });
+          }
+        }
+
+        const eventRes = await fetchWithAuth(`${API_URL}/events/all`);
+        const events = await eventRes.json();
+        const evt = events.find((e) => e.code === eventCode);
+        if (evt) {
+          state.eventName = evt.name;
+          state.eventId = eventCode;
+        }
+
+        state.stickers = stickers;
+        await renderAllStickers(stickers, state.widthMm);
+      } catch (e) {
+        console.error("Load stickers error:", e);
+        app.showModal({
+          title: "Failed to Load Stickers",
+          message: e.message || "Could not load stickers.",
+          icon: "❌",
+          iconColor: "#c0392b",
+        });
+      }
+    };
+
+    this.generateStickers = function () {
+      const select = document.getElementById("sticker-event-select");
+      const eventCode = select ? select.value : "";
+      if (!eventCode) {
+        app.showModal({
+          title: "No Event Selected",
+          message: "Please select an event first.",
+          icon: "⚠️",
+          iconColor: "#e67e22",
+        });
+        return;
+      }
+      this.loadStickersForEvent();
+    };
+
+    this.downloadStickerPDF = async function () {
+      if (!state.stickers || state.stickers.length === 0) {
+        app.showModal({
+          title: "No Stickers",
+          message: "Generate stickers first before downloading PDF.",
+          icon: "⚠️",
+          iconColor: "#e67e22",
+        });
+        return;
+      }
+
+      try {
+        const doc = await generateStickerPDF(state.stickers, state.widthMm);
+        if (doc) {
+          doc.save(`stickers_${state.eventId || "event"}.pdf`);
+          app.showModal({
+            title: "✅ PDF Downloaded",
+            message: `PDF with ${state.stickers.length} stickers has been generated.`,
+            icon: "✅",
+            iconColor: "#27ae60",
+          });
+        }
+      } catch (e) {
+        console.error("PDF generation error:", e);
+        app.showModal({
+          title: "PDF Error",
+          message: "Failed to generate PDF. Please try again.",
+          icon: "❌",
+          iconColor: "#c0392b",
+        });
+      }
+    };
+
+    this.updateStickerWidth = function (val) {
+      state.widthMm = Math.min(42, Math.max(22, parseFloat(val) || 42));
+      document.getElementById("sticker-width-display").textContent =
+        state.widthMm;
+      document.getElementById("sticker-width-slider").value = state.widthMm;
+      if (state.stickers && state.stickers.length > 0 && state.eventId) {
+        this.loadStickersForEvent();
+      }
+    };
+
+    this.populateStickerSelector = function (events) {
+      const select = document.getElementById("sticker-event-select");
+      if (!select) return;
+      const current = select.value;
+      select.innerHTML = '<option value="">-- Select Event --</option>';
+      (events || this.allEvents).forEach((e) => {
+        const opt = document.createElement("option");
+        opt.value = e.code;
+        opt.textContent = `${e.name} (${e.code})`;
+        select.appendChild(opt);
+      });
+      if (current) select.value = current;
+    };
+
+    this.navigateToStickerGenerator = function (code) {
+      if (code) {
+        const select = document.getElementById("sticker-event-select");
+        if (select) select.value = code;
+      }
+      this.navigate("sticker-generator");
+      setTimeout(() => {
+        const select = document.getElementById("sticker-event-select");
+        if (select && select.value) {
+          this.loadStickersForEvent();
+        }
+      }, 300);
+    };
+  },
+
+  // ===== SERVER TIME SYNC =====
   syncServerTime() {
     const clientTime = Date.now();
     fetchWithAuth(`${API_URL}/time`)
@@ -382,7 +938,7 @@ const app = {
     clockElement.textContent = timeStr;
   },
 
-  // ========== CUSTOM MODAL ==========
+  // ===== CUSTOM MODAL =====
   showModal(options) {
     const existingModal = document.getElementById("custom-modal");
     if (existingModal) existingModal.remove();
@@ -400,104 +956,104 @@ const app = {
     const modal = document.createElement("div");
     modal.id = "custom-modal";
     modal.style.cssText = `
-            position: fixed;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            background: rgba(0, 0, 0, 0.55);
-            backdrop-filter: blur(4px);
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            z-index: 9999;
-            padding: 20px;
-            animation: customFadeIn 0.3s ease;
-        `;
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: rgba(0, 0, 0, 0.55);
+      backdrop-filter: blur(4px);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 9999;
+      padding: 20px;
+      animation: customFadeIn 0.3s ease;
+    `;
 
     modal.innerHTML = `
-            <div style="
-                background: #ffffff;
-                border-radius: 16px;
-                padding: 32px 40px;
-                max-width: 440px;
-                width: 100%;
-                box-shadow: 0 20px 60px rgba(0,0,0,0.3);
-                text-align: center;
-                animation: customSlideUp 0.35s ease;
-                position: relative;
-                max-height: 90vh;
-                overflow-y: auto;
-            ">
-                <button class="custom-modal-close" style="
-                    position: absolute;
-                    top: 12px;
-                    right: 16px;
-                    background: none;
-                    border: none;
-                    font-size: 28px;
-                    color: #999;
-                    cursor: pointer;
-                    transition: color 0.2s;
-                    line-height: 1;
-                    padding: 4px 8px;
-                    border-radius: 50%;
-                " onmouseover="this.style.color='#333'" onmouseout="this.style.color='#999'">×</button>
+      <div style="
+        background: #ffffff;
+        border-radius: 16px;
+        padding: 32px 40px;
+        max-width: 440px;
+        width: 100%;
+        box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+        text-align: center;
+        animation: customSlideUp 0.35s ease;
+        position: relative;
+        max-height: 90vh;
+        overflow-y: auto;
+      ">
+        <button class="custom-modal-close" style="
+          position: absolute;
+          top: 12px;
+          right: 16px;
+          background: none;
+          border: none;
+          font-size: 28px;
+          color: #999;
+          cursor: pointer;
+          transition: color 0.2s;
+          line-height: 1;
+          padding: 4px 8px;
+          border-radius: 50%;
+        " onmouseover="this.style.color='#333'" onmouseout="this.style.color='#999'">×</button>
 
-                <div style="
-                    font-size: 48px;
-                    margin-bottom: 8px;
-                    animation: customPulse 0.8s ease 0.3s;
-                    color: ${iconColor};
-                ">${icon}</div>
+        <div style="
+          font-size: 48px;
+          margin-bottom: 8px;
+          animation: customPulse 0.8s ease 0.3s;
+          color: ${iconColor};
+        ">${icon}</div>
 
-                <div style="
-                    font-size: 22px;
-                    font-weight: 700;
-                    color: #1a2a33;
-                    margin-bottom: 8px;
-                    letter-spacing: -0.3px;
-                ">${title}</div>
+        <div style="
+          font-size: 22px;
+          font-weight: 700;
+          color: #1a2a33;
+          margin-bottom: 8px;
+          letter-spacing: -0.3px;
+        ">${title}</div>
 
-                <div style="
-                    width: 50px;
-                    height: 3px;
-                    background: ${iconColor};
-                    margin: 6px auto 14px;
-                    border-radius: 4px;
-                "></div>
+        <div style="
+          width: 50px;
+          height: 3px;
+          background: ${iconColor};
+          margin: 6px auto 14px;
+          border-radius: 4px;
+        "></div>
 
-                <div style="
-                    font-size: 15px;
-                    color: #5b6f82;
-                    line-height: 1.6;
-                    margin-bottom: ${showButton ? "20px" : "0"};
-                    white-space: pre-wrap;
-                    word-break: break-word;
-                ">${message}</div>
+        <div style="
+          font-size: 15px;
+          color: #5b6f82;
+          line-height: 1.6;
+          margin-bottom: ${showButton ? "20px" : "0"};
+          white-space: pre-wrap;
+          word-break: break-word;
+        ">${message}</div>
 
-                ${
-                  showButton
-                    ? `
-                    <button class="custom-modal-btn" style="
-                        padding: 10px 40px;
-                        background: ${iconColor};
-                        color: #fff;
-                        border: none;
-                        border-radius: 8px;
-                        font-size: 16px;
-                        font-weight: 600;
-                        cursor: pointer;
-                        transition: background 0.2s, transform 0.1s;
-                    " onmouseover="this.style.background='${iconColor}dd'" onmouseout="this.style.background='${iconColor}'" 
-                       onmousedown="this.style.transform='scale(0.97)'" onmouseup="this.style.transform='scale(1)'">
-                        ${buttonText}
-                    </button>
-                `
-                    : ""
-                }
-            </div>
-        `;
+        ${
+          showButton
+            ? `
+            <button class="custom-modal-btn" style="
+              padding: 10px 40px;
+              background: ${iconColor};
+              color: #fff;
+              border: none;
+              border-radius: 8px;
+              font-size: 16px;
+              font-weight: 600;
+              cursor: pointer;
+              transition: background 0.2s, transform 0.1s;
+            " onmouseover="this.style.background='${iconColor}dd'" onmouseout="this.style.background='${iconColor}'" 
+              onmousedown="this.style.transform='scale(0.97)'" onmouseup="this.style.transform='scale(1)'">
+              ${buttonText}
+            </button>
+          `
+            : ""
+        }
+      </div>
+    `;
 
     const styleId = "custom-modal-styles";
     let style = document.getElementById(styleId);
@@ -505,15 +1061,15 @@ const app = {
       style = document.createElement("style");
       style.id = styleId;
       style.textContent = `
-                @keyframes customFadeIn { from { opacity: 0; } to { opacity: 1; } }
-                @keyframes customSlideUp { from { opacity: 0; transform: translateY(30px) scale(0.95); } to { opacity: 1; transform: translateY(0) scale(1); } }
-                @keyframes customPulse { 0% { transform: scale(0.6); opacity: 0; } 50% { transform: scale(1.2); } 100% { transform: scale(1); opacity: 1; } }
-                @media (max-width: 480px) {
-                    #custom-modal > div { padding: 24px 20px !important; }
-                    #custom-modal .custom-modal-close { font-size: 24px !important; top: 8px !important; right: 12px !important; }
-                    #custom-modal .custom-modal-btn { padding: 10px 28px !important; font-size: 15px !important; width: 100%; }
-                }
-            `;
+        @keyframes customFadeIn { from { opacity: 0; } to { opacity: 1; } }
+        @keyframes customSlideUp { from { opacity: 0; transform: translateY(30px) scale(0.95); } to { opacity: 1; transform: translateY(0) scale(1); } }
+        @keyframes customPulse { 0% { transform: scale(0.6); opacity: 0; } 50% { transform: scale(1.2); } 100% { transform: scale(1); opacity: 1; } }
+        @media (max-width: 480px) {
+          #custom-modal > div { padding: 24px 20px !important; }
+          #custom-modal .custom-modal-close { font-size: 24px !important; top: 8px !important; right: 12px !important; }
+          #custom-modal .custom-modal-btn { padding: 10px 28px !important; font-size: 15px !important; width: 100%; }
+        }
+      `;
       document.head.appendChild(style);
     }
     document.body.appendChild(modal);
@@ -544,7 +1100,7 @@ const app = {
     return modal;
   },
 
-  // ========== AUTH ==========
+  // ===== AUTH =====
   login() {
     const id = document.getElementById("login-id").value;
     const pass = document.getElementById("login-pass").value;
@@ -618,7 +1174,6 @@ const app = {
       adminEls.forEach((el) => el.classList.remove("hidden"));
       playerEls.forEach((el) => el.classList.add("hidden"));
       document.getElementById("player-clock-in-area").classList.add("hidden");
-      // Hide performance summary for admin
       document.getElementById("player-stats-container").classList.add("hidden");
     } else {
       adminEls.forEach((el) => el.classList.add("hidden"));
@@ -626,7 +1181,6 @@ const app = {
       document
         .getElementById("player-clock-in-area")
         .classList.remove("hidden");
-      // Load stats for player
       this.loadPlayerStats();
     }
 
@@ -640,7 +1194,7 @@ const app = {
     this.fetchAllEvents();
   },
 
-  // === Fetch all events and update lookup (returns promise) ===
+  // === Fetch all events and update lookup ===
   fetchAllEvents() {
     return fetchWithAuth(`${API_URL}/events/all`)
       .then((res) => {
@@ -653,11 +1207,6 @@ const app = {
         this.eventLookup = {};
         events.forEach((e) => {
           this.eventLookup[e.code] = e;
-          if (e.codes && e.codes.length > 0) {
-            e.codes.forEach((c) => {
-              this.eventLookup[c] = e;
-            });
-          }
         });
         this._lastEventsFetch = Date.now();
       })
@@ -668,7 +1217,7 @@ const app = {
       });
   },
 
-  // === Fetch registration counts (pigeon count per event) ===
+  // === Fetch registration counts ===
   fetchRegistrationCounts() {
     return fetchWithAuth(`${API_URL}/events/registrations-summary`)
       .then((res) => {
@@ -705,6 +1254,16 @@ const app = {
     if (view === "admin-events") this.renderEvents();
     if (view === "results") this.initResultsView();
     if (view === "logs") this.renderLogs();
+    if (view === "sticker-generator") {
+      this.populateStickerSelector(this.allEvents);
+      // If there's a selected event in the register modal, pre-select it
+      const regCode = document.getElementById("register-event-code")?.value;
+      if (regCode) {
+        const select = document.getElementById("sticker-event-select");
+        if (select) select.value = regCode;
+        setTimeout(() => this.loadStickersForEvent(), 300);
+      }
+    }
 
     if (view === "dashboard" || view === "results") {
       this.startAutoRefresh();
@@ -773,7 +1332,6 @@ const app = {
         if (!Array.isArray(events)) events = [];
         if (!Array.isArray(summary)) summary = [];
 
-        // Store registration counts (pigeon count per event)
         this.registrationCounts = {};
         summary.forEach((item) => {
           this.registrationCounts[item.eventId] = item.pigeonCount || 0;
@@ -787,7 +1345,6 @@ const app = {
         const table = document.querySelector("#active-events-table");
         const isAdmin = this.currentUser.role === "admin";
 
-        // Build header
         const thead = document.createElement("thead");
         const headerRow = document.createElement("tr");
         if (isAdmin) {
@@ -934,7 +1491,6 @@ const app = {
         return res.json();
       })
       .then((stats) => {
-        // Update the stats card in the profile view
         document.getElementById("stats-total-pigeons").textContent =
           stats.totalPigeons;
         document.getElementById("stats-events").textContent =
@@ -947,8 +1503,6 @@ const app = {
           stats.bestSpeed.toFixed(2);
         document.getElementById("stats-win-rate").textContent =
           stats.winRate.toFixed(1) + "%";
-
-        // Show the stats container
         document
           .getElementById("player-stats-container")
           .classList.remove("hidden");
@@ -1017,7 +1571,6 @@ const app = {
   },
 
   initResultsView() {
-    // Fetch events if needed, then fetch registration counts and setup the view
     const loadData = () => {
       return this.fetchAllEvents()
         .then(() => this.fetchRegistrationCounts())
@@ -1032,7 +1585,6 @@ const app = {
     if (this.allEvents.length === 0) {
       loadData();
     } else {
-      // If events already exist, still ensure registration counts are loaded
       if (Object.keys(this.registrationCounts).length === 0) {
         this.fetchRegistrationCounts().then(() => this.setupResultsView());
       } else {
@@ -1045,19 +1597,16 @@ const app = {
     this.eventLookup = {};
     events.forEach((e) => {
       this.eventLookup[e.code] = e;
-      if (e.codes && e.codes.length > 0) {
-        e.codes.forEach((c) => {
-          this.eventLookup[c] = e;
-        });
-      }
     });
   },
 
   setupResultsView() {
-    // No dynamic search bar creation – we use the static one in HTML.
-    // Just set the initial event and render.
     if (this.allEvents.length > 0) {
-      this.selectedEventCode = this.allEvents[0].code;
+      // If there's a search filter, we don't auto-select; just show the list
+      // But for initial load, pick the first event
+      if (!this.selectedEventCode) {
+        this.selectedEventCode = this.allEvents[0].code;
+      }
       this.renderResults();
     } else {
       this.selectedEventCode = null;
@@ -1065,22 +1614,34 @@ const app = {
     }
   },
 
+  // ===== FILTER RESULTS (without auto-select) =====
   filterResults() {
     const searchTerm = document
       .getElementById("result-search-input")
       .value.toLowerCase()
       .trim();
+
+    // If search is empty, show all events in dropdown and reset selection?
+    // Instead, we just update the dropdown list (the user must click to select)
+    // We'll repopulate the dropdown with filtered events and keep the current selection if it's still valid.
     const filteredEvents = this.allEvents.filter((e) => {
       const nameMatch = e.name.toLowerCase().includes(searchTerm);
       const codeMatch = e.code.toLowerCase().includes(searchTerm);
-      const codesMatch =
-        e.codes && e.codes.some((c) => c.toLowerCase().includes(searchTerm));
-      return nameMatch || codeMatch || codesMatch;
+      return nameMatch || codeMatch;
     });
-    if (filteredEvents.length > 0) {
-      this.selectedEventCode = filteredEvents[0].code;
-    } else {
+
+    // Update the dropdown (or the list) – but we don't have a dropdown in results view; we have a search input.
+    // The current implementation in renderResults() uses the selectedEventCode.
+    // We'll just set selectedEventCode to the first filtered if the current is not in the list.
+    if (filteredEvents.length === 0) {
+      // No matches, we can show a message or keep the current selection?
+      // We'll clear the selectedEventCode to show "no results"
       this.selectedEventCode = null;
+    } else {
+      // If the current selection is not in the filtered list, pick the first.
+      if (!filteredEvents.some((e) => e.code === this.selectedEventCode)) {
+        this.selectedEventCode = filteredEvents[0].code;
+      }
     }
     this.renderResults();
   },
@@ -1093,9 +1654,8 @@ const app = {
     this.renderResults();
   },
 
-  // ===== renderResults with fixed const bug + rendering lock =====
+  // ===== renderResults with fixes =====
   async renderResults() {
-    // Prevent overlapping requests
     if (this._isRendering) return;
     this._isRendering = true;
 
@@ -1104,19 +1664,16 @@ const app = {
 
       if (!this.selectedEventCode) {
         tbody.innerHTML = "";
-        // Clear all analytics sections
         this.clearAnalyticsSections();
         this._isRendering = false;
         return;
       }
 
-      // Refresh event data if older than 10 seconds
       if (Date.now() - this._lastEventsFetch > 10000) {
         await this.fetchAllEvents();
       }
 
       const event = this.eventLookup[this.selectedEventCode];
-      // Populate Race Information Bar
       if (event) {
         document.getElementById("race-name").textContent = event.name;
         document.getElementById("race-release-point").innerHTML =
@@ -1130,7 +1687,6 @@ const app = {
         statusBadge.textContent = event.status;
         statusBadge.className = `race-status-badge ${status}`;
       } else {
-        // Clear info bar if no event
         document.getElementById("race-name").textContent = "—";
         document.getElementById("race-release-point").innerHTML =
           '<span class="coord">—</span>';
@@ -1143,11 +1699,9 @@ const app = {
         `${API_URL}/results/${this.selectedEventCode}`,
       );
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      // FIX: Use 'let' so we can reassign if needed
       let results = await res.json();
       if (!Array.isArray(results)) results = [];
 
-      // Clear tbody
       tbody.innerHTML = "";
       if (results.length === 0) {
         const tr = document.createElement("tr");
@@ -1159,13 +1713,11 @@ const app = {
         td.textContent = "No results yet for this event.";
         tr.appendChild(td);
         tbody.appendChild(tr);
-        // Clear analytics
         this.clearAnalyticsSections();
         this._isRendering = false;
         return;
       }
 
-      // ---- Safely convert values ----
       const safeResults = results.map((r) => ({
         ...r,
         distanceKm: toNumber(r.distanceKm),
@@ -1174,7 +1726,6 @@ const app = {
         arrivalTime: new Date(r.arrivalTime),
       }));
 
-      // ---- Populate Champion Card ----
       const winner = safeResults[0];
       document.getElementById("champion-name").textContent = winner.userName;
       document.getElementById("champion-code").textContent = winner.clockInCode;
@@ -1185,7 +1736,6 @@ const app = {
       document.getElementById("champion-distance").innerHTML =
         `${winner.distanceKm.toFixed(2)} <span class="unit">km</span>`;
 
-      // ---- Race Statistics ----
       const clocked = safeResults.length;
       const totalRegistered =
         this.registrationCounts[this.selectedEventCode] || 0;
@@ -1227,7 +1777,7 @@ const app = {
       document.getElementById("stat-winning-margin").innerHTML =
         `${winningMargin.toFixed(2)} <span class="unit">m/min</span>`;
 
-      // ---- Live Highlights ----
+      // Highlights
       const fastest =
         safeResults.length > 0
           ? safeResults.reduce((a, b) => (a.speedMPM > b.speedMPM ? a : b))
@@ -1272,10 +1822,9 @@ const app = {
         ? `${highestSpeed.speedMPM.toFixed(2)} <span class="unit">m/min</span>`
         : "—";
 
-      // ---- Populate Table ----
+      // Table rows
       safeResults.forEach((r, i) => {
         const tr = document.createElement("tr");
-        // Rank
         const tdRank = document.createElement("td");
         tdRank.setAttribute("data-label", "Rank");
         let rankClass = "";
@@ -1294,27 +1843,27 @@ const app = {
         }
         tdRank.className = rankClass;
         tr.appendChild(tdRank);
-        // Player
+
         const tdPlayer = document.createElement("td");
         tdPlayer.setAttribute("data-label", "Player");
         tdPlayer.textContent = r.userName;
         tr.appendChild(tdPlayer);
-        // Air Dist
+
         const tdDist = document.createElement("td");
         tdDist.setAttribute("data-label", "Air Dist");
         tdDist.textContent = r.distanceKm + " km";
         tr.appendChild(tdDist);
-        // Arrival
+
         const tdArr = document.createElement("td");
         tdArr.setAttribute("data-label", "Arr");
         tdArr.textContent = r.arrivalTime.toLocaleTimeString();
         tr.appendChild(tdArr);
-        // Flight Hours
+
         const tdFlight = document.createElement("td");
         tdFlight.setAttribute("data-label", "Flight Hrs");
         tdFlight.textContent = formatFlightHours(r.flightTimeHours);
         tr.appendChild(tdFlight);
-        // Speed
+
         const tdSpeed = document.createElement("td");
         tdSpeed.setAttribute("data-label", "Speed m/min");
         tdSpeed.className = "speed-cell";
@@ -1344,7 +1893,6 @@ const app = {
   },
 
   clearAnalyticsSections() {
-    // Reset champion
     document.getElementById("champion-name").textContent = "—";
     document.getElementById("champion-code").textContent = "—";
     document.getElementById("champion-speed").innerHTML =
@@ -1353,7 +1901,6 @@ const app = {
     document.getElementById("champion-distance").innerHTML =
       '— <span class="unit">km</span>';
 
-    // Reset stats
     document.getElementById("stat-released").textContent = "0";
     document.getElementById("stat-clocked").textContent = "0";
     document.getElementById("stat-missing").textContent = "0";
@@ -1369,7 +1916,6 @@ const app = {
     document.getElementById("stat-winning-margin").innerHTML =
       '0.00 <span class="unit">m/min</span>';
 
-    // Reset highlights
     document.getElementById("hl-fastest-bird").textContent = "—";
     document.getElementById("hl-first-arrival").textContent = "—";
     document.getElementById("hl-last-arrival").textContent = "—";
@@ -1416,7 +1962,6 @@ const app = {
       .then((users) => {
         if (!Array.isArray(users)) users = [];
         this.allPlayers = users;
-        // No dynamic search bar creation – use static one.
         this.filterPlayers();
       })
       .catch((err) => {
@@ -1442,27 +1987,26 @@ const app = {
     tbody.innerHTML = "";
     filtered.forEach((u) => {
       const tr = document.createElement("tr");
-      // ID
       const tdId = document.createElement("td");
       tdId.setAttribute("data-label", "ID");
       tdId.textContent = u.id;
       tr.appendChild(tdId);
-      // Name
+
       const tdName = document.createElement("td");
       tdName.setAttribute("data-label", "Name");
       tdName.textContent = u.name;
       tr.appendChild(tdName);
-      // Lat/Lng
+
       const tdLoc = document.createElement("td");
       tdLoc.setAttribute("data-label", "Lat/Lng");
       tdLoc.textContent = `${u.lat.toFixed(6)}, ${u.lng.toFixed(6)}`;
       tr.appendChild(tdLoc);
-      // Contact
+
       const tdContact = document.createElement("td");
       tdContact.setAttribute("data-label", "Contact");
       tdContact.textContent = u.contact;
       tr.appendChild(tdContact);
-      // Actions
+
       const tdActions = document.createElement("td");
       tdActions.setAttribute("data-label", "Actions");
       const editBtn = document.createElement("button");
@@ -1788,30 +2332,29 @@ const app = {
             summary.forEach((item) => {
               summaryMap[item.eventId] = item.playerCount || 0;
             });
-            this.renderEventTable(events, summaryMap);
+            this._eventsWithSummary = events.map((e) => ({
+              ...e,
+              playerCount: summaryMap[e.code] || 0,
+            }));
+            this.filterEvents();
           })
           .catch((err) => {
             console.warn(
               "Failed to fetch registration summary, showing 0 players",
               err,
             );
-            const emptyMap = {};
-            this.renderEventTable(events, emptyMap);
+            this._eventsWithSummary = events.map((e) => ({
+              ...e,
+              playerCount: 0,
+            }));
+            this.filterEvents();
           });
       })
       .catch((err) => {
         console.error("Events error:", err);
-        this.renderEventTable([], {});
+        this._eventsWithSummary = [];
+        this.filterEvents();
       });
-  },
-
-  renderEventTable(events, summaryMap) {
-    // No dynamic search bar – use static one.
-    this._eventsWithSummary = events.map((e) => ({
-      ...e,
-      playerCount: summaryMap[e.code] || 0,
-    }));
-    this.filterEvents();
   },
 
   filterEvents() {
@@ -1823,10 +2366,7 @@ const app = {
       ? this._eventsWithSummary.filter((e) => {
           const nameMatch = e.name.toLowerCase().includes(searchTerm);
           const codeMatch = e.code.toLowerCase().includes(searchTerm);
-          const codesMatch =
-            e.codes &&
-            e.codes.some((c) => c.toLowerCase().includes(searchTerm));
-          return nameMatch || codeMatch || codesMatch;
+          return nameMatch || codeMatch;
         })
       : [];
 
@@ -1834,42 +2374,41 @@ const app = {
     tbody.innerHTML = "";
     filtered.forEach((e) => {
       const tr = document.createElement("tr");
-      // Players
       const tdPlayers = document.createElement("td");
       tdPlayers.setAttribute("data-label", "Players");
       tdPlayers.textContent = e.playerCount;
       tr.appendChild(tdPlayers);
-      // Name
+
       const tdName = document.createElement("td");
       tdName.setAttribute("data-label", "Name");
       tdName.textContent = e.name;
       tr.appendChild(tdName);
-      // Point
+
       const tdPoint = document.createElement("td");
       tdPoint.setAttribute("data-label", "Point");
       tdPoint.textContent = `${e.lat.toFixed(6)}, ${e.lng.toFixed(6)}`;
       tr.appendChild(tdPoint);
-      // Actions
+
       const tdActions = document.createElement("td");
       tdActions.setAttribute("data-label", "Actions");
-      // Register button
       const regBtn = document.createElement("button");
       regBtn.className = "btn btn-primary btn-sm";
       regBtn.textContent = "📝 Register Players";
       regBtn.onclick = () => app.openRegisterModal(e.code);
       tdActions.appendChild(regBtn);
-      // Toggle button
+
       const toggleBtn = document.createElement("button");
       toggleBtn.className = "btn btn-danger btn-sm";
       toggleBtn.textContent = e.status === "Active" ? "🔒 Close" : "🔓 Re-open";
       toggleBtn.onclick = () => app.toggleEvent(e.code);
       tdActions.appendChild(toggleBtn);
-      // Delete button
+
       const delBtn = document.createElement("button");
       delBtn.className = "btn btn-danger btn-sm";
       delBtn.textContent = "🗑️ Delete";
       delBtn.onclick = () => app.deleteEvent(e.code);
       tdActions.appendChild(delBtn);
+
       tr.appendChild(tdActions);
       tbody.appendChild(tr);
     });
@@ -1941,7 +2480,6 @@ const app = {
       });
   },
 
-  // ========== FIXED: XSS-safe registration table ==========
   updateRegistrationTable() {
     const tbody = document.querySelector("#registrations-table tbody");
     if (!tbody) return;
@@ -1950,15 +2488,12 @@ const app = {
     if (this.currentRegistrations && this.currentRegistrations.length > 0) {
       this.currentRegistrations.forEach((r) => {
         const tr = document.createElement("tr");
-
-        // Player name – safe with textContent
         const tdPlayer = document.createElement("td");
         const strong = document.createElement("strong");
         strong.textContent = r.userName;
         tdPlayer.appendChild(strong);
         tr.appendChild(tdPlayer);
 
-        // Codes and badges – build with DOM methods
         const tdCodes = document.createElement("td");
         r.codes.forEach((code, idx) => {
           const status = r.statuses[idx];
@@ -1982,7 +2517,6 @@ const app = {
         });
         tr.appendChild(tdCodes);
 
-        // Status summary
         const tdStatus = document.createElement("td");
         const total = r.codes.length;
         const used = r.statuses.filter((s) => s === "used").length;
@@ -2437,82 +2971,7 @@ const app = {
   },
 };
 
-// ===== Patch Sticker Generator =====
-document.addEventListener("DOMContentLoaded", function () {
-  setTimeout(() => {
-    if (window.StickerGenerator) {
-      window.StickerGenerator.loadEventData = async function (eventId) {
-        try {
-          const res = await fetchWithAuth(
-            `${API_URL}/events/${eventId}/registrations`,
-          );
-          if (!res.ok) throw new Error("Failed to fetch registrations");
-          const registrations = await res.json();
-          const stickers = [];
-          for (const reg of registrations) {
-            const playerName = reg.userName || "Player";
-            for (let i = 0; i < reg.codes.length; i++) {
-              stickers.push({
-                playerName: playerName,
-                code: reg.codes[i],
-                status: reg.statuses ? reg.statuses[i] : "unused",
-              });
-            }
-          }
-          const eventRes = await fetchWithAuth(`${API_URL}/events/all`);
-          const events = await eventRes.json();
-          const evt = events.find((e) => e.code === eventId);
-          if (evt) {
-            window.StickerGenerator.state.eventName = evt.name;
-            window.StickerGenerator.state.eventId = eventId;
-          }
-          window.StickerGenerator.state.stickers = stickers;
-          return stickers;
-        } catch (e) {
-          console.error("Load sticker data error:", e);
-          throw e;
-        }
-      };
-      window.StickerGenerator.generateAndRender = async function (eventId) {
-        if (window.StickerGenerator.state.isGenerating) return;
-        window.StickerGenerator.state.isGenerating = true;
-        try {
-          const stickers = await this.loadEventData(eventId);
-          if (!stickers || stickers.length === 0) {
-            document.getElementById("sticker-grid-container").innerHTML = `
-              <div class="sticker-empty-state">
-                <i class="fas fa-inbox" style="font-size:56px; display:block; margin-bottom:12px; color:#ccc;"></i>
-                <h3>No Registered Pigeons</h3>
-                <p>This event has no registered pigeons. Register players first.</p>
-              </div>
-            `;
-            document.getElementById("sticker-total-count").textContent =
-              "0 stickers";
-            window.StickerGenerator.state.isGenerating = false;
-            return;
-          }
-          await window.StickerGenerator.renderAllStickers(
-            stickers,
-            window.StickerGenerator.state.widthMm,
-          );
-        } catch (e) {
-          console.error("Generate stickers error:", e);
-          app.showModal({
-            title: "Generation Failed",
-            message:
-              e.message || "Failed to generate stickers. Please try again.",
-            icon: "❌",
-            iconColor: "#c0392b",
-          });
-        } finally {
-          window.StickerGenerator.state.isGenerating = false;
-        }
-      };
-      console.log("✅ Sticker generator patched with fetchWithAuth");
-    }
-  }, 500);
-});
-
+// ===== Service Worker =====
 if ("serviceWorker" in navigator) {
   navigator.serviceWorker
     .register("./sw.js")

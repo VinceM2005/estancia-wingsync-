@@ -6,10 +6,11 @@ const bcrypt = require("bcrypt");
 const jwt = require("jsonwebtoken");
 const { body, validationResult, matchedData } = require("express-validator");
 const rateLimit = require("express-rate-limit");
+const helmet = require("helmet"); // NEW
 
 const app = express();
 
-// ===== CORS – restricted to frontend domain(s) =====
+// ===== CORS =====
 const allowedOrigins = process.env.FRONTEND_URL
   ? process.env.FRONTEND_URL.split(",").map((url) => url.trim())
   : ["http://localhost:5173", "http://localhost:3000", "http://localhost:5500"];
@@ -28,6 +29,7 @@ app.use(
   }),
 );
 
+app.use(helmet()); // NEW – security headers
 app.use(express.json({ limit: "10mb" }));
 
 // ===== RATE LIMITING =====
@@ -99,13 +101,13 @@ const UserSchema = new mongoose.Schema({
 
 const EventSchema = new mongoose.Schema({
   code: { type: String, required: true, unique: true },
-  codes: [{ type: String }],
   name: { type: String, required: true },
   releaseTime: { type: Date, required: true },
   status: { type: String, default: "Active", enum: ["Active", "Closed"] },
   lat: { type: Number, required: true, min: -90, max: 90 },
   lng: { type: Number, required: true, min: -180, max: 180 },
 });
+// removed unused 'codes' field
 
 const RaceCodeSchema = new mongoose.Schema({
   eventId: { type: String, required: true, index: true },
@@ -115,7 +117,7 @@ const RaceCodeSchema = new mongoose.Schema({
   generatedAt: { type: Date, default: Date.now },
   usedAt: { type: Date },
 });
-RaceCodeSchema.index({ eventId: 1, userId: 1, status: 1 });
+RaceCodeSchema.index({ eventId: 1, userId: 1, status: 1 }); // compound index for speed
 
 const CounterSchema = new mongoose.Schema({
   eventId: { type: String, required: true },
@@ -157,7 +159,7 @@ const Counter = mongoose.model("Counter", CounterSchema);
 const Result = mongoose.model("Result", ResultSchema);
 const Log = mongoose.model("Log", LogSchema);
 
-// ===== HELPER: Hash password =====
+// ===== HELPER =====
 const saltRounds = 10;
 async function hashPassword(plain) {
   return bcrypt.hash(plain, saltRounds);
@@ -201,7 +203,6 @@ async function seedDatabase() {
       ]);
       await Event.create({
         code: "EST2026",
-        codes: ["EST2026"],
         name: "Estancia Opening Race",
         releaseTime: new Date(Date.now() - 6 * 60 * 60 * 1000),
         status: "Active",
@@ -231,7 +232,6 @@ function authenticateToken(req, res, next) {
   });
 }
 
-// ===== ADMIN MIDDLEWARE (NEW) =====
 const requireAdmin = (req, res, next) => {
   if (req.user.role !== "admin") {
     return res.status(403).json({ error: "Admin access required." });
@@ -301,7 +301,6 @@ app.post("/api/login", loginLimiter, validateLogin, async (req, res) => {
   }
 });
 
-// Server Time (public)
 let timeApiFailed = false;
 app.get("/api/time", async (req, res) => {
   try {
@@ -323,7 +322,6 @@ app.get("/api/time", async (req, res) => {
 });
 
 // ===== PROTECTED ROUTES =====
-// All routes under /api require authentication (authenticateToken)
 app.use("/api", authenticateToken);
 
 // GET active events
@@ -557,7 +555,6 @@ app.post(
         });
       }
 
-      // 1. Atomically mark the race code as "used" – but we may revert later.
       const raceCode = await RaceCode.findOneAndUpdate(
         { code: eventCode, status: "unused" },
         { status: "used", usedAt: new Date() },
@@ -607,13 +604,11 @@ app.post(
         return res.status(400).json({ error: "Event is not active" });
       }
 
-      // Get total codes for this user/event
       const totalCodes = await RaceCode.countDocuments({
         eventId: event.code,
         userId,
       }).session(session);
 
-      // Find or create counter
       let counter = await Counter.findOne({
         eventId: event.code,
         userId: userId,
@@ -628,7 +623,6 @@ app.post(
         await counter.save({ session });
       }
 
-      // Check if the player has already clocked all pigeons
       if (counter.count >= totalCodes) {
         await RaceCode.updateOne(
           { _id: raceCode._id },
@@ -642,12 +636,10 @@ app.post(
         });
       }
 
-      // Increment the counter
       counter.count += 1;
       await counter.save({ session });
       const newCount = counter.count;
 
-      // Validate time
       const release = new Date(event.releaseTime);
       const arrival = new Date(arrivalTime);
       if (isNaN(release.getTime()) || isNaN(arrival.getTime())) {
@@ -762,9 +754,7 @@ app.post(
 // RESULTS
 app.get("/api/results/:eventCode", async (req, res) => {
   try {
-    const event = await Event.findOne({
-      $or: [{ code: req.params.eventCode }, { codes: req.params.eventCode }],
-    });
+    const event = await Event.findOne({ code: req.params.eventCode });
     if (!event) return res.json([]);
     const results = await Result.find({ eventId: event.code })
       .sort({ speedMPM: -1 })
@@ -791,8 +781,9 @@ app.get("/api/logs", async (req, res) => {
   }
 });
 
-// ===== PLAYERS CRUD (SECURED WITH requireAdmin) =====
-app.get("/api/users/players", async (req, res) => {
+// ===== PLAYERS CRUD =====
+// SECURE: now requireAdmin for GET all players
+app.get("/api/users/players", requireAdmin, async (req, res) => {
   try {
     const users = await User.find({ role: "player" }).select("-passwordHash");
     res.json(users);
@@ -819,7 +810,6 @@ app.get("/api/users/player/:id", async (req, res) => {
   }
 });
 
-// SECURE: CREATE PLAYER (Admin only)
 app.post(
   "/api/users/player",
   requireAdmin,
@@ -860,7 +850,6 @@ app.post(
   },
 );
 
-// SECURE: UPDATE PLAYER (Admin only)
 app.put(
   "/api/users/player/:id",
   requireAdmin,
@@ -915,7 +904,6 @@ app.put(
   },
 );
 
-// SECURE: DELETE PLAYER (Admin only)
 app.delete("/api/users/player/:id", requireAdmin, async (req, res) => {
   try {
     const { id } = req.params;
@@ -944,8 +932,7 @@ app.delete("/api/users/player/:id", requireAdmin, async (req, res) => {
   }
 });
 
-// ===== EVENT MANAGEMENT (SECURED WITH requireAdmin) =====
-// SECURE: DELETE EVENT (Admin only)
+// ===== EVENT MANAGEMENT =====
 app.delete("/api/events/:code", requireAdmin, async (req, res) => {
   try {
     const { code } = req.params;
@@ -969,7 +956,6 @@ app.delete("/api/events/:code", requireAdmin, async (req, res) => {
   }
 });
 
-// SECURE: CREATE EVENT (Admin only)
 app.post(
   "/api/events",
   requireAdmin,
@@ -999,7 +985,6 @@ app.post(
 
       const event = await Event.create({
         code: dummyCode,
-        codes: [dummyCode],
         name: name.trim(),
         releaseTime: new Date(releaseTime),
         status: "Active",
@@ -1022,7 +1007,6 @@ app.post(
   },
 );
 
-// SECURE: TOGGLE EVENT (Admin only)
 app.put("/api/events/:code/toggle", requireAdmin, async (req, res) => {
   try {
     const event = await Event.findOne({ code: req.params.code });
@@ -1044,7 +1028,7 @@ app.put("/api/events/:code/toggle", requireAdmin, async (req, res) => {
   }
 });
 
-// ===== UPDATE PASSWORD (with ownership check) =====
+// ===== UPDATE PASSWORD =====
 app.put(
   "/api/users/update-password",
   [
@@ -1061,7 +1045,6 @@ app.put(
       }
       const { userId, newPassword } = matchedData(req);
 
-      // 🔐 Verify that the requester is either the owner or an admin
       if (req.user.id !== userId && req.user.role !== "admin") {
         return res
           .status(403)
@@ -1087,6 +1070,77 @@ app.put(
     }
   },
 );
+
+// ===== PLAYER STATS =====
+app.get("/api/users/player/:id/stats", authenticateToken, async (req, res) => {
+  try {
+    const { id } = req.params;
+    if (req.user.id !== id && req.user.role !== "admin") {
+      return res.status(403).json({ error: "Forbidden" });
+    }
+
+    const user = await User.findOne({ id });
+    if (!user) return res.status(404).json({ error: "Player not found" });
+
+    const results = await Result.find({ userId: id });
+    if (results.length === 0) {
+      return res.json({
+        userId: id,
+        userName: user.name,
+        totalPigeons: 0,
+        eventsParticipated: 0,
+        wins: 0,
+        podiums: 0,
+        averageSpeed: 0,
+        bestSpeed: 0,
+        winRate: 0,
+      });
+    }
+
+    const totalPigeons = results.length;
+    const eventIds = [...new Set(results.map((r) => r.eventId))];
+    const eventsParticipated = eventIds.length;
+    const speeds = results.map((r) => r.speedMPM);
+    const averageSpeed = speeds.reduce((a, b) => a + b, 0) / speeds.length;
+    const bestSpeed = Math.max(...speeds);
+
+    let wins = 0;
+    let podiums = 0;
+
+    for (const eventId of eventIds) {
+      const eventResults = await Result.find({ eventId })
+        .sort({ speedMPM: -1 })
+        .lean();
+
+      if (eventResults.length === 0) continue;
+
+      const userIndex = eventResults.findIndex((r) => r.userId === id);
+
+      if (userIndex === 0) wins++;
+      if (userIndex >= 0 && userIndex < 3) podiums++;
+    }
+
+    const winRate =
+      eventsParticipated > 0 ? (wins / eventsParticipated) * 100 : 0;
+
+    res.json({
+      userId: id,
+      userName: user.name,
+      totalPigeons,
+      eventsParticipated,
+      wins,
+      podiums,
+      averageSpeed: parseFloat(averageSpeed.toFixed(4)),
+      bestSpeed: parseFloat(bestSpeed.toFixed(4)),
+      winRate: parseFloat(winRate.toFixed(1)),
+    });
+  } catch (error) {
+    console.error("Player stats error:", error);
+    res
+      .status(500)
+      .json({ error: "An internal error occurred. Please try again later." });
+  }
+});
 
 // ===== HELPERS =====
 function calculateDistance(lat1, lon1, lat2, lon2) {
@@ -1136,81 +1190,12 @@ async function getUniqueRaceCode() {
   return code;
 }
 
-// ===== PLAYER STATS =====
-app.get("/api/users/player/:id/stats", authenticateToken, async (req, res) => {
-  try {
-    const { id } = req.params;
-    // Allow users to view only their own stats, or admins to view any
-    if (req.user.id !== id && req.user.role !== "admin") {
-      return res.status(403).json({ error: "Forbidden" });
-    }
-
-    const user = await User.findOne({ id });
-    if (!user) return res.status(404).json({ error: "Player not found" });
-
-    // 1. Get all results for this user
-    const results = await Result.find({ userId: id });
-    if (results.length === 0) {
-      return res.json({
-        userId: id,
-        userName: user.name,
-        totalPigeons: 0,
-        eventsParticipated: 0,
-        wins: 0,
-        podiums: 0,
-        averageSpeed: 0,
-        bestSpeed: 0,
-        winRate: 0,
-      });
-    }
-
-    // 2. Basic stats
-    const totalPigeons = results.length;
-    const eventIds = [...new Set(results.map((r) => r.eventId))];
-    const eventsParticipated = eventIds.length;
-    const speeds = results.map((r) => r.speedMPM);
-    const averageSpeed = speeds.reduce((a, b) => a + b, 0) / speeds.length;
-    const bestSpeed = Math.max(...speeds);
-
-    // 3. Calculate Wins (1st place) and Podiums (Top 3)
-    let wins = 0;
-    let podiums = 0;
-
-    for (const eventId of eventIds) {
-      // Get all results for this event, sorted by speed (descending)
-      const eventResults = await Result.find({ eventId })
-        .sort({ speedMPM: -1 })
-        .lean();
-
-      if (eventResults.length === 0) continue;
-
-      // Find this user's rank in this event
-      const userIndex = eventResults.findIndex((r) => r.userId === id);
-
-      if (userIndex === 0) wins++; // 1st place
-      if (userIndex >= 0 && userIndex < 3) podiums++; // Top 3
-    }
-
-    const winRate =
-      eventsParticipated > 0 ? (wins / eventsParticipated) * 100 : 0;
-
-    res.json({
-      userId: id,
-      userName: user.name,
-      totalPigeons,
-      eventsParticipated,
-      wins,
-      podiums,
-      averageSpeed: parseFloat(averageSpeed.toFixed(4)),
-      bestSpeed: parseFloat(bestSpeed.toFixed(4)),
-      winRate: parseFloat(winRate.toFixed(1)),
-    });
-  } catch (error) {
-    console.error("Player stats error:", error);
-    res
-      .status(500)
-      .json({ error: "An internal error occurred. Please try again later." });
-  }
+// ===== GLOBAL ERROR HANDLER (NEW) =====
+app.use((err, req, res, next) => {
+  console.error("Global error:", err.stack || err);
+  res.status(500).json({
+    error: "An unexpected error occurred. Please try again later.",
+  });
 });
 
 // ===== START SERVER =====

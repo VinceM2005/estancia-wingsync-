@@ -1,4 +1,4 @@
-const CACHE_NAME = "wingsync-v4"; // Increment on every deployment
+const CACHE_NAME = "wingsync-v6"; // Increment on every deployment
 const urlsToCache = ["/index.html", "/app.js", "/style.css", "/manifest.json"];
 
 self.addEventListener("install", (event) => {
@@ -21,7 +21,6 @@ self.addEventListener("activate", (event) => {
     caches
       .keys()
       .then((cacheNames) => {
-        // Delete old caches that are not the current version
         return Promise.all(
           cacheNames
             .filter((cacheName) => cacheName !== CACHE_NAME)
@@ -29,13 +28,17 @@ self.addEventListener("activate", (event) => {
         );
       })
       .then(() => {
-        // Take control of all clients immediately
         return clients.claim();
       }),
   );
 });
 
 self.addEventListener("fetch", (event) => {
+  // Ignore chrome-extension requests
+  if (event.request.url.startsWith("chrome-extension://")) {
+    return;
+  }
+
   if (event.request.method !== "GET") {
     event.respondWith(fetch(event.request));
     return;
