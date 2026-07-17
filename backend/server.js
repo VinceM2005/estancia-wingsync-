@@ -303,6 +303,11 @@ app.post("/api/login", loginLimiter, validateLogin, async (req, res) => {
 
 let timeApiFailed = false;
 app.get("/api/time", async (req, res) => {
+  // Prevent any caching
+  res.setHeader("Cache-Control", "no-cache, no-store, must-revalidate");
+  res.setHeader("Pragma", "no-cache");
+  res.setHeader("Expires", "0");
+
   try {
     const response = await fetch(
       "https://worldtimeapi.org/api/timezone/Asia/Manila",

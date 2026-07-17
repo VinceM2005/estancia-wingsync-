@@ -303,7 +303,7 @@ const app = {
   selectedEventCode: null,
   currentRegistrations: [],
   registrationCounts: {},
-  _eventsWithSummary: [], // FIXED: initialized as empty array
+  _eventsWithSummary: [],
 
   refreshIntervalId: null,
   serverTimeOffset: 0,
@@ -313,8 +313,9 @@ const app = {
 
   init() {
     this.loadTheme();
+    this.setupVisibilityListener(); // ADD THIS LINE
     this.syncServerTime();
-    setInterval(() => this.syncServerTime(), 10000);
+    setInterval(() => this.syncServerTime(), 30000); // reduced to 30s
 
     const sessionStr = sessionStorage.getItem("wingsync_user");
     const token = sessionStorage.getItem("wingsync_token");
@@ -323,7 +324,6 @@ const app = {
       this.showApp();
     }
 
-    // Sticker generator initialization (moved inside app)
     this.initStickerGenerator();
   },
 
@@ -894,6 +894,26 @@ const app = {
     };
   },
 
+  // ===== VISIBILITY LISTENER (NEW) =====
+  setupVisibilityListener() {
+    document.addEventListener("visibilitychange", () => {
+      if (!document.hidden) {
+        console.log("👁️ Tab became visible – refreshing data");
+        const currentView = document.querySelector(
+          ".view-section:not(.hidden)",
+        );
+        if (currentView) {
+          const id = currentView.id;
+          if (id === "view-dashboard") this.renderDashboard();
+          else if (id === "view-results") this.renderResults();
+          else if (id === "view-admin-events") this.renderEvents();
+          else if (id === "view-admin-players") this.renderPlayers();
+        }
+        this.updateClockDisplay();
+      }
+    });
+  },
+
   // ===== SERVER TIME SYNC =====
   syncServerTime() {
     const clientTime = Date.now();
@@ -904,7 +924,21 @@ const app = {
       })
       .then((data) => {
         const serverTime = new Date(data.time).getTime();
-        this.serverTimeOffset = serverTime - clientTime;
+        const newOffset = serverTime - clientTime;
+
+        const previousOffset = this.serverTimeOffset;
+        if (
+          previousOffset !== undefined &&
+          Math.abs(newOffset - previousOffset) > 10000
+        ) {
+          console.warn(
+            `⚠️ Suspicious time sync – offset jumped from ${previousOffset}ms to ${newOffset}ms. Ignoring.`,
+          );
+          this.updateClockDisplay();
+          return;
+        }
+
+        this.serverTimeOffset = newOffset;
         if (Math.abs(this.serverTimeOffset) > 5000) {
           console.warn(
             `⚠️ Server time offset is ${this.serverTimeOffset}ms – check server clock.`,
@@ -1602,8 +1636,6 @@ const app = {
 
   setupResultsView() {
     if (this.allEvents.length > 0) {
-      // If there's a search filter, we don't auto-select; just show the list
-      // But for initial load, pick the first event
       if (!this.selectedEventCode) {
         this.selectedEventCode = this.allEvents[0].code;
       }
@@ -1621,24 +1653,15 @@ const app = {
       .value.toLowerCase()
       .trim();
 
-    // If search is empty, show all events in dropdown and reset selection?
-    // Instead, we just update the dropdown list (the user must click to select)
-    // We'll repopulate the dropdown with filtered events and keep the current selection if it's still valid.
     const filteredEvents = this.allEvents.filter((e) => {
       const nameMatch = e.name.toLowerCase().includes(searchTerm);
       const codeMatch = e.code.toLowerCase().includes(searchTerm);
       return nameMatch || codeMatch;
     });
 
-    // Update the dropdown (or the list) – but we don't have a dropdown in results view; we have a search input.
-    // The current implementation in renderResults() uses the selectedEventCode.
-    // We'll just set selectedEventCode to the first filtered if the current is not in the list.
     if (filteredEvents.length === 0) {
-      // No matches, we can show a message or keep the current selection?
-      // We'll clear the selectedEventCode to show "no results"
       this.selectedEventCode = null;
     } else {
-      // If the current selection is not in the filtered list, pick the first.
       if (!filteredEvents.some((e) => e.code === this.selectedEventCode)) {
         this.selectedEventCode = filteredEvents[0].code;
       }
