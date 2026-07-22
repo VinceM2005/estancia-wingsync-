@@ -962,15 +962,223 @@
         color: var(--text-muted);
       }
 
-      /* Scanner frame detection animation – Kubo Pro style */
+      /* ===== SCANNER FRAME – BASE ===== */
+      #qr-frame {
+        position: absolute;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+        width: 300px;
+        height: 300px;
+        border: 3px solid #00ff00;
+        border-radius: 16px;
+        pointer-events: none;
+        z-index: 10;
+        box-shadow: 0 0 25px rgba(0, 255, 0, 0.35);
+        transition: none; /* we use keyframes for the animation */
+      }
+
+      /* ===== CORNER BRACKETS ===== */
+      #qr-frame::before,
+      #qr-frame::after {
+        content: "";
+        position: absolute;
+        width: 22px;
+        height: 22px;
+        border-color: #00ff00;
+        border-style: solid;
+        border-width: 0;
+        opacity: 0;
+        transition: all 0.3s ease;
+        border-radius: 3px;
+      }
+
+      #qr-frame::before {
+        top: -2px;
+        left: -2px;
+        border-top-width: 4px;
+        border-left-width: 4px;
+      }
+
+      #qr-frame::after {
+        bottom: -2px;
+        right: -2px;
+        border-bottom-width: 4px;
+        border-right-width: 4px;
+      }
+
+      /* ===== SECOND PAIR OF CORNER BRACKETS (bottom-left & top-right) ===== */
+      #qr-frame .corner-bracket {
+        position: absolute;
+        width: 22px;
+        height: 22px;
+        border-color: #00ff00;
+        border-style: solid;
+        border-width: 0;
+        opacity: 0;
+        transition: all 0.3s ease;
+        border-radius: 3px;
+      }
+
+      #qr-frame .corner-bracket.bl {
+        bottom: -2px;
+        left: -2px;
+        border-bottom-width: 4px;
+        border-left-width: 4px;
+      }
+
+      #qr-frame .corner-bracket.tr {
+        top: -2px;
+        right: -2px;
+        border-top-width: 4px;
+        border-right-width: 4px;
+      }
+
+      /* ===== DETECTION ANIMATION – ZOOM & FOCUS ===== */
       #qr-frame.detected {
-        transform: translate(-50%, -50%) scale(1.15);
+        animation: focusZoom 0.85s ease forwards;
+      }
+
+      #qr-frame.detected::before,
+      #qr-frame.detected::after,
+      #qr-frame.detected .corner-bracket {
         border-color: #ffd700;
-        box-shadow: 0 0 40px rgba(255, 215, 0, 0.8);
-        transition:
-          transform 0.15s ease,
-          border-color 0.15s ease,
-          box-shadow 0.15s ease;
+        opacity: 1;
+      }
+
+      #qr-frame.detected::before {
+        animation: cornerSlideTL 0.55s ease forwards 0.1s;
+      }
+
+      #qr-frame.detected::after {
+        animation: cornerSlideBR 0.55s ease forwards 0.1s;
+      }
+
+      #qr-frame.detected .corner-bracket.bl {
+        animation: cornerSlideBL 0.55s ease forwards 0.15s;
+      }
+
+      #qr-frame.detected .corner-bracket.tr {
+        animation: cornerSlideTR 0.55s ease forwards 0.15s;
+      }
+
+      /* ===== KEYFRAMES ===== */
+      @keyframes focusZoom {
+        0% {
+          transform: translate(-50%, -50%) scale(1);
+          border-color: #00ff00;
+          box-shadow: 0 0 25px rgba(0, 255, 0, 0.35);
+        }
+        20% {
+          transform: translate(-50%, -50%) scale(1.45);
+          border-color: #ffd700;
+          box-shadow:
+            0 0 70px rgba(255, 215, 0, 0.95),
+            0 0 140px rgba(255, 215, 0, 0.4);
+        }
+        45% {
+          transform: translate(-50%, -50%) scale(1.2);
+          border-color: #ffd700;
+          box-shadow: 0 0 45px rgba(255, 215, 0, 0.7);
+        }
+        70% {
+          transform: translate(-50%, -50%) scale(1.05);
+          border-color: #ffd700;
+          box-shadow: 0 0 30px rgba(255, 215, 0, 0.4);
+        }
+        100% {
+          transform: translate(-50%, -50%) scale(1);
+          border-color: #00ff00;
+          box-shadow: 0 0 25px rgba(0, 255, 0, 0.35);
+        }
+      }
+
+      @keyframes cornerSlideTL {
+        0% {
+          top: -2px;
+          left: -2px;
+          width: 22px;
+          height: 22px;
+          opacity: 0;
+        }
+        40% {
+          opacity: 1;
+          width: 48px;
+          height: 48px;
+        }
+        100% {
+          top: 10px;
+          left: 10px;
+          width: 32px;
+          height: 32px;
+          opacity: 0.8;
+        }
+      }
+
+      @keyframes cornerSlideBR {
+        0% {
+          bottom: -2px;
+          right: -2px;
+          width: 22px;
+          height: 22px;
+          opacity: 0;
+        }
+        40% {
+          opacity: 1;
+          width: 48px;
+          height: 48px;
+        }
+        100% {
+          bottom: 10px;
+          right: 10px;
+          width: 32px;
+          height: 32px;
+          opacity: 0.8;
+        }
+      }
+
+      @keyframes cornerSlideBL {
+        0% {
+          bottom: -2px;
+          left: -2px;
+          width: 22px;
+          height: 22px;
+          opacity: 0;
+        }
+        40% {
+          opacity: 1;
+          width: 48px;
+          height: 48px;
+        }
+        100% {
+          bottom: 10px;
+          left: 10px;
+          width: 32px;
+          height: 32px;
+          opacity: 0.8;
+        }
+      }
+
+      @keyframes cornerSlideTR {
+        0% {
+          top: -2px;
+          right: -2px;
+          width: 22px;
+          height: 22px;
+          opacity: 0;
+        }
+        40% {
+          opacity: 1;
+          width: 48px;
+          height: 48px;
+        }
+        100% {
+          top: 10px;
+          right: 10px;
+          width: 32px;
+          height: 32px;
+          opacity: 0.8;
+        }
       }
     </style>
   </head>

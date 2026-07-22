@@ -330,7 +330,7 @@ const app = {
     this.initStickerGenerator();
   },
 
-  // ---------- QR SCANNER (with animated frame) ----------
+  // ---------- QR SCANNER (with animated frame + corner brackets) ----------
   openQRScanner() {
     if (typeof Html5Qrcode === "undefined") {
       this.showModal({
@@ -366,8 +366,11 @@ const app = {
       </div>
       <div style="position: relative; width: 100%;">
         <div id="qr-reader" style="width:100%;"></div>
-        <!-- Custom scanning frame -->
-        <div id="qr-frame" style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); width: 300px; height: 300px; border: 3px solid #00ff00; border-radius: 12px; pointer-events: none; transition: transform 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease; box-shadow: 0 0 20px rgba(0,255,0,0.3); z-index: 10;"></div>
+        <!-- Custom scanning frame with 4 corner brackets -->
+        <div id="qr-frame" style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); width: 300px; height: 300px; border: 3px solid #00ff00; border-radius: 16px; pointer-events: none; box-shadow: 0 0 25px rgba(0,255,0,0.35); z-index: 10;">
+          <span class="corner-bracket bl"></span>
+          <span class="corner-bracket tr"></span>
+        </div>
       </div>
       <div id="qr-reader-results" style="margin-top: 12px; font-size: 14px; color: #333; text-align:center;"></div>
       <button id="flashlight-btn" class="btn btn-secondary" style="margin-top:8px;">
@@ -411,11 +414,11 @@ const app = {
           document.getElementById("qr-reader-results").innerHTML =
             `✅ Decoded: <strong>${decodedText}</strong>`;
 
-          // Animate the frame (Kubo Pro style)
+          // Animate the frame (Kubo Pro style – zoom & focus)
           const frame = document.getElementById("qr-frame");
           if (frame) {
             frame.classList.add("detected");
-            setTimeout(() => frame.classList.remove("detected"), 400);
+            setTimeout(() => frame.classList.remove("detected"), 850);
           }
 
           setTimeout(() => {
@@ -435,7 +438,7 @@ const app = {
       });
   },
 
-  // ===== STICKER GENERATOR (fixed semicolon) =====
+  // ===== STICKER GENERATOR =====
   initStickerGenerator() {
     const state = {
       stickers: [],
@@ -446,7 +449,7 @@ const app = {
       eventName: "",
       isGenerating: false,
       canvasCache: [],
-    }; // <-- FIXED: semicolon, not comma
+    };
 
     const SCRATCH_WIDTH_MM = 22;
 
