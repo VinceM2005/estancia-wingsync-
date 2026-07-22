@@ -330,7 +330,7 @@ const app = {
     this.initStickerGenerator();
   },
 
-  // ---------- QR SCANNER (with animated frame + corner brackets) ----------
+  // ---------- QR SCANNER with Zoom & Focus ----------
   openQRScanner() {
     if (typeof Html5Qrcode === "undefined") {
       this.showModal({
@@ -373,6 +373,13 @@ const app = {
         </div>
       </div>
       <div id="qr-reader-results" style="margin-top: 12px; font-size: 14px; color: #333; text-align:center;"></div>
+      <!-- Zoom Controls -->
+      <div style="display: flex; align-items: center; gap: 8px; margin-top: 8px; flex-wrap: wrap;">
+        <label style="font-size:13px; font-weight:600; color:#333;">Zoom:</label>
+        <input type="range" id="zoom-slider" min="0.5" max="5.0" step="0.1" value="1.0" style="flex:1; min-width:120px;">
+        <span id="zoom-value" style="font-size:13px; font-weight:600; min-width:40px; text-align:center;">1.0×</span>
+        <button id="reset-zoom-btn" class="btn btn-sm btn-secondary" style="padding:4px 12px; font-size:12px;">⟲ Reset</button>
+      </div>
       <button id="flashlight-btn" class="btn btn-secondary" style="margin-top:8px;">
         <i class="fas fa-lightbulb"></i> Toggle Flash
       </button>
@@ -398,6 +405,47 @@ const app = {
       });
     }
 
+    // ----- Zoom Control -----
+    let videoTrack = null;
+    const zoomSlider = document.getElementById("zoom-slider");
+    const zoomValue = document.getElementById("zoom-value");
+    const resetZoomBtn = document.getElementById("reset-zoom-btn");
+
+    // Function to apply zoom
+    const applyZoom = async (zoomFactor) => {
+      if (!videoTrack) return;
+      try {
+        await videoTrack.applyConstraints({
+          advanced: [{ zoom: zoomFactor }],
+        });
+        zoomValue.textContent = zoomFactor.toFixed(1) + "×";
+      } catch (e) {
+        console.warn("Zoom not supported on this device", e);
+        // Fallback: show alert only once
+        if (!window._zoomWarningShown) {
+          window._zoomWarningShown = true;
+          app.showModal({
+            title: "Zoom Not Supported",
+            message:
+              "Your device camera does not support digital zoom. Try moving the camera closer to the QR code.",
+            icon: "⚠️",
+            iconColor: "#e67e22",
+          });
+        }
+      }
+    };
+
+    zoomSlider.addEventListener("input", () => {
+      const val = parseFloat(zoomSlider.value);
+      applyZoom(val);
+    });
+
+    resetZoomBtn.addEventListener("click", () => {
+      zoomSlider.value = "1.0";
+      applyZoom(1.0);
+    });
+
+    // ----- Start Scanner -----
     const config = {
       fps: 15,
       qrbox: { width: 300, height: 300 },
@@ -431,6 +479,24 @@ const app = {
         },
         () => {}, // ignore errors
       )
+      .then(() => {
+        // After camera starts, get video track for zoom control
+        const videoElement = document.querySelector("#qr-reader video");
+        if (videoElement && videoElement.srcObject) {
+          const tracks = videoElement.srcObject.getVideoTracks();
+          if (tracks.length > 0) {
+            videoTrack = tracks[0];
+            // Try to set continuous autofocus and initial zoom
+            try {
+              videoTrack.applyConstraints({
+                advanced: [{ focusMode: "continuous" }, { zoom: 1.0 }],
+              });
+            } catch (e) {
+              console.warn("Autofocus/zoom constraints not supported", e);
+            }
+          }
+        }
+      })
       .catch((err) => {
         console.error("QR scanner start error:", err);
         document.getElementById("qr-reader-results").innerHTML =
