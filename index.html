@@ -961,6 +961,17 @@
       .admin-search-bar input::placeholder {
         color: var(--text-muted);
       }
+
+      /* Scanner frame detection animation – Kubo Pro style */
+      #qr-frame.detected {
+        transform: translate(-50%, -50%) scale(1.15);
+        border-color: #ffd700;
+        box-shadow: 0 0 40px rgba(255, 215, 0, 0.8);
+        transition:
+          transform 0.15s ease,
+          border-color 0.15s ease,
+          box-shadow 0.15s ease;
+      }
     </style>
   </head>
   <body>

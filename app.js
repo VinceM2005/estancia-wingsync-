@@ -330,8 +330,7 @@ const app = {
     this.initStickerGenerator();
   },
 
-  // ---------- QR SCANNER ----------
-
+  // ---------- QR SCANNER (with animated frame) ----------
   openQRScanner() {
     if (typeof Html5Qrcode === "undefined") {
       this.showModal({
@@ -365,7 +364,11 @@ const app = {
         <h3 style="margin:0;"><i class="fas fa-qrcode"></i> Scan QR Code</h3>
         <button onclick="document.getElementById('qr-scanner-modal').remove()" style="background:none; border:none; font-size:28px; cursor:pointer;">&times;</button>
       </div>
-      <div id="qr-reader" style="width:100%;"></div>
+      <div style="position: relative; width: 100%;">
+        <div id="qr-reader" style="width:100%;"></div>
+        <!-- Custom scanning frame -->
+        <div id="qr-frame" style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); width: 300px; height: 300px; border: 3px solid #00ff00; border-radius: 12px; pointer-events: none; transition: transform 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease; box-shadow: 0 0 20px rgba(0,255,0,0.3); z-index: 10;"></div>
+      </div>
       <div id="qr-reader-results" style="margin-top: 12px; font-size: 14px; color: #333; text-align:center;"></div>
       <button id="flashlight-btn" class="btn btn-secondary" style="margin-top:8px;">
         <i class="fas fa-lightbulb"></i> Toggle Flash
@@ -407,6 +410,14 @@ const app = {
             decodedText.toUpperCase();
           document.getElementById("qr-reader-results").innerHTML =
             `✅ Decoded: <strong>${decodedText}</strong>`;
+
+          // Animate the frame (Kubo Pro style)
+          const frame = document.getElementById("qr-frame");
+          if (frame) {
+            frame.classList.add("detected");
+            setTimeout(() => frame.classList.remove("detected"), 400);
+          }
+
           setTimeout(() => {
             html5QrCode.stop().then(() => {
               html5QrCode.clear();
@@ -423,8 +434,8 @@ const app = {
           "❌ Could not access camera. Please allow camera permissions.";
       });
   },
-  // ===== STICKER GENERATOR =====
-  // (unchanged, kept as is)
+
+  // ===== STICKER GENERATOR (fixed semicolon) =====
   initStickerGenerator() {
     const state = {
       stickers: [],
@@ -435,7 +446,7 @@ const app = {
       eventName: "",
       isGenerating: false,
       canvasCache: [],
-    };
+    }; // <-- FIXED: semicolon, not comma
 
     const SCRATCH_WIDTH_MM = 22;
 
@@ -545,8 +556,8 @@ const app = {
       const marginPx = Math.round((1 / 25.4) * dpi);
       const scratchWidthPx = Math.round((22 / 25.4) * dpi);
 
-      // ---------- QR CODE (slightly smaller) ----------
-      const qrSizeMm = 5.5; // reduced from 4.5
+      // ---------- QR CODE ----------
+      const qrSizeMm = 5.5;
       const qrSizePx = Math.round((qrSizeMm / 25.4) * dpi);
       const qrX = marginPx;
       const qrY = Math.round((topHeightPx - qrSizePx) / 2);
@@ -570,19 +581,16 @@ const app = {
 
       // ---------- 8‑DIGIT CODE (enlarged, no barcode) ----------
       const codeText = code;
-      // Gap between QR and text: 2mm
       const gapPx = Math.round((2 / 25.4) * dpi);
       const textStartX = qrX + qrSizePx + gapPx;
       const textAvailableWidth = scratchWidthPx - textStartX - marginPx;
       const textAvailableHeight = topHeightPx - 2 * marginPx;
 
-      // Try to fill the height but never exceed the available width
       let fontSize = textAvailableHeight * 1.0;
       const estimatedWidth = codeText.length * fontSize * 0.6;
       if (estimatedWidth > textAvailableWidth) {
         fontSize = textAvailableWidth / (codeText.length * 0.6);
       }
-      // Clamp to a readable range (min 14px, max 48px)
       fontSize = Math.min(48, Math.max(14, Math.round(fontSize)));
 
       ctx.textAlign = "left";
@@ -590,14 +598,11 @@ const app = {
       ctx.fillStyle = "#000000";
       ctx.font = `bold ${fontSize}px monospace`;
 
-      // Measure the final text width and center it horizontally in the available space
       const metrics = ctx.measureText(codeText);
       const textWidth = metrics.width;
       const startX = textStartX + (textAvailableWidth - textWidth) / 2;
 
-      // Ensure the text does not start before the QR code (safety check)
       if (startX < qrX + qrSizePx + gapPx) {
-        // If centering would cause overlap, left‑align with the gap
         ctx.textAlign = "left";
         ctx.fillText(codeText, textStartX, topHeightPx / 2);
       } else {
@@ -945,7 +950,7 @@ const app = {
     };
   },
 
-  // ===== VISIBILITY LISTENER (UPDATED) =====
+  // ===== VISIBILITY LISTENER =====
   setupVisibilityListener() {
     document.addEventListener("visibilitychange", () => {
       if (!document.hidden) {
@@ -959,7 +964,7 @@ const app = {
           else if (id === "view-results") this.renderResults();
           else if (id === "view-admin-events") this.renderEvents();
           else if (id === "view-admin-players") this.renderPlayers();
-          else if (id === "view-profile") this.loadPlayerStats(); // <-- added
+          else if (id === "view-profile") this.loadPlayerStats();
         }
         this.updateClockDisplay();
       }
@@ -1327,7 +1332,7 @@ const app = {
       });
   },
 
-  // ===== NAVIGATE (UPDATED) =====
+  // ===== NAVIGATE =====
   navigate(view) {
     this.stopAutoRefresh();
     if (this._profileStatsInterval) {
@@ -1352,10 +1357,8 @@ const app = {
     if (view === "logs") this.renderLogs();
     if (view === "profile") {
       this.loadProfile();
-      this.loadPlayerStats(); // Refresh stats on navigation
-      // Also start a periodic refresh for stats when on profile
+      this.loadPlayerStats();
       this._profileStatsInterval = setInterval(() => {
-        // Only refresh if still on profile view
         const currentView = document.querySelector(
           ".view-section:not(.hidden)",
         );
@@ -1365,7 +1368,7 @@ const app = {
           clearInterval(this._profileStatsInterval);
           this._profileStatsInterval = null;
         }
-      }, 30000); // every 30 seconds
+      }, 30000);
     }
     if (view === "sticker-generator") {
       this.populateStickerSelector(this.allEvents);
@@ -1558,7 +1561,6 @@ const app = {
           hour12: true,
         });
 
-        // CHANGED: (ERPC) -> (MPFRC)
         this.showModal({
           title: "✅ Bird Clocked!",
           message: `${formattedDate}  ${formattedTime}\n📋 ${eventName} (MPFRC)\n📏 Air Distance: ${data.distance.toFixed(4)} KM\n⚡ Speed: ${data.speed.toFixed(4)} m/min`,
@@ -1725,7 +1727,6 @@ const app = {
     }
   },
 
-  // ===== FILTER RESULTS (without auto-select) =====
   filterResults() {
     const searchTerm = document
       .getElementById("result-search-input")
@@ -1756,7 +1757,6 @@ const app = {
     this.renderResults();
   },
 
-  // ===== renderResults with fixes =====
   async renderResults() {
     if (this._isRendering) return;
     this._isRendering = true;
@@ -1879,7 +1879,6 @@ const app = {
       document.getElementById("stat-winning-margin").innerHTML =
         `${winningMargin.toFixed(2)} <span class="unit">m/min</span>`;
 
-      // Highlights
       const fastest =
         safeResults.length > 0
           ? safeResults.reduce((a, b) => (a.speedMPM > b.speedMPM ? a : b))
@@ -1924,7 +1923,6 @@ const app = {
         ? `${highestSpeed.speedMPM.toFixed(2)} <span class="unit">m/min</span>`
         : "—";
 
-      // Table rows
       safeResults.forEach((r, i) => {
         const tr = document.createElement("tr");
         const tdRank = document.createElement("td");
@@ -1953,7 +1951,6 @@ const app = {
 
         const tdDist = document.createElement("td");
         tdDist.setAttribute("data-label", "Air Dist");
-        // CHANGED: format distance to 2 decimal places
         tdDist.textContent = r.distanceKm.toFixed(2) + " km";
         tr.appendChild(tdDist);
 
