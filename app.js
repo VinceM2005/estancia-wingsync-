@@ -331,6 +331,7 @@ const app = {
   },
 
   // ---------- QR SCANNER ----------
+
   openQRScanner() {
     if (typeof Html5Qrcode === "undefined") {
       this.showModal({
@@ -395,7 +396,6 @@ const app = {
       fps: 15,
       qrbox: { width: 300, height: 300 },
       aspectRatio: 1.0,
-      // formatsToSupport: [Html5QrcodeSupportedFormats.QR_CODE], // optional, may be omitted
     };
 
     html5QrCode
@@ -409,15 +409,13 @@ const app = {
             `✅ Decoded: <strong>${decodedText}</strong>`;
           setTimeout(() => {
             html5QrCode.stop().then(() => {
-              html5QrCode.clear(); // release camera
+              html5QrCode.clear();
               document.getElementById("qr-scanner-modal").remove();
               app.clockIn();
             });
           }, 1000);
         },
-        (errorMessage) => {
-          /* ignore */
-        },
+        () => {}, // ignore errors
       )
       .catch((err) => {
         console.error("QR scanner start error:", err);
