@@ -1323,25 +1323,26 @@
               <p style="margin-bottom: 20px; color: #666">
                 Enter the event code to clock your pigeon's arrival
               </p>
-              <input
-                type="text"
-                id="clock-in-code"
-                class="form-control"
-                placeholder="ENTER EVENT CODE"
-                onkeyup="this.value = this.value.toUpperCase()"
-              />
-              <button
-                class="btn btn-secondary"
-                onclick="app.openQRScanner()"
-                style="white-space: nowrap"
-              >
-                <i class="fas fa-qrcode"></i> Scan QR
-              </button>
-              <button
-                class="btn btn-success"
-                style="font-size: 1.2em; padding: 15px 30px"
-                onclick="app.clockIn()"
-              >
+
+              <!-- Input + Scan QR group -->
+              <div class="clock-in-input-group">
+                <input
+                  type="text"
+                  id="clock-in-code"
+                  class="form-control"
+                  placeholder="ENTER EVENT CODE"
+                  onkeyup="this.value = this.value.toUpperCase()"
+                />
+                <button
+                  class="btn btn-secondary btn-scan"
+                  onclick="app.openQRScanner()"
+                >
+                  <i class="fas fa-qrcode"></i> Scan QR
+                </button>
+              </div>
+
+              <!-- Clock Bird Arrival button (full width) -->
+              <button class="btn btn-success btn-clock" onclick="app.clockIn()">
                 <i class="fas fa-check-circle"></i> Clock Bird Arrival
               </button>
             </div>

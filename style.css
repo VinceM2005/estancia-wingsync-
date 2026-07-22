@@ -1720,3 +1720,64 @@ tr:hover td {
     font-size: 10px;
   }
 }
+/* ===== IMPROVED CLOCK-IN LAYOUT ===== */
+.clock-in-input-group {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  margin-bottom: 12px;
+}
+
+.clock-in-input-group .form-control {
+  flex: 1;
+  min-width: 0; /* prevents overflow */
+}
+
+/* Scan QR button – compact and secondary */
+.btn-scan {
+  white-space: nowrap;
+  padding: 10px 18px;
+  font-size: 15px;
+  border: 2px solid var(--border);
+  background: var(--bg);
+  color: var(--text);
+  transition: all 0.2s;
+}
+.btn-scan:hover {
+  background: var(--border);
+  border-color: var(--text-muted);
+}
+
+/* Clock Bird Arrival – full width, large, prominent */
+.btn-clock {
+  width: 100%;
+  font-size: 1.2em;
+  padding: 14px 20px;
+  margin-top: 4px;
+  border-radius: 10px;
+  font-weight: 600;
+  letter-spacing: 0.3px;
+  background: var(--success);
+  color: #fff;
+  border: none;
+  transition: all 0.2s;
+}
+.btn-clock:hover {
+  background: #1e8449;
+  transform: translateY(-1px);
+  box-shadow: 0 4px 16px rgba(39, 174, 96, 0.3);
+}
+
+/* On very small screens, stack input and scan button vertically */
+@media (max-width: 480px) {
+  .clock-in-input-group {
+    flex-wrap: wrap;
+  }
+  .clock-in-input-group .form-control {
+    flex: 1 1 100%;
+  }
+  .btn-scan {
+    width: 100%;
+    justify-content: center;
+  }
+}
