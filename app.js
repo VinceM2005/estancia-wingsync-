@@ -332,21 +332,14 @@ const app = {
 
   // ---------- QR SCANNER ----------
   openQRScanner() {
-    // Check if the library is loaded
-    if (typeof Html5Qrcode === "undefined") {
-      this.showModal({
-        title: "Scanner Not Available",
-        message: "QR scanner library not loaded. Please refresh the page.",
-        icon: "❌",
-        iconColor: "#c0392b",
-      });
-      return;
-    }
+  if (typeof Html5Qrcode === "undefined") {
+    this.showModal({ title: "Scanner Not Available", message: "QR scanner library not loaded. Please refresh the page.", icon: "❌", iconColor: "#c0392b" });
+    return;
+  }
 
-    // Create a modal overlay for the scanner
-    const scannerModal = document.createElement("div");
-    scannerModal.id = "qr-scanner-modal";
-    scannerModal.style.cssText = `
+  const scannerModal = document.createElement("div");
+  scannerModal.id = "qr-scanner-modal";
+  scannerModal.style.cssText = `
     position: fixed;
     top: 0;
     left: 0;
@@ -360,7 +353,7 @@ const app = {
     z-index: 10000;
     padding: 20px;
   `;
-    scannerModal.innerHTML = `
+  scannerModal.innerHTML = `
     <div style="background: #fff; border-radius: 16px; padding: 20px; max-width: 500px; width: 100%;">
       <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
         <h3 style="margin:0;"><i class="fas fa-qrcode"></i> Scan QR Code</h3>
@@ -368,52 +361,56 @@ const app = {
       </div>
       <div id="qr-reader" style="width:100%;"></div>
       <div id="qr-reader-results" style="margin-top: 12px; font-size: 14px; color: #333; text-align:center;"></div>
-      <button class="btn btn-secondary" style="margin-top:12px;" onclick="document.getElementById('qr-scanner-modal').remove()">Cancel</button>
+      <button id="flashlight-btn" class="btn btn-secondary" style="margin-top:8px;">
+        <i class="fas fa-lightbulb"></i> Toggle Flash
+      </button>
+      <button class="btn btn-secondary" style="margin-top:8px;" onclick="document.getElementById('qr-scanner-modal').remove()">Cancel</button>
     </div>
   `;
-    document.body.appendChild(scannerModal);
+  document.body.appendChild(scannerModal);
 
-    const readerContainer = document.getElementById("qr-reader");
-    const resultsDiv = document.getElementById("qr-reader-results");
+  const html5QrCode = new Html5Qrcode("qr-reader");
 
-    const html5QrCode = new Html5Qrcode("qr-reader");
+  // Flashlight toggle
+  const flashBtn = document.getElementById('flashlight-btn');
+  if (flashBtn) {
+    flashBtn.addEventListener('click', async () => {
+      try {
+        const isOn = await html5QrCode.toggleFlash();
+        flashBtn.innerHTML = isOn ? '<i class="fas fa-lightbulb"></i> Flash On' : '<i class="fas fa-lightbulb"></i> Flash Off';
+      } catch (e) {
+        console.warn('Flash not available', e);
+      }
+    });
+  }
 
-    const config = {
-      fps: 10,
-      qrbox: { width: 250, height: 250 },
-    };
+  const config = {
+    fps: 15,
+    qrbox: { width: 300, height: 300 },
+    aspectRatio: 1.0,
+    // formatsToSupport: [Html5QrcodeSupportedFormats.QR_CODE], // optional, may be omitted
+  };
 
-    // Start scanning
-    html5QrCode
-      .start(
-        { facingMode: "environment" }, // Use back camera
-        config,
-        (decodedText, decodedResult) => {
-          // Success callback
-          resultsDiv.innerHTML = `✅ Decoded: <strong>${decodedText}</strong>`;
-          // Fill the clock-in input and optionally auto-clock-in
-          document.getElementById("clock-in-code").value =
-            decodedText.toUpperCase();
-          // Close scanner after a short delay
-          setTimeout(() => {
-            html5QrCode.stop().then(() => {
-              document.getElementById("qr-scanner-modal").remove();
-              app.clockIn(); // automatically submit
-            });
-          }, 1000);
-        },
-        (errorMessage) => {
-          // Error callback – ignore (it's called for every failed frame)
-          // You can show a message if needed
-        },
-      )
-      .catch((err) => {
-        console.error("QR scanner start error:", err);
-        resultsDiv.innerHTML =
-          "❌ Could not access camera. Please allow camera permissions.";
-      });
-  },
-
+  html5QrCode.start(
+    { facingMode: "environment" },
+    config,
+    (decodedText) => {
+      document.getElementById("clock-in-code").value = decodedText.toUpperCase();
+      document.getElementById("qr-reader-results").innerHTML = `✅ Decoded: <strong>${decodedText}</strong>`;
+      setTimeout(() => {
+        html5QrCode.stop().then(() => {
+          html5QrCode.clear(); // release camera
+          document.getElementById("qr-scanner-modal").remove();
+          app.clockIn();
+        });
+      }, 1000);
+    },
+    (errorMessage) => { /* ignore */ }
+  ).catch((err) => {
+    console.error("QR scanner start error:", err);
+    document.getElementById("qr-reader-results").innerHTML = "❌ Could not access camera. Please allow camera permissions.";
+  });
+}
   // ===== STICKER GENERATOR =====
   // (unchanged, kept as is)
   initStickerGenerator() {
@@ -537,7 +534,7 @@ const app = {
       const scratchWidthPx = Math.round((22 / 25.4) * dpi);
 
       // ---------- QR CODE (slightly smaller) ----------
-      const qrSizeMm = 4.0; // reduced from 4.5
+      const qrSizeMm = 5.5; // reduced from 4.5
       const qrSizePx = Math.round((qrSizeMm / 25.4) * dpi);
       const qrX = marginPx;
       const qrY = Math.round((topHeightPx - qrSizePx) / 2);
