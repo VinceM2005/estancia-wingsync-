@@ -330,6 +330,90 @@ const app = {
     this.initStickerGenerator();
   },
 
+  // ---------- QR SCANNER ----------
+  openQRScanner() {
+    // Check if the library is loaded
+    if (typeof Html5Qrcode === "undefined") {
+      this.showModal({
+        title: "Scanner Not Available",
+        message: "QR scanner library not loaded. Please refresh the page.",
+        icon: "❌",
+        iconColor: "#c0392b",
+      });
+      return;
+    }
+
+    // Create a modal overlay for the scanner
+    const scannerModal = document.createElement("div");
+    scannerModal.id = "qr-scanner-modal";
+    scannerModal.style.cssText = `
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0,0,0,0.8);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    z-index: 10000;
+    padding: 20px;
+  `;
+    scannerModal.innerHTML = `
+    <div style="background: #fff; border-radius: 16px; padding: 20px; max-width: 500px; width: 100%;">
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
+        <h3 style="margin:0;"><i class="fas fa-qrcode"></i> Scan QR Code</h3>
+        <button onclick="document.getElementById('qr-scanner-modal').remove()" style="background:none; border:none; font-size:28px; cursor:pointer;">&times;</button>
+      </div>
+      <div id="qr-reader" style="width:100%;"></div>
+      <div id="qr-reader-results" style="margin-top: 12px; font-size: 14px; color: #333; text-align:center;"></div>
+      <button class="btn btn-secondary" style="margin-top:12px;" onclick="document.getElementById('qr-scanner-modal').remove()">Cancel</button>
+    </div>
+  `;
+    document.body.appendChild(scannerModal);
+
+    const readerContainer = document.getElementById("qr-reader");
+    const resultsDiv = document.getElementById("qr-reader-results");
+
+    const html5QrCode = new Html5Qrcode("qr-reader");
+
+    const config = {
+      fps: 10,
+      qrbox: { width: 250, height: 250 },
+    };
+
+    // Start scanning
+    html5QrCode
+      .start(
+        { facingMode: "environment" }, // Use back camera
+        config,
+        (decodedText, decodedResult) => {
+          // Success callback
+          resultsDiv.innerHTML = `✅ Decoded: <strong>${decodedText}</strong>`;
+          // Fill the clock-in input and optionally auto-clock-in
+          document.getElementById("clock-in-code").value =
+            decodedText.toUpperCase();
+          // Close scanner after a short delay
+          setTimeout(() => {
+            html5QrCode.stop().then(() => {
+              document.getElementById("qr-scanner-modal").remove();
+              app.clockIn(); // automatically submit
+            });
+          }, 1000);
+        },
+        (errorMessage) => {
+          // Error callback – ignore (it's called for every failed frame)
+          // You can show a message if needed
+        },
+      )
+      .catch((err) => {
+        console.error("QR scanner start error:", err);
+        resultsDiv.innerHTML =
+          "❌ Could not access camera. Please allow camera permissions.";
+      });
+  },
+
   // ===== STICKER GENERATOR =====
   // (unchanged, kept as is)
   initStickerGenerator() {
@@ -447,13 +531,13 @@ const app = {
       ctx.fillStyle = "#ffffff";
       ctx.fillRect(0, 0, widthPx, heightPx);
 
-      const topHeightPx = Math.round((6 / 10) * heightPx);
+      const topHeightPx = Math.round((6 / 10) * heightPx); // 6mm top
       const bottomHeightPx = heightPx - topHeightPx;
       const marginPx = Math.round((1 / 25.4) * dpi);
-      const scratchWidthPx = Math.round((SCRATCH_WIDTH_MM / 25.4) * dpi);
+      const scratchWidthPx = Math.round((22 / 25.4) * dpi);
 
-      // QR code
-      const qrSizeMm = Math.min(4.5, SCRATCH_WIDTH_MM * 0.28);
+      // ---------- QR CODE (slightly smaller) ----------
+      const qrSizeMm = 4.0; // reduced from 4.5
       const qrSizePx = Math.round((qrSizeMm / 25.4) * dpi);
       const qrX = marginPx;
       const qrY = Math.round((topHeightPx - qrSizePx) / 2);
@@ -475,93 +559,45 @@ const app = {
         ctx.drawImage(qrCanvas, qrX, qrY, qrSizePx, qrSizePx);
       }
 
-      // Barcode
-      const barcodeHeightMm = 1.6;
-      const barcodeHeightPx = Math.round((barcodeHeightMm / 25.4) * dpi);
-      const barcodeY = marginPx;
-      const gap1 = Math.round((1.2 / 25.4) * dpi);
-      const barcodeLeft = qrX + qrSizePx + gap1;
-      const barcodeWidth = scratchWidthPx - barcodeLeft - marginPx;
-
-      let bcCanvas = null;
-      try {
-        bcCanvas = await generateBarcodeCanvas(
-          code,
-          Math.max(20, barcodeWidth),
-          barcodeHeightPx,
-        );
-      } catch (e) {
-        console.warn("Barcode generation failed for", code, e);
-      }
-      if (bcCanvas) {
-        ctx.drawImage(
-          bcCanvas,
-          barcodeLeft,
-          barcodeY,
-          Math.max(20, barcodeWidth),
-          barcodeHeightPx,
-        );
-      } else {
-        ctx.fillStyle = "#f0f0f0";
-        ctx.fillRect(barcodeLeft, barcodeY, barcodeWidth, barcodeHeightPx);
-        ctx.fillStyle = "#999";
-        ctx.font = `${Math.round(barcodeHeightPx * 0.5)}px sans-serif`;
-        ctx.textAlign = "center";
-        ctx.textBaseline = "middle";
-        ctx.fillText(
-          "Barcode",
-          barcodeLeft + barcodeWidth / 2,
-          barcodeY + barcodeHeightPx / 2,
-        );
-      }
-
-      // CODE TEXT
+      // ---------- 8‑DIGIT CODE (enlarged, no barcode) ----------
       const codeText = code;
-      const gap2 = Math.round((0.8 / 25.4) * dpi);
-      const codeY = barcodeY + barcodeHeightPx + gap2;
-      const codeAvailableHeight = topHeightPx - codeY - marginPx;
-      const codeAvailableWidth = barcodeWidth;
+      // Gap between QR and text: 2mm
+      const gapPx = Math.round((2 / 25.4) * dpi);
+      const textStartX = qrX + qrSizePx + gapPx;
+      const textAvailableWidth = scratchWidthPx - textStartX - marginPx;
+      const textAvailableHeight = topHeightPx - 2 * marginPx;
 
-      const maxFontByHeight = codeAvailableHeight * 0.95;
-      const maxFontByWidth = codeAvailableWidth / (codeText.length * 0.6);
-      let codeFontSize = Math.min(
-        maxFontByHeight,
-        maxFontByWidth,
-        Math.round((5.0 / 25.4) * dpi),
-      );
-      codeFontSize = Math.min(48, Math.max(16, Math.round(codeFontSize)));
-      const letterSpacing = Math.min(
-        3,
-        Math.max(1, Math.round(codeFontSize * 0.05)),
-      );
+      // Try to fill the height but never exceed the available width
+      let fontSize = textAvailableHeight * 1.0;
+      const estimatedWidth = codeText.length * fontSize * 0.6;
+      if (estimatedWidth > textAvailableWidth) {
+        fontSize = textAvailableWidth / (codeText.length * 0.6);
+      }
+      // Clamp to a readable range (min 14px, max 48px)
+      fontSize = Math.min(48, Math.max(14, Math.round(fontSize)));
 
       ctx.textAlign = "left";
-      ctx.textBaseline = "top";
+      ctx.textBaseline = "middle";
       ctx.fillStyle = "#000000";
-      ctx.font = `bold ${codeFontSize}px monospace`;
+      ctx.font = `bold ${fontSize}px monospace`;
 
-      let totalWidth = 0;
-      const charWidths = [];
-      for (let i = 0; i < codeText.length; i++) {
-        const char = codeText[i];
-        const metrics = ctx.measureText(char);
-        const w = metrics.width;
-        charWidths.push(w);
-        totalWidth += w;
-      }
-      totalWidth += (codeText.length - 1) * letterSpacing;
+      // Measure the final text width and center it horizontally in the available space
+      const metrics = ctx.measureText(codeText);
+      const textWidth = metrics.width;
+      const startX = textStartX + (textAvailableWidth - textWidth) / 2;
 
-      const centerX = barcodeLeft + barcodeWidth / 2;
-      let currentX = centerX - totalWidth / 2;
-
-      for (let i = 0; i < codeText.length; i++) {
-        ctx.fillText(codeText[i], currentX, codeY);
-        currentX += charWidths[i] + letterSpacing;
+      // Ensure the text does not start before the QR code (safety check)
+      if (startX < qrX + qrSizePx + gapPx) {
+        // If centering would cause overlap, left‑align with the gap
+        ctx.textAlign = "left";
+        ctx.fillText(codeText, textStartX, topHeightPx / 2);
+      } else {
+        ctx.fillText(codeText, startX, topHeightPx / 2);
       }
 
-      // Bottom section
+      // ---------- BOTTOM SECTION (Event + Player names) ----------
       const bottomY = topHeightPx;
-      const fontSizePx = Math.min(
+      const fontSizeBottom = Math.min(
         Math.round((2.2 / 25.4) * dpi),
         Math.round(bottomHeightPx * 0.6),
       );
@@ -569,7 +605,7 @@ const app = {
       let eventLabel = eventName || "Event";
       let playerLabel = playerName || "Player";
 
-      let testSize = fontSizePx;
+      let testSize = fontSizeBottom;
       const leftX = marginPx;
       const rightX = widthPx - marginPx;
       const centerY = bottomY + bottomHeightPx / 2;
@@ -585,7 +621,7 @@ const app = {
       ctx.fillStyle = "#000000";
       ctx.fillText(eventLabel, leftX, centerY);
 
-      testSize = fontSizePx;
+      testSize = fontSizeBottom;
       ctx.font = `${testSize}px sans-serif`;
       while (testSize > 8 && ctx.measureText(playerLabel).width > maxWidth) {
         testSize -= 1;
@@ -596,10 +632,12 @@ const app = {
       ctx.fillStyle = "#000000";
       ctx.fillText(playerLabel, rightX, centerY);
 
+      // Outer border
       ctx.strokeStyle = "#000000";
       ctx.lineWidth = 1.0;
       ctx.strokeRect(0, 0, widthPx, heightPx);
 
+      // Optional dotted scratch‑off area border
       ctx.strokeStyle = "#e0e0e0";
       ctx.lineWidth = 0.5;
       ctx.setLineDash([2, 3]);

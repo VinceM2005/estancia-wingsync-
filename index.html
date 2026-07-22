@@ -22,7 +22,7 @@
 
     <!-- Lucide Icons (for premium analytics feel) -->
     <script src="https://unpkg.com/lucide@latest"></script>
-
+    <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
     <!-- Google Maps API -->
     <script
       src="https://maps.googleapis.com/maps/api/js?key=AIzaSyBrEWXV135IN7v1hM6Dwd_ynoKAK5t7TL8&libraries=places&loading=async"
@@ -1111,6 +1111,13 @@
                 placeholder="ENTER EVENT CODE"
                 onkeyup="this.value = this.value.toUpperCase()"
               />
+              <button
+                class="btn btn-secondary"
+                onclick="app.openQRScanner()"
+                style="white-space: nowrap"
+              >
+                <i class="fas fa-qrcode"></i> Scan QR
+              </button>
               <button
                 class="btn btn-success"
                 style="font-size: 1.2em; padding: 15px 30px"
