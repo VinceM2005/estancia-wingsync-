@@ -373,6 +373,7 @@ const app = {
         </div>
       </div>
       <div id="qr-reader-results" style="margin-top: 12px; font-size: 14px; color: #333; text-align:center;"></div>
+
       <!-- Zoom Controls -->
       <div style="display: flex; align-items: center; gap: 8px; margin-top: 8px; flex-wrap: wrap;">
         <label style="font-size:13px; font-weight:600; color:#333;">Zoom:</label>
@@ -380,9 +381,12 @@ const app = {
         <span id="zoom-value" style="font-size:13px; font-weight:600; min-width:40px; text-align:center;">1.0×</span>
         <button id="reset-zoom-btn" class="btn btn-sm btn-secondary" style="padding:4px 12px; font-size:12px;">⟲ Reset</button>
       </div>
-      <button id="flashlight-btn" class="btn btn-secondary" style="margin-top:8px;">
-        <i class="fas fa-lightbulb"></i> Toggle Flash
+
+      <!-- Flashlight button with status -->
+      <button id="flashlight-btn" class="btn btn-secondary" style="margin-top:8px; width:100%; justify-content:center;">
+        <i class="fas fa-lightbulb"></i> <span id="flash-status">Toggle Flash</span>
       </button>
+
       <button class="btn btn-secondary" style="margin-top:8px;" onclick="document.getElementById('qr-scanner-modal').remove()">Cancel</button>
     </div>
   `;
@@ -390,28 +394,12 @@ const app = {
 
     const html5QrCode = new Html5Qrcode("qr-reader");
 
-    // Flashlight toggle
-    const flashBtn = document.getElementById("flashlight-btn");
-    if (flashBtn) {
-      flashBtn.addEventListener("click", async () => {
-        try {
-          const isOn = await html5QrCode.toggleFlash();
-          flashBtn.innerHTML = isOn
-            ? '<i class="fas fa-lightbulb"></i> Flash On'
-            : '<i class="fas fa-lightbulb"></i> Flash Off';
-        } catch (e) {
-          console.warn("Flash not available", e);
-        }
-      });
-    }
-
     // ----- Zoom Control -----
     let videoTrack = null;
     const zoomSlider = document.getElementById("zoom-slider");
     const zoomValue = document.getElementById("zoom-value");
     const resetZoomBtn = document.getElementById("reset-zoom-btn");
 
-    // Function to apply zoom
     const applyZoom = async (zoomFactor) => {
       if (!videoTrack) return;
       try {
@@ -420,14 +408,13 @@ const app = {
         });
         zoomValue.textContent = zoomFactor.toFixed(1) + "×";
       } catch (e) {
-        console.warn("Zoom not supported on this device", e);
-        // Fallback: show alert only once
+        console.warn("Zoom not supported", e);
         if (!window._zoomWarningShown) {
           window._zoomWarningShown = true;
           app.showModal({
             title: "Zoom Not Supported",
             message:
-              "Your device camera does not support digital zoom. Try moving the camera closer to the QR code.",
+              "Your device camera does not support digital zoom. Try moving the camera closer.",
             icon: "⚠️",
             iconColor: "#e67e22",
           });
@@ -444,6 +431,57 @@ const app = {
       zoomSlider.value = "1.0";
       applyZoom(1.0);
     });
+
+    // ----- Flashlight Control (improved) -----
+    const flashBtn = document.getElementById("flashlight-btn");
+    const flashStatus = document.getElementById("flash-status");
+    let flashOn = false;
+
+    const toggleFlash = async () => {
+      if (!videoTrack) {
+        flashStatus.textContent = "⚠️ Camera not ready";
+        return;
+      }
+
+      try {
+        // Try the library's built-in toggle first
+        if (typeof html5QrCode.toggleFlash === "function") {
+          const isOn = await html5QrCode.toggleFlash();
+          flashOn = isOn;
+        } else {
+          // Fallback: manual torch control via constraints
+          const capabilities = videoTrack.getCapabilities();
+          if (capabilities.torch) {
+            flashOn = !flashOn;
+            await videoTrack.applyConstraints({
+              advanced: [{ torch: flashOn }],
+            });
+          } else {
+            throw new Error("Torch not supported");
+          }
+        }
+        // Update UI
+        flashStatus.textContent = flashOn ? "✅ Flash ON" : "Flash OFF";
+        flashBtn.style.background = flashOn ? "#ffd700" : "";
+        flashBtn.style.color = flashOn ? "#333" : "";
+      } catch (e) {
+        console.warn("Flash toggle error:", e);
+        flashStatus.textContent = "⚠️ Not available";
+        // Show a one-time warning
+        if (!window._flashWarningShown) {
+          window._flashWarningShown = true;
+          app.showModal({
+            title: "Flash Not Supported",
+            message:
+              "Your device or browser does not support the flashlight. You can still scan codes in good lighting.",
+            icon: "⚠️",
+            iconColor: "#e67e22",
+          });
+        }
+      }
+    };
+
+    flashBtn.addEventListener("click", toggleFlash);
 
     // ----- Start Scanner -----
     const config = {
@@ -462,7 +500,6 @@ const app = {
           document.getElementById("qr-reader-results").innerHTML =
             `✅ Decoded: <strong>${decodedText}</strong>`;
 
-          // Animate the frame (Kubo Pro style – zoom & focus)
           const frame = document.getElementById("qr-frame");
           if (frame) {
             frame.classList.add("detected");
@@ -477,10 +514,9 @@ const app = {
             });
           }, 1000);
         },
-        () => {}, // ignore errors
+        () => {},
       )
       .then(() => {
-        // After camera starts, get video track for zoom control
         const videoElement = document.querySelector("#qr-reader video");
         if (videoElement && videoElement.srcObject) {
           const tracks = videoElement.srcObject.getVideoTracks();
@@ -503,7 +539,6 @@ const app = {
           "❌ Could not access camera. Please allow camera permissions.";
       });
   },
-
   // ===== STICKER GENERATOR =====
   initStickerGenerator() {
     const state = {
