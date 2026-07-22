@@ -117,16 +117,13 @@ body {
   align-items: center;
   justify-content: center;
   height: 100vh;
-  background:
-    linear-gradient(var(--modal-overlay), var(--modal-overlay)),
-    url("https://images.unsplash.com/photo-1500382017468-9049fed747ef?w=1920&q=80");
+  background: url("login-bg.png") no-repeat center center fixed;
   background-size: cover;
-  background-position: center;
-  background-attachment: fixed;
 }
-
 .login-box {
-  background: var(--card-bg);
+  background: rgba(255, 255, 255, 0.85);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
   padding: 40px 36px;
   border-radius: var(--radius);
   box-shadow:
@@ -135,6 +132,14 @@ body {
   width: 100%;
   max-width: 400px;
   text-align: center;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+}
+
+[data-theme="dark"] .login-box {
+  background: rgba(20, 30, 50, 0.88);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid rgba(255, 255, 255, 0.05);
 }
 
 .login-box h2 {
