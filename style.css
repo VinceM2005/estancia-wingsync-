@@ -121,9 +121,9 @@ body {
   background-size: cover;
 }
 .login-box {
-  background: rgba(255, 255, 255, 0.45);
-  backdrop-filter: blur(18px);
-  -webkit-backdrop-filter: blur(18px);
+  background: rgba(255, 255, 255, 0.3);
+  backdrop-filter: blur(24px);
+  -webkit-backdrop-filter: blur(24px);
   padding: 40px 36px;
   border-radius: var(--radius);
   box-shadow:
@@ -137,8 +137,8 @@ body {
 
 [data-theme="dark"] .login-box {
   background: rgba(20, 30, 50, 0.5);
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
+  backdrop-filter: blur(24px);
+  -webkit-backdrop-filter: blur(24px);
   border: 1px solid rgba(255, 255, 255, 0.05);
 }
 
