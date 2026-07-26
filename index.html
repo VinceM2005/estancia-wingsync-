@@ -2129,7 +2129,7 @@
 
     <!-- ===== NEW MODALS ===== -->
 
-    <!-- Event Details Modal -->
+    <!-- Event Details Modal (updated) -->
     <div id="modal-event-details" class="modal-overlay">
       <div class="modal-content" style="max-width: 500px">
         <div class="modal-header">
@@ -2147,6 +2147,10 @@
         </p>
         <p><strong>Location:</strong> <span id="view-event-location"></span></p>
         <p><strong>Status:</strong> <span id="view-event-status"></span></p>
+        <p
+          id="view-event-status-msg"
+          style="color: #e67e22; font-weight: bold"
+        ></p>
         <button
           id="view-event-join-btn"
           class="btn btn-success"
@@ -2160,6 +2164,57 @@
           onclick="app.closeModal('modal-event-details')"
         >
           Close
+        </button>
+      </div>
+    </div>
+
+    <!-- Manage Registration Modal (Admin) -->
+    <div id="modal-manage-registration" class="modal-overlay">
+      <div class="modal-content" style="max-width: 500px">
+        <div class="modal-header">
+          <h3><i class="fas fa-sliders-h"></i> Manage Registration</h3>
+          <button
+            class="close-modal"
+            onclick="app.closeModal('modal-manage-registration')"
+          >
+            <i class="fas fa-times"></i>
+          </button>
+        </div>
+        <input type="hidden" id="manage-event-code" />
+        <div class="form-group">
+          <label>Event State</label>
+          <select id="manage-state-select" class="form-control">
+            <option value="Draft">Draft</option>
+            <option value="Registration Open">Registration Open</option>
+            <option value="Registration Closed">Registration Closed</option>
+            <option value="Sticker Generated">Sticker Generated</option>
+            <option value="Ready for Release">Ready for Release</option>
+            <option value="Live Race">Live Race</option>
+            <option value="Result Verification">Result Verification</option>
+            <option value="Completed">Completed</option>
+            <option value="Archived">Archived</option>
+          </select>
+          <small style="display: block; margin-top: 4px; color: #666"
+            >Changing to "Registration Open" allows players to join.</small
+          >
+        </div>
+        <div class="form-group">
+          <label>Registration Deadline</label>
+          <input
+            type="datetime-local"
+            id="manage-deadline-input"
+            class="form-control"
+          />
+          <small style="display: block; margin-top: 4px; color: #666"
+            >Leave empty for no deadline (manual close).</small
+          >
+        </div>
+        <button
+          class="btn btn-success"
+          style="width: 100%"
+          onclick="app.saveRegistrationSettings()"
+        >
+          <i class="fas fa-save"></i> Save Settings
         </button>
       </div>
     </div>

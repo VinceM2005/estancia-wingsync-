@@ -1999,6 +1999,62 @@ app.put(
 );
 
 // ============================================================
+//  NEW: Admin update registration settings (state + deadline)
+// ============================================================
+app.put(
+  "/api/admin/events/:eventId/registration-settings",
+  requireAdmin,
+  [
+    body("state")
+      .optional()
+      .isIn([
+        "Draft",
+        "Registration Open",
+        "Registration Closed",
+        "Sticker Generated",
+        "Ready for Release",
+        "Live Race",
+        "Result Verification",
+        "Completed",
+        "Archived",
+      ])
+      .withMessage("Invalid state."),
+    body("registrationDeadline")
+      .optional()
+      .isISO8601()
+      .withMessage("Invalid date format. Use ISO 8601."),
+  ],
+  async (req, res) => {
+    try {
+      const errors = validationResult(req);
+      if (!errors.isEmpty()) {
+        return res.status(400).json({ error: errors.array()[0].msg });
+      }
+      const { eventId } = req.params;
+      const { state, registrationDeadline } = matchedData(req);
+      const event = await Event.findOne({ code: eventId });
+      if (!event) {
+        return res.status(404).json({ error: "Event not found." });
+      }
+      if (state !== undefined) event.state = state;
+      if (registrationDeadline !== undefined) {
+        event.registrationDeadline = new Date(registrationDeadline);
+      }
+      await event.save();
+      await Log.create({
+        message: `Admin updated registration settings for event ${event.name} (${eventId})`,
+      });
+      res.json({ success: true, event });
+    } catch (error) {
+      console.error("Error updating registration settings:", error);
+      res
+        .status(500)
+        .json({ error: "Failed to update registration settings." });
+    }
+  },
+);
+
+// ============================================================
 //  PHASE 7: CERTIFICATES
 // ============================================================
 async function generateCertificateNumber() {

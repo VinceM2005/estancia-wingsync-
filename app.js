@@ -2738,7 +2738,12 @@ const app = {
       const tdActions = document.createElement("td");
       tdActions.setAttribute("data-label", "Actions");
 
-      // "Register Players" button REMOVED – admin uses Event Review
+      // ===== NEW: Manage Registration button =====
+      const manageBtn = document.createElement("button");
+      manageBtn.className = "btn btn-sm btn-primary";
+      manageBtn.textContent = "⚙️ Manage Registration";
+      manageBtn.onclick = () => app.openManageRegistrationModal(e.code);
+      tdActions.appendChild(manageBtn);
 
       const toggleBtn = document.createElement("button");
       toggleBtn.className = "btn btn-danger btn-sm";
@@ -2757,210 +2762,83 @@ const app = {
     });
   },
 
-  openRegisterModal(eventCode) {
-    this.currentEventCode = eventCode;
-    const modal = document.getElementById("modal-register-players");
-    modal.classList.add("show");
-    this.loadRegistrations(eventCode);
+  // ===== NEW: Manage Registration Modal =====
+  openManageRegistrationModal(eventCode) {
+    const event = this.eventLookup[eventCode];
+    if (!event) {
+      this.showModal({
+        title: "Error",
+        message: "Event not found.",
+        icon: "❌",
+        iconColor: "#c0392b",
+      });
+      return;
+    }
+    // Populate modal with current state and deadline
+    document.getElementById("manage-event-code").value = eventCode;
+    document.getElementById("manage-state-select").value =
+      event.state || "Draft";
+    const deadline = event.registrationDeadline
+      ? new Date(event.registrationDeadline)
+      : null;
+    const deadlineInput = document.getElementById("manage-deadline-input");
+    if (deadline) {
+      deadlineInput.value = deadline.toISOString().slice(0, 16);
+    } else {
+      deadlineInput.value = "";
+    }
+    // Show modal
+    document.getElementById("modal-manage-registration").classList.add("show");
   },
 
-  loadRegistrations(eventCode) {
-    fetchWithAuth(`${API_URL}/events/${eventCode}/registrations`)
-      .then((res) => {
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        return res.json();
-      })
-      .then((registrations) => {
-        if (!Array.isArray(registrations)) registrations = [];
-        this.currentRegistrations = registrations;
-        this.populateRegisterModal(eventCode);
+  saveRegistrationSettings() {
+    const eventCode = document.getElementById("manage-event-code").value;
+    const state = document.getElementById("manage-state-select").value;
+    const deadline = document.getElementById("manage-deadline-input").value;
+
+    const payload = { state };
+    if (deadline) {
+      payload.registrationDeadline = new Date(deadline).toISOString();
+    }
+
+    fetchWithAuth(
+      `${API_URL}/admin/events/${eventCode}/registration-settings`,
+      {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      },
+    )
+      .then((res) => res.json())
+      .then((data) => {
+        if (data.success) {
+          this.closeModal("modal-manage-registration");
+          this.renderEvents();
+          this.renderDashboard();
+          this.fetchAllEvents(); // refresh eventLookup
+          this.showModal({
+            title: "✅ Registration Settings Updated",
+            message: `Event state: ${data.event.state}\nDeadline: ${data.event.registrationDeadline ? new Date(data.event.registrationDeadline).toLocaleString() : "Not set"}`,
+            icon: "✅",
+            iconColor: "#27ae60",
+          });
+        } else {
+          this.showModal({
+            title: "Update Failed",
+            message: data.error || "Failed to update registration settings.",
+            icon: "❌",
+            iconColor: "#c0392b",
+          });
+        }
       })
       .catch((err) => {
-        console.error("❌ Error loading registrations:", err);
-        this.currentRegistrations = [];
-        this.populateRegisterModal(eventCode);
         this.showModal({
-          title: "Warning",
-          message: "Could not load existing registrations. Please refresh.",
+          title: "Connection Error",
+          message: "Unable to connect to the server.",
           icon: "⚠️",
           iconColor: "#e67e22",
         });
       });
-  },
-
-  populateRegisterModal(eventCode) {
-    fetchWithAuth(`${API_URL}/users/players`)
-      .then((res) => {
-        if (!res.ok) throw new Error("Failed to fetch players");
-        return res.json();
-      })
-      .then((players) => {
-        if (!Array.isArray(players)) players = [];
-        const registeredIds = this.currentRegistrations
-          ? this.currentRegistrations.map((r) => r.userId)
-          : [];
-        const available = players.filter((p) => !registeredIds.includes(p.id));
-
-        const select = document.getElementById("register-player-select");
-        select.innerHTML =
-          '<option value="">-- Select Player --</option>' +
-          available
-            .map((p) => `<option value="${p.id}">${p.name} (${p.id})</option>`)
-            .join("");
-
-        this.updateRegistrationTable();
-        document.getElementById("register-pigeon-count").value = 1;
-        document.getElementById("register-event-code").value = eventCode;
-      })
-      .catch((err) => {
-        console.error("❌ Error loading players:", err);
-        this.showModal({
-          title: "Error",
-          message: "Could not load player list. Please refresh the page.",
-          icon: "❌",
-          iconColor: "#c0392b",
-        });
-      });
-  },
-
-  updateRegistrationTable() {
-    const tbody = document.querySelector("#registrations-table tbody");
-    if (!tbody) return;
-
-    tbody.innerHTML = "";
-    if (this.currentRegistrations && this.currentRegistrations.length > 0) {
-      this.currentRegistrations.forEach((r) => {
-        const tr = document.createElement("tr");
-        const tdPlayer = document.createElement("td");
-        const strong = document.createElement("strong");
-        strong.textContent = r.userName;
-        tdPlayer.appendChild(strong);
-        tr.appendChild(tdPlayer);
-
-        const tdCodes = document.createElement("td");
-        r.codes.forEach((code, idx) => {
-          const status = r.statuses[idx];
-          const span = document.createElement("span");
-          span.className = "code-item";
-
-          const codeSpan = document.createElement("span");
-          codeSpan.textContent = code;
-          span.appendChild(codeSpan);
-          span.appendChild(document.createTextNode(" "));
-
-          const badge = document.createElement("span");
-          badge.className = status === "unused" ? "badge-unused" : "badge-used";
-          badge.textContent = status === "unused" ? "✅ Unused" : "⏳ Used";
-          span.appendChild(badge);
-
-          tdCodes.appendChild(span);
-          if (idx < r.codes.length - 1) {
-            tdCodes.appendChild(document.createTextNode(" "));
-          }
-        });
-        tr.appendChild(tdCodes);
-
-        const tdStatus = document.createElement("td");
-        const total = r.codes.length;
-        const used = r.statuses.filter((s) => s === "used").length;
-        const unused = total - used;
-        tdStatus.innerHTML = `
-          <span class="badge-total">${total} total</span>
-          <span class="badge-unused">${unused} unused</span>
-          <span class="badge-used">${used} used</span>
-        `;
-        tr.appendChild(tdStatus);
-
-        tbody.appendChild(tr);
-      });
-    } else {
-      const tr = document.createElement("tr");
-      const td = document.createElement("td");
-      td.colSpan = 3;
-      td.style.textAlign = "center";
-      td.style.color = "#999";
-      td.style.padding = "20px";
-      td.textContent = "No players registered yet.";
-      tr.appendChild(td);
-      tbody.appendChild(tr);
-    }
-  },
-
-  registerPlayers() {
-    const eventCode = document.getElementById("register-event-code").value;
-    const userId = document.getElementById("register-player-select").value;
-    const pigeonCount = parseInt(
-      document.getElementById("register-pigeon-count").value,
-      10,
-    );
-
-    if (!userId) {
-      this.showModal({
-        title: "Incomplete",
-        message: "Please select a player.",
-        icon: "❌",
-        iconColor: "#c0392b",
-      });
-      return;
-    }
-    if (isNaN(pigeonCount) || pigeonCount < 1 || pigeonCount > 10) {
-      this.showModal({
-        title: "Invalid Count",
-        message: "Pigeon count must be between 1 and 10.",
-        icon: "❌",
-        iconColor: "#c0392b",
-      });
-      return;
-    }
-
-    const btn = document.querySelector("#modal-register-players .btn-success");
-    if (btn) {
-      btn.disabled = true;
-      btn.textContent = "⏳ Registering...";
-    }
-
-    fetchWithAuth(`${API_URL}/events/${eventCode}/register-players`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ registrations: [{ userId, pigeonCount }] }),
-    })
-      .then(async (res) => {
-        const data = await res.json();
-        if (!res.ok) throw new Error(data.error || "Registration failed");
-        return data;
-      })
-      .then((data) => {
-        if (data.success) {
-          this.showModal({
-            title: "✅ Registration Successful",
-            message: `Generated ${pigeonCount} codes for player.\nCodes: ${data.registrations[0].codes.join(", ")}`,
-            icon: "✅",
-            iconColor: "#27ae60",
-          });
-          this.loadRegistrations(eventCode);
-        } else {
-          throw new Error(data.error || "Unknown error");
-        }
-      })
-      .catch((err) => {
-        console.error("❌ Registration error:", err);
-        this.showModal({
-          title: "Registration Failed",
-          message: err.message || "Unable to connect to the server.",
-          icon: "❌",
-          iconColor: "#c0392b",
-        });
-      })
-      .finally(() => {
-        if (btn) {
-          btn.disabled = false;
-          btn.textContent = "✅ Register Player";
-        }
-      });
-  },
-
-  closeRegisterModal() {
-    document.getElementById("modal-register-players").classList.remove("show");
   },
 
   toggleEvent(code) {
@@ -3208,6 +3086,7 @@ const app = {
       "modal-edit-registration",
       "modal-certificate",
       "modal-event-details",
+      "modal-manage-registration",
     ].forEach((modalId) => {
       const el = document.getElementById(modalId);
       if (el) el.classList.remove("show");
@@ -4145,24 +4024,28 @@ const app = {
     document.getElementById("view-event-status").textContent =
       event.state || event.status;
     const joinBtn = document.getElementById("view-event-join-btn");
+    // Only show join button if event is "Registration Open" and deadline not passed
     if (event.state === "Registration Open") {
-      joinBtn.style.display = "block";
-      joinBtn.onclick = () => {
-        this.closeModal("modal-event-details");
-        this.openRegisterModalNew(eventCode);
-      };
+      // Also check deadline
+      if (
+        event.registrationDeadline &&
+        new Date() > new Date(event.registrationDeadline)
+      ) {
+        joinBtn.style.display = "none";
+        document.getElementById("view-event-status-msg").textContent =
+          "Registration deadline has passed.";
+      } else {
+        joinBtn.style.display = "block";
+        joinBtn.onclick = () => {
+          this.closeModal("modal-event-details");
+          this.openRegisterModalNew(eventCode);
+        };
+      }
     } else {
       joinBtn.style.display = "none";
     }
     document.getElementById("modal-event-details").classList.add("show");
   },
-
-  // ============================================================
-  //  LEGACY STICKER GENERATOR SUPPORT (already defined above)
-  // ============================================================
-  // The existing loadStickersForEvent, generateStickers, downloadStickerPDF,
-  // updateStickerWidth, populateStickerSelector, navigateToStickerGenerator
-  // are already defined in initStickerGenerator.
 };
 
 // ===== Service Worker =====
