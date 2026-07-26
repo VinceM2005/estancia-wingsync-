@@ -180,6 +180,7 @@ const LogSchema = new mongoose.Schema({
 });
 LogSchema.index({ createdAt: 1 }, { expireAfterSeconds: 2592000 });
 
+// ===== PIGEON & REGISTRATION SCHEMAS =====
 const PigeonSchema = new mongoose.Schema({
   ringNumber: { type: String, required: true, unique: true },
   ownerId: { type: String, required: true, index: true },
@@ -202,18 +203,22 @@ const PigeonSchema = new mongoose.Schema({
 PigeonSchema.index({ ringNumber: 1 }, { unique: true });
 PigeonSchema.index({ ownerId: 1, status: 1 });
 
-const EventRegistrationSchema = new mongoose.Schema({
-  eventId: { type: String, required: true, index: true },
-  playerId: { type: String, required: true, index: true },
-  pigeonIds: [{ type: String, ref: "Pigeon" }],
-  status: {
-    type: String,
-    enum: ["draft", "confirmed", "locked"],
-    default: "draft",
+// ===== FIX: Disable version key to avoid conflicts =====
+const EventRegistrationSchema = new mongoose.Schema(
+  {
+    eventId: { type: String, required: true, index: true },
+    playerId: { type: String, required: true, index: true },
+    pigeonIds: [{ type: String, ref: "Pigeon" }],
+    status: {
+      type: String,
+      enum: ["draft", "confirmed", "locked"],
+      default: "draft",
+    },
+    registrationDate: { type: Date, default: Date.now },
+    updatedAt: { type: Date, default: Date.now },
   },
-  registrationDate: { type: Date, default: Date.now },
-  updatedAt: { type: Date, default: Date.now },
-});
+  { versionKey: false }, // <-- Disable __v
+);
 EventRegistrationSchema.index(
   { eventId: 1, playerId: 1, pigeonIds: 1 },
   { unique: true, sparse: true },
@@ -1611,7 +1616,7 @@ app.post(
   },
 );
 
-// ================ FIXED PUT ENDPOINT ================
+// ================ FIXED PUT ENDPOINT (uses findOneAndUpdate) ================
 app.put(
   "/api/events/:eventId/register",
   [
@@ -1649,14 +1654,22 @@ app.put(
         registration._id,
       );
 
-      // Update
-      registration.pigeonIds = pigeonIds;
-      registration.updatedAt = new Date();
-      await registration.save();
+      // Use findOneAndUpdate to avoid version conflicts
+      const updated = await EventRegistration.findOneAndUpdate(
+        { _id: registration._id },
+        { pigeonIds, updatedAt: new Date() },
+        { new: true, runValidators: true },
+      );
+      if (!updated) {
+        return res
+          .status(500)
+          .json({ error: "Failed to update registration." });
+      }
+
       await Log.create({
         message: `Player ${playerId} updated registration for event ${eventId}.`,
       });
-      res.json({ success: true, registration });
+      res.json({ success: true, registration: updated });
     } catch (error) {
       console.error("Error updating registration:", error);
       res
@@ -1701,6 +1714,7 @@ app.delete("/api/events/:eventId/register", async (req, res) => {
 // ============================================================
 //  PHASE 4: ADMIN REVIEW & STICKER GENERATION
 // ============================================================
+// ===== FIX: handle missing player gracefully =====
 async function validateRegistrations(eventId) {
   const registrations = await EventRegistration.find({ eventId })
     .populate("pigeonIds")
@@ -1713,15 +1727,19 @@ async function validateRegistrations(eventId) {
     const player = reg.playerId;
     const pigeons = reg.pigeonIds;
 
-    // ===== NEW CHECK FOR LEGACY =====
+    // Determine player ID and name (fallback if player deleted)
+    const playerId = player ? player.id : reg.playerId;
+    const playerName = player ? player.name : "Unknown Player";
+
+    // ===== LEGACY CHECK =====
     const isLegacy = pigeons.every(
       (p) => typeof p === "string" && p.startsWith("LEGACY_"),
     );
     if (isLegacy) {
       results.push({
         registrationId: reg._id,
-        playerId: player.id,
-        playerName: player.name,
+        playerId: playerId,
+        playerName: playerName,
         pigeonIds: pigeons.map((p) => p._id || p),
         ringNumbers: pigeons.map((p) => p.ringNumber || "LEGACY"),
         valid: true,
@@ -1745,7 +1763,7 @@ async function validateRegistrations(eventId) {
         duplicateRing = true;
         valid = false;
       } else {
-        ringMap.set(p.ringNumber, { playerId: player.id, pigeonId: p._id });
+        ringMap.set(p.ringNumber, { playerId: playerId, pigeonId: p._id });
       }
       if (p.status !== "Active") {
         invalidStatus = true;
@@ -1757,8 +1775,8 @@ async function validateRegistrations(eventId) {
     }
     results.push({
       registrationId: reg._id,
-      playerId: player.id,
-      playerName: player.name,
+      playerId: playerId,
+      playerName: playerName,
       pigeonIds: pigeons.map((p) => p._id),
       ringNumbers: pigeons.map((p) => p.ringNumber),
       valid,
@@ -1801,12 +1819,16 @@ app.get(
   },
 );
 
+// ===== FIX: handle undefined playerId =====
 app.delete(
   "/api/admin/events/:eventId/registrations/:playerId",
   requireAdmin,
   async (req, res) => {
     try {
       const { eventId, playerId } = req.params;
+      if (!playerId) {
+        return res.status(400).json({ error: "Player ID is required." });
+      }
       const event = await Event.findOne({ code: eventId });
       if (!event) {
         return res.status(404).json({ error: "Event not found." });
@@ -1829,15 +1851,14 @@ app.delete(
         playerId,
       });
       if (!result) {
-        // Try to see if the registration exists but with a different playerId format (maybe ObjectId)
+        // Fallback: try case-insensitive match (rare)
         const altResult = await EventRegistration.findOneAndDelete({
           eventId,
-          playerId: playerId, // same, but we can also try to search by playerId string
+          playerId: { $regex: new RegExp(`^${playerId}$`, "i") },
         });
         if (!altResult) {
           return res.status(404).json({ error: "Registration not found." });
         }
-        // If found, we already deleted it, but we should log the success
         await Log.create({
           message: `Admin removed player ${playerId} from event ${eventId} (alternative match).`,
         });
