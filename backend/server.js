@@ -118,7 +118,6 @@ const EventSchema = new mongoose.Schema({
   status: { type: String, default: "Active", enum: ["Active", "Closed"] },
   lat: { type: Number, required: true, min: -90, max: 90 },
   lng: { type: Number, required: true, min: -180, max: 180 },
-  // NEW: state machine and deadline
   state: {
     type: String,
     enum: [
@@ -181,7 +180,6 @@ const LogSchema = new mongoose.Schema({
 });
 LogSchema.index({ createdAt: 1 }, { expireAfterSeconds: 2592000 });
 
-// ===== NEW MODELS (Pigeon, EventRegistration, Certificate) =====
 const PigeonSchema = new mongoose.Schema({
   ringNumber: { type: String, required: true, unique: true },
   ownerId: { type: String, required: true, index: true },
@@ -236,7 +234,6 @@ const CertificateSchema = new mongoose.Schema({
 CertificateSchema.index({ playerId: 1, eventId: 1 });
 CertificateSchema.index({ qrHash: 1 });
 
-// ===== MODEL REGISTRATION =====
 const User = mongoose.model("User", UserSchema);
 const Event = mongoose.model("Event", EventSchema);
 const RaceCode = mongoose.model("RaceCode", RaceCodeSchema);
@@ -753,7 +750,6 @@ app.post(
         return res.status(400).json({ error: "Event not found" });
       }
 
-      // New validations (Phase 5)
       if (event.state) {
         if (!["Live Race", "Ready for Release"].includes(event.state)) {
           await RaceCode.updateOne(
@@ -827,7 +823,6 @@ app.post(
         }
       }
 
-      // Existing counter/distance/speed logic
       const totalCodes = await RaceCode.countDocuments({
         eventId: event.code,
         userId,
@@ -1483,7 +1478,14 @@ app.delete("/api/pigeons/:id", async (req, res) => {
 // ============================================================
 //  PHASE 3: PLAYER SELF-REGISTRATION
 // ============================================================
-async function validateRegistrationEligibility(eventId, playerId, pigeonIds) {
+
+// ================ FIXED VALIDATION FUNCTION ================
+async function validateRegistrationEligibility(
+  eventId,
+  playerId,
+  pigeonIds,
+  excludeRegistrationId = null,
+) {
   const event = await Event.findOne({ code: eventId });
   if (!event) throw new Error("Event not found.");
   if (event.state !== "Registration Open") {
@@ -1505,11 +1507,16 @@ async function validateRegistrationEligibility(eventId, playerId, pigeonIds) {
       "One or more pigeons are invalid, inactive, or do not belong to you.",
     );
   }
-  const existing = await EventRegistration.findOne({
+  // Check for duplicates, excluding the current registration if updating
+  const query = {
     eventId,
     playerId,
     pigeonIds: { $in: pigeonIds },
-  });
+  };
+  if (excludeRegistrationId) {
+    query._id = { $ne: excludeRegistrationId };
+  }
+  const existing = await EventRegistration.findOne(query);
   if (existing) {
     throw new Error(
       "One or more pigeons are already registered in this event.",
@@ -1517,6 +1524,7 @@ async function validateRegistrationEligibility(eventId, playerId, pigeonIds) {
   }
   return { event, pigeons };
 }
+// =====================================================
 
 app.get("/api/events/open", async (req, res) => {
   try {
@@ -1568,6 +1576,7 @@ app.post(
       const { eventId } = req.params;
       const { pigeonIds } = matchedData(req);
       const playerId = req.user.id;
+      // For new registration, no exclusion
       await validateRegistrationEligibility(eventId, playerId, pigeonIds);
       const existing = await EventRegistration.findOne({
         eventId,
@@ -1602,6 +1611,7 @@ app.post(
   },
 );
 
+// ================ FIXED PUT ENDPOINT ================
 app.put(
   "/api/events/:eventId/register",
   [
@@ -1618,7 +1628,8 @@ app.put(
       const { eventId } = req.params;
       const { pigeonIds } = matchedData(req);
       const playerId = req.user.id;
-      await validateRegistrationEligibility(eventId, playerId, pigeonIds);
+
+      // Find existing draft registration
       const registration = await EventRegistration.findOne({
         eventId,
         playerId,
@@ -1629,6 +1640,16 @@ app.put(
           .status(404)
           .json({ error: "No draft registration found for this event." });
       }
+
+      // Validate, excluding the current registration
+      await validateRegistrationEligibility(
+        eventId,
+        playerId,
+        pigeonIds,
+        registration._id,
+      );
+
+      // Update
       registration.pigeonIds = pigeonIds;
       registration.updatedAt = new Date();
       await registration.save();
@@ -1644,6 +1665,7 @@ app.put(
     }
   },
 );
+// =====================================================
 
 app.delete("/api/events/:eventId/register", async (req, res) => {
   try {
@@ -1692,12 +1714,10 @@ async function validateRegistrations(eventId) {
     const pigeons = reg.pigeonIds;
 
     // ===== NEW CHECK FOR LEGACY =====
-    // If all pigeonIds are strings starting with "LEGACY_", treat as valid.
     const isLegacy = pigeons.every(
       (p) => typeof p === "string" && p.startsWith("LEGACY_"),
     );
     if (isLegacy) {
-      // Mark as valid and skip all validation
       results.push({
         registrationId: reg._id,
         playerId: player.id,
@@ -1711,7 +1731,7 @@ async function validateRegistrations(eventId) {
         status: reg.status,
         registrationDate: reg.registrationDate,
       });
-      continue; // skip the rest of the loop
+      continue;
     }
 
     // --- existing validation for non-legacy ---
@@ -1809,7 +1829,19 @@ app.delete(
         playerId,
       });
       if (!result) {
-        return res.status(404).json({ error: "Registration not found." });
+        // Try to see if the registration exists but with a different playerId format (maybe ObjectId)
+        const altResult = await EventRegistration.findOneAndDelete({
+          eventId,
+          playerId: playerId, // same, but we can also try to search by playerId string
+        });
+        if (!altResult) {
+          return res.status(404).json({ error: "Registration not found." });
+        }
+        // If found, we already deleted it, but we should log the success
+        await Log.create({
+          message: `Admin removed player ${playerId} from event ${eventId} (alternative match).`,
+        });
+        return res.json({ success: true });
       }
       await Log.create({
         message: `Admin removed player ${playerId} from event ${eventId}.`,
