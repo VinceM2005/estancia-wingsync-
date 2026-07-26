@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Wingsync - Pigeon Clocking System</title>
     <link rel="manifest" href="manifest.json" />
-    <link rel="stylesheet" href="style.css?v=2" />
+    <link rel="stylesheet" href="style.css?v=3" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="mobile-web-app-capable" content="yes" />
     <meta
@@ -14,13 +14,13 @@
     />
     <meta name="apple-mobile-web-app-title" content="Wingsync" />
 
-    <!-- Font Awesome 6 (free) -->
+    <!-- Font Awesome 6 -->
     <link
       rel="stylesheet"
       href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css"
     />
 
-    <!-- Lucide Icons (for premium analytics feel) -->
+    <!-- Lucide Icons -->
     <script src="https://unpkg.com/lucide@latest"></script>
     <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
     <!-- Google Maps API -->
@@ -30,1155 +30,68 @@
       defer
     ></script>
 
-    <!-- QR Code (qrcodejs) + Barcode + PDF -->
+    <!-- QR Code + Barcode + PDF -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.6/dist/JsBarcode.all.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 
     <link rel="stylesheet" href="style.css" />
     <style>
-      /* ===== STICKER GENERATOR STYLES ===== */
-      .sticker-generator-container {
-        padding: 20px 0;
-      }
-      .sticker-controls {
-        display: flex;
-        flex-wrap: wrap;
-        gap: 16px;
-        align-items: center;
-        background: #f8fafc;
-        padding: 16px 20px;
-        border-radius: 10px;
-        margin-bottom: 20px;
-        border: 1px solid #e9edf2;
-      }
-      .sticker-controls label {
-        font-weight: 600;
-        font-size: 14px;
-        color: var(--text);
-        display: flex;
-        align-items: center;
-        gap: 8px;
-      }
-      .sticker-controls input[type="range"] {
-        width: 140px;
-        accent-color: var(--primary);
-        cursor: pointer;
-      }
-      .sticker-controls .width-display {
-        font-weight: 600;
-        font-size: 15px;
-        color: var(--primary);
-        min-width: 40px;
-        text-align: center;
-      }
-      .sticker-controls .btn-group {
-        display: flex;
-        gap: 8px;
-        flex-wrap: wrap;
-        margin-left: auto;
-      }
-      .sticker-preview-grid {
+      /* Additional styles for new UI components */
+      .pigeons-grid {
         display: grid;
-        grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
-        gap: 12px;
-        padding: 4px 0;
+        grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+        gap: 16px;
       }
-      .sticker-preview-item {
-        background: #ffffff;
-        border-radius: 6px;
-        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
-        border: 1px solid #eef2f6;
-        overflow: hidden;
-        display: flex;
-        flex-direction: column;
-        align-items: center;
-        padding: 6px;
-        transition: transform 0.15s;
-      }
-      .sticker-preview-item:hover {
-        transform: scale(1.02);
-        box-shadow: 0 4px 16px rgba(0, 0, 0, 0.1);
-      }
-      .sticker-preview-item canvas {
-        width: 100%;
-        height: auto;
-        border-radius: 3px;
-        image-rendering: crisp-edges;
-      }
-      .sticker-preview-item .sticker-label {
-        font-size: 10px;
-        color: #888;
-        margin-top: 4px;
-        font-family: monospace;
-        letter-spacing: 0.5px;
-      }
-      .sticker-preview-item .sticker-player {
-        font-size: 11px;
-        font-weight: 600;
-        color: var(--text);
-        margin-top: 2px;
-        text-align: center;
-        line-height: 1.2;
-      }
-      .sticker-empty-state {
-        text-align: center;
-        padding: 60px 20px;
-        color: #999;
-      }
-      .sticker-empty-state .big-icon {
-        font-size: 56px;
-        display: block;
-        margin-bottom: 12px;
-      }
-      .sticker-empty-state h3 {
-        font-size: 20px;
-        color: var(--text);
-        margin-bottom: 6px;
-      }
-      .sticker-count-badge {
-        background: var(--primary);
-        color: #fff;
-        padding: 2px 12px;
-        border-radius: 20px;
-        font-size: 13px;
-        font-weight: 600;
-        margin-left: 8px;
-      }
-      @media (max-width: 768px) {
-        .sticker-preview-grid {
-          grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
-          gap: 8px;
-        }
-        .sticker-controls {
-          flex-direction: column;
-          align-items: stretch;
-        }
-        .sticker-controls .btn-group {
-          margin-left: 0;
-          justify-content: center;
-        }
-      }
-      @media (max-width: 480px) {
-        .sticker-preview-grid {
-          grid-template-columns: repeat(auto-fill, minmax(100px, 1fr));
-        }
-      }
-      @media print {
-        .sticker-controls,
-        .no-print {
-          display: none !important;
-        }
-        .sticker-preview-grid {
-          display: flex !important;
-          flex-wrap: wrap !important;
-          gap: 2mm !important;
-          justify-content: flex-start !important;
-          padding: 2mm !important;
-        }
-        .sticker-preview-item {
-          border: none !important;
-          box-shadow: none !important;
-          padding: 0 !important;
-          margin: 0 !important;
-          background: transparent !important;
-          break-inside: avoid !important;
-        }
-        .sticker-preview-item canvas {
-          width: 100% !important;
-          height: auto !important;
-        }
-        .sticker-preview-item .sticker-label,
-        .sticker-preview-item .sticker-player {
-          display: none !important;
-        }
-        body {
-          background: white !important;
-          margin: 0 !important;
-          padding: 0 !important;
-        }
-        #app-screen {
-          display: block !important;
-          height: auto !important;
-        }
-        #sidebar {
-          display: none !important;
-        }
-        #main-content {
-          margin: 0 !important;
-          padding: 0 !important;
-        }
-        header {
-          display: none !important;
-        }
-        .content-area {
-          padding: 0 !important;
-        }
-        .view-section {
-          padding: 0 !important;
-        }
-        .card {
-          box-shadow: none !important;
-          border: none !important;
-          padding: 0 !important;
-          margin: 0 !important;
-        }
-      }
-      .sticker-loading {
-        display: flex;
-        flex-direction: column;
-        align-items: center;
-        justify-content: center;
-        padding: 60px 20px;
-        color: var(--text-light);
-      }
-      .sticker-loading .spinner {
-        width: 48px;
-        height: 48px;
-        border: 4px solid #e9edf2;
-        border-top-color: var(--primary);
-        border-radius: 50%;
-        animation: spin 0.8s linear infinite;
-        margin-bottom: 16px;
-      }
-      @keyframes spin {
-        to {
-          transform: rotate(360deg);
-        }
-      }
-      .btn-generate-stickers {
-        background: linear-gradient(135deg, #f39c12, #e67e22);
-        color: #fff;
-        font-size: 1.1em;
-        padding: 14px 28px;
-        border: none;
-        border-radius: 10px;
-        font-weight: 700;
-        cursor: pointer;
-        transition: all 0.25s;
-        display: inline-flex;
-        align-items: center;
-        gap: 10px;
-        box-shadow: 0 4px 14px rgba(243, 156, 18, 0.35);
-        width: 100%;
-        justify-content: center;
-        margin-top: 12px;
-      }
-      .btn-generate-stickers:hover {
-        transform: translateY(-2px);
-        box-shadow: 0 6px 24px rgba(243, 156, 18, 0.45);
-        background: linear-gradient(135deg, #e67e22, #d35400);
-      }
-      .btn-generate-stickers:disabled {
-        opacity: 0.5;
-        cursor: not-allowed;
-        transform: none !important;
-        box-shadow: none !important;
-      }
-      .btn-sticker-action {
-        padding: 8px 18px;
+      .pigeon-card {
+        background: var(--card-bg);
+        border: 1px solid var(--border);
         border-radius: 8px;
-        font-weight: 600;
-        font-size: 13px;
-        border: none;
-        cursor: pointer;
-        transition: 0.2s;
-        display: inline-flex;
-        align-items: center;
-        gap: 6px;
+        padding: 12px;
+        text-align: center;
       }
-      .btn-sticker-action-primary {
-        background: var(--primary);
-        color: #fff;
+      .pigeon-card .ring {
+        font-weight: bold;
+        font-size: 16px;
       }
-      .btn-sticker-action-primary:hover {
-        background: var(--primary-dark);
-        transform: translateY(-1px);
-      }
-      .btn-sticker-action-success {
-        background: var(--success);
-        color: #fff;
-      }
-      .btn-sticker-action-success:hover {
-        background: #1e8449;
-        transform: translateY(-1px);
-      }
-      .btn-sticker-action-danger {
-        background: var(--danger);
-        color: #fff;
-      }
-      .btn-sticker-action-danger:hover {
-        background: #a93226;
-      }
-      .btn-sticker-action-secondary {
-        background: #e9edf2;
-        color: var(--text);
-      }
-      .btn-sticker-action-secondary:hover {
-        background: #d5dbe3;
-      }
-      .sticker-event-selector {
-        display: flex;
-        gap: 12px;
-        flex-wrap: wrap;
-        align-items: center;
-        margin-bottom: 16px;
-        padding: 12px 16px;
-        background: #f8fafc;
-        border-radius: 8px;
-        border: 1px solid #e9edf2;
-      }
-      .sticker-event-selector select {
-        padding: 8px 14px;
-        border-radius: 6px;
-        border: 1px solid #dce3e8;
-        font-size: 14px;
-        flex: 1;
-        min-width: 200px;
-        background: #fff;
-      }
-      .sticker-event-selector select:focus {
-        outline: none;
-        border-color: var(--primary);
-        box-shadow: 0 0 0 3px rgba(42, 122, 98, 0.12);
-      }
-      .sticker-event-selector .event-info {
-        font-size: 13px;
-        color: var(--text-light);
-      }
-      .sticker-event-selector .event-info strong {
-        color: var(--text);
-      }
-      .sticker-badge {
+      .pigeon-card .status {
         display: inline-block;
-        background: #f39c12;
-        color: #fff;
-        padding: 1px 10px;
+        padding: 2px 10px;
         border-radius: 12px;
         font-size: 11px;
-        font-weight: 600;
-        margin-left: 6px;
-      }
-
-      /* ============================================================
-                   NEW: RACE ANALYTICS DASHBOARD STYLES
-                   ============================================================ */
-
-      /* -- Race Info Bar -- */
-      .race-info-bar {
-        display: flex;
-        flex-wrap: wrap;
-        align-items: center;
-        gap: 16px 32px;
-        padding: 14px 20px;
-        background: var(--bg);
-        border-radius: 14px;
-        margin-bottom: 24px;
-        border: 1px solid var(--border);
-      }
-
-      .race-info-item {
-        display: flex;
-        flex-direction: column;
-        gap: 0px;
-      }
-
-      .race-info-label {
-        font-size: 10px;
-        font-weight: 600;
-        text-transform: uppercase;
-        letter-spacing: 0.5px;
-        color: var(--text-muted);
-      }
-
-      .race-info-value {
-        font-size: 15px;
-        font-weight: 600;
-        color: var(--text);
-      }
-
-      .race-info-value .coord {
-        font-weight: 400;
-        color: var(--text-light);
-        font-family: monospace;
-        font-size: 13px;
-      }
-
-      .race-status-badge {
-        display: inline-flex;
-        align-items: center;
-        gap: 6px;
-        padding: 4px 14px;
-        border-radius: 20px;
-        font-size: 12px;
-        font-weight: 600;
-        text-transform: uppercase;
-        letter-spacing: 0.3px;
-      }
-
-      .race-status-badge.active {
         background: #d4edda;
         color: #155724;
       }
-      .race-status-badge.closed {
+      .pigeon-card .status.inactive {
         background: #f8d7da;
         color: #721c24;
       }
-      .race-status-badge.scheduled {
-        background: #fff3cd;
-        color: #856404;
-      }
-
-      [data-theme="dark"] .race-status-badge.active {
-        background: #1a3a2a;
-        color: #8dd9a0;
-      }
-      [data-theme="dark"] .race-status-badge.closed {
-        background: #3a1a1a;
-        color: #f5a0a0;
-      }
-      [data-theme="dark"] .race-status-badge.scheduled {
-        background: #3a331a;
-        color: #f5d98a;
-      }
-
-      /* -- Champion Card -- */
-      .champion-card {
-        background: linear-gradient(145deg, #f8fafc, #eef2f6);
-        border-radius: 16px;
-        padding: 20px 24px;
-        margin-bottom: 24px;
-        border: 1px solid var(--border);
-        position: relative;
-        overflow: hidden;
-        transition: all 0.3s ease;
-      }
-
-      .champion-card:hover {
-        box-shadow: var(--shadow-hover);
-        border-color: var(--primary-light);
-      }
-
-      .champion-card::before {
-        content: "";
-        position: absolute;
-        top: 0;
-        left: 0;
-        right: 0;
-        height: 3px;
-        background: linear-gradient(90deg, #f1c40f, #f39c12, #e67e22);
-        border-radius: 16px 16px 0 0;
-      }
-
-      [data-theme="dark"] .champion-card {
-        background: linear-gradient(145deg, #1a2332, #141d2a);
-      }
-
-      .champion-badge {
-        display: inline-flex;
-        align-items: center;
-        gap: 6px;
-        font-size: 11px;
-        font-weight: 700;
-        text-transform: uppercase;
-        letter-spacing: 0.8px;
-        color: #b8860b;
-        background: rgba(241, 196, 15, 0.15);
-        padding: 2px 14px;
-        border-radius: 12px;
-        margin-bottom: 12px;
-      }
-
-      .champion-content {
-        display: flex;
-        flex-wrap: wrap;
-        align-items: center;
-        gap: 16px 32px;
-      }
-
-      .champion-avatar {
-        width: 60px;
-        height: 60px;
-        border-radius: 50%;
-        background: linear-gradient(135deg, #f1c40f, #f39c12);
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        font-size: 30px;
-        flex-shrink: 0;
-        box-shadow: 0 4px 16px rgba(241, 196, 15, 0.3);
-      }
-
-      .champion-info {
-        flex: 1;
-        min-width: 140px;
-      }
-
-      .champion-name {
-        font-size: 22px;
-        font-weight: 700;
-        color: var(--text);
-        letter-spacing: -0.3px;
-        line-height: 1.2;
-      }
-
-      .champion-code {
-        font-size: 14px;
-        color: var(--text-light);
-        font-family: monospace;
-        letter-spacing: 0.5px;
-      }
-
-      .champion-stats {
-        display: flex;
-        flex-wrap: wrap;
-        gap: 12px 24px;
-        margin-left: auto;
-      }
-
-      .champion-stat {
-        display: flex;
-        flex-direction: column;
-        align-items: center;
-        padding: 4px 8px;
-        min-width: 60px;
-      }
-
-      .champion-stat-label {
-        font-size: 9px;
-        font-weight: 600;
-        text-transform: uppercase;
-        letter-spacing: 0.6px;
-        color: var(--text-muted);
-      }
-
-      .champion-stat-value {
-        font-size: 18px;
-        font-weight: 700;
-        color: var(--text);
-        line-height: 1.2;
-      }
-
-      .champion-stat-value .unit {
-        font-size: 11px;
-        font-weight: 400;
-        color: var(--text-muted);
-        margin-left: 2px;
-      }
-
-      /* -- Stats Grid (Race Statistics) -- */
-      .race-stats-grid {
-        display: grid;
-        grid-template-columns: repeat(5, 1fr);
-        gap: 10px;
-        margin-bottom: 20px;
-      }
-
-      .race-stat-card {
-        background: var(--card-bg);
-        border-radius: 12px;
-        padding: 12px 14px;
-        border: 1px solid var(--border);
-        transition: all 0.2s ease;
-        text-align: center;
-      }
-
-      .race-stat-card:hover {
-        transform: translateY(-2px);
-        box-shadow: var(--shadow-hover);
-        border-color: var(--primary-light);
-      }
-
-      .race-stat-card .stat-icon {
-        display: inline-flex;
-        align-items: center;
-        justify-content: center;
-        width: 32px;
-        height: 32px;
-        border-radius: 8px;
-        background: rgba(25, 135, 84, 0.08);
-        color: var(--primary);
-        margin-bottom: 4px;
-      }
-
-      .race-stat-card .stat-value {
-        font-size: 20px;
-        font-weight: 700;
-        color: var(--text);
-        line-height: 1.2;
-      }
-
-      .race-stat-card .stat-value .unit {
-        font-size: 11px;
-        font-weight: 400;
-        color: var(--text-muted);
-        margin-left: 1px;
-      }
-
-      .race-stat-card .stat-label {
-        font-size: 10px;
-        font-weight: 500;
-        text-transform: uppercase;
-        letter-spacing: 0.4px;
-        color: var(--text-muted);
-        margin-top: 2px;
-      }
-
-      .race-stat-card.highlight {
-        background: rgba(25, 135, 84, 0.06);
-        border-color: rgba(25, 135, 84, 0.2);
-      }
-
-      .race-stat-card.highlight .stat-value {
-        color: var(--primary);
-      }
-
-      /* -- Highlights Grid -- */
-      .highlights-grid {
-        display: grid;
-        grid-template-columns: repeat(3, 1fr);
-        gap: 10px;
-        margin-bottom: 24px;
-      }
-
-      .highlight-item {
-        display: flex;
-        align-items: center;
-        gap: 12px;
-        padding: 10px 14px;
-        background: var(--card-bg);
-        border-radius: 12px;
-        border: 1px solid var(--border);
-        transition: all 0.2s ease;
-      }
-
-      .highlight-item:hover {
-        transform: translateY(-2px);
-        box-shadow: var(--shadow-hover);
-        border-color: var(--primary-light);
-      }
-
-      .highlight-icon {
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        width: 36px;
-        height: 36px;
-        border-radius: 8px;
-        background: rgba(25, 135, 84, 0.06);
-        color: var(--primary);
-        flex-shrink: 0;
-      }
-
-      .highlight-content {
-        flex: 1;
-        min-width: 0;
-      }
-
-      .highlight-label {
-        font-size: 9px;
-        font-weight: 600;
-        text-transform: uppercase;
-        letter-spacing: 0.5px;
-        color: var(--text-muted);
-      }
-
-      .highlight-value {
-        font-size: 14px;
-        font-weight: 600;
-        color: var(--text);
-        white-space: nowrap;
-        overflow: hidden;
-        text-overflow: ellipsis;
-      }
-
-      .highlight-value .unit {
-        font-size: 11px;
-        font-weight: 400;
-        color: var(--text-muted);
-        margin-left: 2px;
-      }
-
-      /* -- Results Table Wrapper -- */
-      .results-table-wrapper {
-        margin-top: 8px;
-      }
-
-      .results-table-wrapper .search-bar {
-        display: flex;
-        gap: 10px;
-        flex-wrap: wrap;
-        margin-bottom: 16px;
-      }
-
-      .results-table-wrapper .search-bar input {
-        flex: 1;
-        min-width: 200px;
-        padding: 10px 16px;
-        border-radius: 20px;
-        border: 2px solid var(--border);
-        background: var(--input-bg);
-        color: var(--text);
-        font-size: 14px;
-        transition: 0.2s;
-      }
-
-      .results-table-wrapper .search-bar input:focus {
-        outline: none;
-        border-color: var(--primary);
-        box-shadow: 0 0 0 3px rgba(25, 135, 84, 0.12);
-      }
-
-      .results-table-wrapper .search-bar input::placeholder {
-        color: var(--text-muted);
-      }
-
-      .results-table-wrapper .table-header-actions {
+      .entry-item {
+        border-bottom: 1px solid var(--border);
+        padding: 12px 0;
         display: flex;
         justify-content: space-between;
         align-items: center;
         flex-wrap: wrap;
-        gap: 8px;
-        margin-bottom: 10px;
       }
-
-      .results-table-wrapper .table-header-actions .left {
-        display: flex;
-        align-items: center;
-        gap: 12px;
-        font-size: 13px;
-        color: var(--text-light);
+      .certificate-card {
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        padding: 12px;
+        margin-bottom: 8px;
+        background: var(--bg);
       }
-
-      .results-table-wrapper .table-header-actions .left .live-dot {
-        display: inline-block;
-        width: 8px;
-        height: 8px;
-        border-radius: 50%;
-        background: #27ae60;
-        animation: pulse-dot 1.5s ease-in-out infinite;
+      .review-table .badge-valid {
+        color: green;
       }
-
-      @keyframes pulse-dot {
-        0%,
-        100% {
-          opacity: 1;
-          transform: scale(1);
-        }
-        50% {
-          opacity: 0.4;
-          transform: scale(0.8);
-        }
+      .review-table .badge-invalid {
+        color: red;
       }
-
-      /* -- Responsive -- */
-      @media (max-width: 1200px) {
-        .race-stats-grid {
-          grid-template-columns: repeat(4, 1fr);
-        }
-      }
-
-      @media (max-width: 992px) {
-        .race-stats-grid {
-          grid-template-columns: repeat(3, 1fr);
-        }
-        .highlights-grid {
-          grid-template-columns: repeat(2, 1fr);
-        }
-        .champion-stats {
-          margin-left: 0;
-          width: 100%;
-          justify-content: flex-start;
-        }
-      }
-
-      @media (max-width: 768px) {
-        .race-info-bar {
-          gap: 10px 20px;
-          padding: 12px 16px;
-        }
-        .race-info-item {
-          flex: 1 1 40%;
-        }
-        .race-stats-grid {
-          grid-template-columns: repeat(2, 1fr);
-          gap: 8px;
-        }
-        .highlights-grid {
-          grid-template-columns: 1fr;
-          gap: 8px;
-        }
-        .champion-content {
-          flex-direction: column;
-          align-items: stretch;
-          text-align: center;
-        }
-        .champion-avatar {
-          margin: 0 auto;
-        }
-        .champion-stats {
-          justify-content: center;
-        }
-        .champion-stat {
-          min-width: 50px;
-        }
-        .champion-stat-value {
-          font-size: 16px;
-        }
-        .race-stat-card .stat-value {
-          font-size: 17px;
-        }
-        .highlight-value {
-          font-size: 13px;
-        }
-        .results-table-wrapper .table-header-actions {
-          flex-direction: column;
-          align-items: stretch;
-        }
-      }
-
-      @media (max-width: 480px) {
-        .race-info-bar {
-          flex-direction: column;
-          align-items: stretch;
-          gap: 6px;
-        }
-        .race-info-item {
-          flex: 1 1 auto;
-        }
-        .race-stats-grid {
-          grid-template-columns: 1fr 1fr;
-          gap: 6px;
-        }
-        .race-stat-card {
-          padding: 10px 8px;
-        }
-        .race-stat-card .stat-value {
-          font-size: 16px;
-        }
-        .highlight-item {
-          padding: 8px 12px;
-        }
-        .champion-card {
-          padding: 16px;
-        }
-        .champion-name {
-          font-size: 18px;
-        }
-        .champion-stat-value {
-          font-size: 14px;
-        }
-      }
-
-      /* dark mode overrides for new elements */
-      [data-theme="dark"] .race-stat-card.highlight {
-        background: rgba(25, 135, 84, 0.12);
-        border-color: rgba(25, 135, 84, 0.3);
-      }
-
-      [data-theme="dark"] .race-stat-card .stat-icon {
-        background: rgba(25, 135, 84, 0.15);
-      }
-
-      [data-theme="dark"] .highlight-icon {
-        background: rgba(25, 135, 84, 0.15);
-      }
-
-      [data-theme="dark"] .champion-card::before {
-        background: linear-gradient(90deg, #d4a017, #b8860b, #8b6914);
-      }
-
-      [data-theme="dark"] .champion-avatar {
-        background: linear-gradient(135deg, #d4a017, #b8860b);
-      }
-
-      /* leaderboard table enhancements */
-      #results-table .rank-gold {
-        color: #b8860b;
-        font-weight: 700;
-      }
-      #results-table .rank-silver {
-        color: #a8a8a8;
-        font-weight: 700;
-      }
-      #results-table .rank-bronze {
-        color: #cd7f32;
-        font-weight: 700;
-      }
-      #results-table .rank-number {
-        font-weight: 600;
-        color: var(--text-muted);
-      }
-      #results-table .speed-cell {
-        font-weight: 700;
-        color: var(--primary);
-        font-size: 1.05em;
-      }
-      #results-table .winner-row td {
-        background: rgba(25, 135, 84, 0.04);
-      }
-      #results-table .winner-row td:first-child {
-        border-left: 3px solid #f1c40f;
-      }
-      [data-theme="dark"] #results-table .winner-row td {
-        background: rgba(25, 135, 84, 0.08);
-      }
-
-      /* event release info in new design */
-      .race-release-info {
-        font-size: 13px;
-        color: var(--text-light);
-        text-align: center;
-        padding: 4px 0 8px;
-      }
-      .race-release-info strong {
-        color: var(--text);
-      }
-
-      /* ===== ADMIN SEARCH BARS (added) ===== */
-      .admin-search-bar {
-        display: flex;
-        gap: 10px;
-        flex-wrap: wrap;
-        margin-bottom: 16px;
-      }
-      .admin-search-bar input {
-        flex: 1;
-        min-width: 200px;
-        padding: 10px 16px;
-        border-radius: 20px;
-        border: 2px solid var(--border);
-        background: var(--input-bg);
-        color: var(--text);
-        font-size: 14px;
-        transition: 0.2s;
-      }
-      .admin-search-bar input:focus {
-        outline: none;
-        border-color: var(--primary);
-        box-shadow: 0 0 0 3px rgba(25, 135, 84, 0.12);
-      }
-      .admin-search-bar input::placeholder {
-        color: var(--text-muted);
-      }
-
-      /* ===== SCANNER FRAME – BASE ===== */
-      #qr-frame {
-        position: absolute;
-        top: 50%;
-        left: 50%;
-        transform: translate(-50%, -50%);
-        width: 300px;
-        height: 300px;
-        border: 3px solid #00ff00;
-        border-radius: 16px;
-        pointer-events: none;
-        z-index: 10;
-        box-shadow: 0 0 25px rgba(0, 255, 0, 0.35);
-        transition: none; /* we use keyframes for the animation */
-      }
-
-      /* ===== CORNER BRACKETS ===== */
-      #qr-frame::before,
-      #qr-frame::after {
-        content: "";
-        position: absolute;
-        width: 22px;
-        height: 22px;
-        border-color: #00ff00;
-        border-style: solid;
-        border-width: 0;
-        opacity: 0;
-        transition: all 0.3s ease;
-        border-radius: 3px;
-      }
-
-      #qr-frame::before {
-        top: -2px;
-        left: -2px;
-        border-top-width: 4px;
-        border-left-width: 4px;
-      }
-
-      #qr-frame::after {
-        bottom: -2px;
-        right: -2px;
-        border-bottom-width: 4px;
-        border-right-width: 4px;
-      }
-
-      /* ===== SECOND PAIR OF CORNER BRACKETS (bottom-left & top-right) ===== */
-      #qr-frame .corner-bracket {
-        position: absolute;
-        width: 22px;
-        height: 22px;
-        border-color: #00ff00;
-        border-style: solid;
-        border-width: 0;
-        opacity: 0;
-        transition: all 0.3s ease;
-        border-radius: 3px;
-      }
-
-      #qr-frame .corner-bracket.bl {
-        bottom: -2px;
-        left: -2px;
-        border-bottom-width: 4px;
-        border-left-width: 4px;
-      }
-
-      #qr-frame .corner-bracket.tr {
-        top: -2px;
-        right: -2px;
-        border-top-width: 4px;
-        border-right-width: 4px;
-      }
-
-      /* ===== DETECTION ANIMATION – ZOOM & FOCUS ===== */
-      #qr-frame.detected {
-        animation: focusZoom 0.85s ease forwards;
-      }
-
-      #qr-frame.detected::before,
-      #qr-frame.detected::after,
-      #qr-frame.detected .corner-bracket {
-        border-color: #ffd700;
-        opacity: 1;
-      }
-
-      #qr-frame.detected::before {
-        animation: cornerSlideTL 0.55s ease forwards 0.1s;
-      }
-
-      #qr-frame.detected::after {
-        animation: cornerSlideBR 0.55s ease forwards 0.1s;
-      }
-
-      #qr-frame.detected .corner-bracket.bl {
-        animation: cornerSlideBL 0.55s ease forwards 0.15s;
-      }
-
-      #qr-frame.detected .corner-bracket.tr {
-        animation: cornerSlideTR 0.55s ease forwards 0.15s;
-      }
-
-      /* ===== KEYFRAMES ===== */
-      @keyframes focusZoom {
-        0% {
-          transform: translate(-50%, -50%) scale(1);
-          border-color: #00ff00;
-          box-shadow: 0 0 25px rgba(0, 255, 0, 0.35);
-        }
-        20% {
-          transform: translate(-50%, -50%) scale(1.45);
-          border-color: #ffd700;
-          box-shadow:
-            0 0 70px rgba(255, 215, 0, 0.95),
-            0 0 140px rgba(255, 215, 0, 0.4);
-        }
-        45% {
-          transform: translate(-50%, -50%) scale(1.2);
-          border-color: #ffd700;
-          box-shadow: 0 0 45px rgba(255, 215, 0, 0.7);
-        }
-        70% {
-          transform: translate(-50%, -50%) scale(1.05);
-          border-color: #ffd700;
-          box-shadow: 0 0 30px rgba(255, 215, 0, 0.4);
-        }
-        100% {
-          transform: translate(-50%, -50%) scale(1);
-          border-color: #00ff00;
-          box-shadow: 0 0 25px rgba(0, 255, 0, 0.35);
-        }
-      }
-
-      @keyframes cornerSlideTL {
-        0% {
-          top: -2px;
-          left: -2px;
-          width: 22px;
-          height: 22px;
-          opacity: 0;
-        }
-        40% {
-          opacity: 1;
-          width: 48px;
-          height: 48px;
-        }
-        100% {
-          top: 10px;
-          left: 10px;
-          width: 32px;
-          height: 32px;
-          opacity: 0.8;
-        }
-      }
-
-      @keyframes cornerSlideBR {
-        0% {
-          bottom: -2px;
-          right: -2px;
-          width: 22px;
-          height: 22px;
-          opacity: 0;
-        }
-        40% {
-          opacity: 1;
-          width: 48px;
-          height: 48px;
-        }
-        100% {
-          bottom: 10px;
-          right: 10px;
-          width: 32px;
-          height: 32px;
-          opacity: 0.8;
-        }
-      }
-
-      @keyframes cornerSlideBL {
-        0% {
-          bottom: -2px;
-          left: -2px;
-          width: 22px;
-          height: 22px;
-          opacity: 0;
-        }
-        40% {
-          opacity: 1;
-          width: 48px;
-          height: 48px;
-        }
-        100% {
-          bottom: 10px;
-          left: 10px;
-          width: 32px;
-          height: 32px;
-          opacity: 0.8;
-        }
-      }
-
-      @keyframes cornerSlideTR {
-        0% {
-          top: -2px;
-          right: -2px;
-          width: 22px;
-          height: 22px;
-          opacity: 0;
-        }
-        40% {
-          opacity: 1;
-          width: 48px;
-          height: 48px;
-        }
-        100% {
-          top: 10px;
-          right: 10px;
-          width: 32px;
-          height: 32px;
-          opacity: 0.8;
-        }
+      .season-rank {
+        grid-column: 1 / -1 !important;
+        justify-self: center;
+        width: 100%;
+        max-width: 320px;
       }
     </style>
   </head>
@@ -1255,6 +168,29 @@
           >
             <i class="fas fa-chart-pie"></i> Dashboard
           </li>
+          <!-- Player-only -->
+          <li
+            onclick="app.navigate('pigeons')"
+            id="nav-pigeons"
+            class="player-only hidden"
+          >
+            <i class="fas fa-dove"></i> My Pigeons
+          </li>
+          <li
+            onclick="app.navigate('entries')"
+            id="nav-entries"
+            class="player-only hidden"
+          >
+            <i class="fas fa-calendar-check"></i> My Entries
+          </li>
+          <li
+            onclick="app.navigate('certificates')"
+            id="nav-certificates"
+            class="player-only hidden"
+          >
+            <i class="fas fa-award"></i> Certificates
+          </li>
+          <!-- Common -->
           <li onclick="app.navigate('profile')" id="nav-profile">
             <i class="fas fa-user-circle"></i> My Profile
           </li>
@@ -1264,6 +200,7 @@
           <li onclick="app.navigate('logs')" id="nav-logs">
             <i class="fas fa-history"></i> App Logs
           </li>
+          <!-- Admin-only -->
           <li
             onclick="app.navigate('admin-players')"
             id="nav-admin-players"
@@ -1277,6 +214,13 @@
             class="admin-only hidden"
           >
             <i class="fas fa-calendar-alt"></i> Manage Events
+          </li>
+          <li
+            onclick="app.navigate('event-review')"
+            id="nav-event-review"
+            class="admin-only hidden"
+          >
+            <i class="fas fa-clipboard-list"></i> Event Review
           </li>
           <li
             onclick="app.navigate('sticker-generator')"
@@ -1324,8 +268,6 @@
               <p style="margin-bottom: 20px; color: #666">
                 Enter the event code to clock your pigeon's arrival
               </p>
-
-              <!-- Input + Scan QR group -->
               <div class="clock-in-input-group">
                 <input
                   type="text"
@@ -1341,8 +283,6 @@
                   <i class="fas fa-qrcode"></i> Scan QR
                 </button>
               </div>
-
-              <!-- Clock Bird Arrival button (full width) -->
               <button class="btn btn-success btn-clock" onclick="app.clockIn()">
                 <i class="fas fa-check-circle"></i> Clock Bird Arrival
               </button>
@@ -1355,10 +295,42 @@
                     <th>Event Name</th>
                     <th>Release Time</th>
                     <th>Status</th>
+                    <th>Action</th>
                   </tr>
                 </thead>
                 <tbody></tbody>
               </table>
+            </div>
+          </div>
+
+          <!-- ===== MY PIGEONS ===== -->
+          <div id="view-pigeons" class="view-section hidden player-only">
+            <div class="card">
+              <div class="dashboard-header">
+                <h2><i class="fas fa-dove"></i> My Pigeons</h2>
+                <button class="btn btn-primary" onclick="app.openPigeonModal()">
+                  <i class="fas fa-plus"></i> Add Pigeon
+                </button>
+              </div>
+              <div id="pigeons-list" class="pigeons-grid">
+                <p>Loading...</p>
+              </div>
+            </div>
+          </div>
+
+          <!-- ===== MY ENTRIES ===== -->
+          <div id="view-entries" class="view-section hidden player-only">
+            <div class="card">
+              <h2><i class="fas fa-calendar-check"></i> My Entries</h2>
+              <div id="entries-container"><p>Loading...</p></div>
+            </div>
+          </div>
+
+          <!-- ===== CERTIFICATES ===== -->
+          <div id="view-certificates" class="view-section hidden player-only">
+            <div class="card">
+              <h2><i class="fas fa-award"></i> My Certificates</h2>
+              <div id="certificates-list"><p>Loading...</p></div>
             </div>
           </div>
 
@@ -1379,8 +351,8 @@
                 User ID: <span id="prof-id" style="font-weight: bold"></span>
               </p>
               <div class="form-group">
-                <label><i class="fas fa-phone"></i> Contact</label>
-                <input
+                <label><i class="fas fa-phone"></i> Contact</label
+                ><input
                   type="text"
                   id="prof-contact"
                   class="form-control"
@@ -1390,8 +362,7 @@
               <div class="form-group player-only hidden">
                 <label
                   ><i class="fas fa-map-marker-alt"></i> Loft Latitude</label
-                >
-                <input
+                ><input
                   type="text"
                   id="prof-lat"
                   class="form-control"
@@ -1401,8 +372,7 @@
               <div class="form-group player-only hidden">
                 <label
                   ><i class="fas fa-map-marker-alt"></i> Loft Longitude</label
-                >
-                <input
+                ><input
                   type="text"
                   id="prof-lng"
                   class="form-control"
@@ -1410,7 +380,7 @@
                 />
               </div>
 
-              <!-- ===== PERFORMANCE SUMMARY CARD ===== -->
+              <!-- Performance Summary (extended) -->
               <div id="player-stats-container" class="card stats-card hidden">
                 <div class="stats-card-header">
                   <div class="stats-card-title-wrapper">
@@ -1419,21 +389,16 @@
                   </div>
                   <span class="stats-card-badge">Lifetime</span>
                 </div>
-
                 <div class="stats-grid">
-                  <!-- Birds Clocked -->
                   <div class="stat-metric">
                     <div class="stat-metric-icon">
                       <svg
-                        xmlns="http://www.w3.org/2000/svg"
                         width="20"
                         height="20"
                         viewBox="0 0 24 24"
                         fill="none"
                         stroke="currentColor"
                         stroke-width="1.8"
-                        stroke-linecap="round"
-                        stroke-linejoin="round"
                       >
                         <path d="M16 7h.01" />
                         <path
@@ -1444,26 +409,21 @@
                       </svg>
                     </div>
                     <div class="stat-metric-content">
-                      <span class="stat-metric-label">Birds Clocked</span>
-                      <span class="stat-metric-value" id="stats-total-pigeons"
+                      <span class="stat-metric-label">Birds Clocked</span
+                      ><span class="stat-metric-value" id="stats-total-pigeons"
                         >0</span
                       >
                     </div>
                   </div>
-
-                  <!-- Races Entered -->
                   <div class="stat-metric">
                     <div class="stat-metric-icon">
                       <svg
-                        xmlns="http://www.w3.org/2000/svg"
                         width="20"
                         height="20"
                         viewBox="0 0 24 24"
                         fill="none"
                         stroke="currentColor"
                         stroke-width="1.8"
-                        stroke-linecap="round"
-                        stroke-linejoin="round"
                       >
                         <path
                           d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"
@@ -1472,24 +432,21 @@
                       </svg>
                     </div>
                     <div class="stat-metric-content">
-                      <span class="stat-metric-label">Races Entered</span>
-                      <span class="stat-metric-value" id="stats-events">0</span>
+                      <span class="stat-metric-label">Races Entered</span
+                      ><span class="stat-metric-value" id="stats-events"
+                        >0</span
+                      >
                     </div>
                   </div>
-
-                  <!-- Race Wins (Emphasized) -->
                   <div class="stat-metric stat-metric-highlight">
                     <div class="stat-metric-icon stat-metric-icon-gold">
                       <svg
-                        xmlns="http://www.w3.org/2000/svg"
                         width="22"
                         height="22"
                         viewBox="0 0 24 24"
                         fill="none"
                         stroke="currentColor"
                         stroke-width="1.8"
-                        stroke-linecap="round"
-                        stroke-linejoin="round"
                       >
                         <path
                           d="M12 2L15.09 8.26L22 9.27L17 14.14L18.18 21.02L12 17.77L5.82 21.02L7 14.14L2 9.27L8.91 8.26L12 2Z"
@@ -1497,28 +454,23 @@
                       </svg>
                     </div>
                     <div class="stat-metric-content">
-                      <span class="stat-metric-label">Race Wins</span>
-                      <span
+                      <span class="stat-metric-label">Race Wins</span
+                      ><span
                         class="stat-metric-value stat-metric-value-gold"
                         id="stats-wins"
                         >0</span
                       >
                     </div>
                   </div>
-
-                  <!-- Podium Finishes -->
                   <div class="stat-metric">
                     <div class="stat-metric-icon">
                       <svg
-                        xmlns="http://www.w3.org/2000/svg"
                         width="20"
                         height="20"
                         viewBox="0 0 24 24"
                         fill="none"
                         stroke="currentColor"
                         stroke-width="1.8"
-                        stroke-linecap="round"
-                        stroke-linejoin="round"
                       >
                         <circle cx="12" cy="8" r="3" />
                         <path d="M12 11v8" />
@@ -1526,26 +478,21 @@
                       </svg>
                     </div>
                     <div class="stat-metric-content">
-                      <span class="stat-metric-label">Podium Finishes</span>
-                      <span class="stat-metric-value" id="stats-podiums"
+                      <span class="stat-metric-label">Podium Finishes</span
+                      ><span class="stat-metric-value" id="stats-podiums"
                         >0</span
                       >
                     </div>
                   </div>
-
-                  <!-- Average Speed -->
                   <div class="stat-metric">
                     <div class="stat-metric-icon">
                       <svg
-                        xmlns="http://www.w3.org/2000/svg"
                         width="20"
                         height="20"
                         viewBox="0 0 24 24"
                         fill="none"
                         stroke="currentColor"
                         stroke-width="1.8"
-                        stroke-linecap="round"
-                        stroke-linejoin="round"
                       >
                         <path
                           d="M12 22c5.523 0 10-4.477 10-10S17.523 2 12 2 2 6.477 2 12s4.477 10 10 10z"
@@ -1554,27 +501,21 @@
                       </svg>
                     </div>
                     <div class="stat-metric-content">
-                      <span class="stat-metric-label">Average Speed</span>
-                      <span class="stat-metric-value" id="stats-avg-speed"
+                      <span class="stat-metric-label">Average Speed</span
+                      ><span class="stat-metric-value" id="stats-avg-speed"
                         >0.00</span
-                      >
-                      <span class="stat-metric-unit">m/min</span>
+                      ><span class="stat-metric-unit">m/min</span>
                     </div>
                   </div>
-
-                  <!-- Top Speed (Emphasized) -->
                   <div class="stat-metric stat-metric-highlight">
                     <div class="stat-metric-icon stat-metric-icon-accent">
                       <svg
-                        xmlns="http://www.w3.org/2000/svg"
                         width="22"
                         height="22"
                         viewBox="0 0 24 24"
                         fill="none"
                         stroke="currentColor"
                         stroke-width="1.8"
-                        stroke-linecap="round"
-                        stroke-linejoin="round"
                       >
                         <polygon
                           points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"
@@ -1582,42 +523,85 @@
                       </svg>
                     </div>
                     <div class="stat-metric-content">
-                      <span class="stat-metric-label">Top Speed</span>
-                      <span
+                      <span class="stat-metric-label">Top Speed</span
+                      ><span
                         class="stat-metric-value stat-metric-value-accent"
                         id="stats-best-speed"
                         >0.00</span
-                      >
-                      <span class="stat-metric-unit">m/min</span>
+                      ><span class="stat-metric-unit">m/min</span>
                     </div>
                   </div>
-
-                  <!-- Win Rate (Emphasized) -->
                   <div
                     class="stat-metric stat-metric-highlight stat-metric-full"
                   >
                     <div class="stat-metric-icon stat-metric-icon-accent">
                       <svg
-                        xmlns="http://www.w3.org/2000/svg"
                         width="22"
                         height="22"
                         viewBox="0 0 24 24"
                         fill="none"
                         stroke="currentColor"
                         stroke-width="1.8"
-                        stroke-linecap="round"
-                        stroke-linejoin="round"
                       >
                         <polyline points="23 6 13.5 15.5 8.5 10.5 1 18" />
                         <polyline points="17 6 23 6 23 12" />
                       </svg>
                     </div>
                     <div class="stat-metric-content">
-                      <span class="stat-metric-label">Win Rate</span>
-                      <span
+                      <span class="stat-metric-label">Win Rate</span
+                      ><span
                         class="stat-metric-value stat-metric-value-accent"
                         id="stats-win-rate"
                         >0.0%</span
+                      >
+                    </div>
+                  </div>
+                  <!-- NEW extended stats -->
+                  <div class="stat-metric">
+                    <div class="stat-metric-icon">
+                      <svg
+                        width="20"
+                        height="20"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        stroke-width="1.8"
+                      >
+                        <circle cx="12" cy="12" r="10" />
+                        <path d="M12 8v8" />
+                        <path d="M8 12h8" />
+                      </svg>
+                    </div>
+                    <div class="stat-metric-content">
+                      <span class="stat-metric-label">Champion Titles</span
+                      ><span
+                        class="stat-metric-value"
+                        id="stats-champion-titles"
+                        >0</span
+                      >
+                    </div>
+                  </div>
+                  <div class="stat-metric">
+                    <div class="stat-metric-icon">
+                      <svg
+                        width="20"
+                        height="20"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        stroke-width="1.8"
+                      >
+                        <path
+                          d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"
+                        />
+                      </svg>
+                    </div>
+                    <div class="stat-metric-content">
+                      <span class="stat-metric-label">Certificates</span
+                      ><span
+                        class="stat-metric-value"
+                        id="stats-total-certificates"
+                        >0</span
                       >
                     </div>
                   </div>
@@ -1636,9 +620,8 @@
                 <span
                   class="password-toggle"
                   onclick="app.togglePasswordVisibility('new-password', this)"
-                >
-                  <i class="far fa-eye"></i>
-                </span>
+                  ><i class="far fa-eye"></i
+                ></span>
               </div>
               <button class="btn btn-primary" onclick="app.changePassword()">
                 <i class="fas fa-save"></i> Update Password
@@ -1646,32 +629,30 @@
             </div>
           </div>
 
-          <!-- ===== RESULTS (RACE ANALYTICS DASHBOARD) ===== -->
+          <!-- ===== RESULTS ===== -->
           <div id="view-results" class="view-section hidden">
             <div class="card" style="padding: 24px 24px 20px">
-              <!-- ---- RACE INFORMATION BAR ---- -->
               <div class="race-info-bar" id="race-info-bar">
                 <div class="race-info-item">
-                  <span class="race-info-label">🏁 Race</span>
-                  <span class="race-info-value" id="race-name">—</span>
+                  <span class="race-info-label">🏁 Race</span
+                  ><span class="race-info-value" id="race-name">—</span>
                 </div>
                 <div class="race-info-item">
-                  <span class="race-info-label">📍 Release Point</span>
-                  <span class="race-info-value" id="race-release-point"
+                  <span class="race-info-label">📍 Release Point</span
+                  ><span class="race-info-value" id="race-release-point"
                     ><span class="coord">—</span></span
                   >
                 </div>
                 <div class="race-info-item">
-                  <span class="race-info-label">🕐 Release Time</span>
-                  <span class="race-info-value" id="race-release-time">—</span>
+                  <span class="race-info-label">🕐 Release Time</span
+                  ><span class="race-info-value" id="race-release-time">—</span>
                 </div>
                 <div class="race-info-item">
-                  <span class="race-info-label">📌 Status</span>
-                  <span class="race-status-badge" id="race-status">—</span>
+                  <span class="race-info-label">📌 Status</span
+                  ><span class="race-status-badge" id="race-status">—</span>
                 </div>
               </div>
 
-              <!-- ---- CHAMPION CARD ---- -->
               <div class="champion-card" id="champion-card">
                 <div class="champion-badge">🏆 Champion</div>
                 <div class="champion-content">
@@ -1682,22 +663,22 @@
                   </div>
                   <div class="champion-stats">
                     <div class="champion-stat">
-                      <span class="champion-stat-label">Speed</span>
-                      <span class="champion-stat-value" id="champion-speed"
+                      <span class="champion-stat-label">Speed</span
+                      ><span class="champion-stat-value" id="champion-speed"
                         >— <span class="unit">m/min</span></span
                       >
                     </div>
                     <div class="champion-stat">
-                      <span class="champion-stat-label">Flight Time</span>
-                      <span
+                      <span class="champion-stat-label">Flight Time</span
+                      ><span
                         class="champion-stat-value"
                         id="champion-flight-time"
                         >—</span
                       >
                     </div>
                     <div class="champion-stat">
-                      <span class="champion-stat-label">Distance</span>
-                      <span class="champion-stat-value" id="champion-distance"
+                      <span class="champion-stat-label">Distance</span
+                      ><span class="champion-stat-value" id="champion-distance"
                         >— <span class="unit">km</span></span
                       >
                     </div>
@@ -1705,21 +686,16 @@
                 </div>
               </div>
 
-              <!-- ---- RACE STATISTICS GRID ---- -->
               <div class="race-stats-grid" id="race-stats-grid">
-                <!-- Birds Released -->
                 <div class="race-stat-card">
                   <div class="stat-icon">
                     <svg
-                      xmlns="http://www.w3.org/2000/svg"
                       width="18"
                       height="18"
                       viewBox="0 0 24 24"
                       fill="none"
                       stroke="currentColor"
                       stroke-width="2"
-                      stroke-linecap="round"
-                      stroke-linejoin="round"
                     >
                       <path d="M16 7h.01" />
                       <path
@@ -1732,19 +708,15 @@
                   <div class="stat-value" id="stat-released">0</div>
                   <div class="stat-label">Birds Released</div>
                 </div>
-                <!-- Birds Clocked -->
                 <div class="race-stat-card highlight">
                   <div class="stat-icon">
                     <svg
-                      xmlns="http://www.w3.org/2000/svg"
                       width="18"
                       height="18"
                       viewBox="0 0 24 24"
                       fill="none"
                       stroke="currentColor"
                       stroke-width="2"
-                      stroke-linecap="round"
-                      stroke-linejoin="round"
                     >
                       <path d="M12 2v4" />
                       <path d="M12 18v4" />
@@ -1759,19 +731,15 @@
                   <div class="stat-value" id="stat-clocked">0</div>
                   <div class="stat-label">Birds Clocked</div>
                 </div>
-                <!-- Missing Birds -->
                 <div class="race-stat-card">
                   <div class="stat-icon">
                     <svg
-                      xmlns="http://www.w3.org/2000/svg"
                       width="18"
                       height="18"
                       viewBox="0 0 24 24"
                       fill="none"
                       stroke="currentColor"
                       stroke-width="2"
-                      stroke-linecap="round"
-                      stroke-linejoin="round"
                     >
                       <circle cx="12" cy="12" r="10" />
                       <line x1="12" y1="8" x2="12" y2="12" />
@@ -1781,19 +749,15 @@
                   <div class="stat-value" id="stat-missing">0</div>
                   <div class="stat-label">Missing Birds</div>
                 </div>
-                <!-- Completion Rate -->
                 <div class="race-stat-card highlight">
                   <div class="stat-icon">
                     <svg
-                      xmlns="http://www.w3.org/2000/svg"
                       width="18"
                       height="18"
                       viewBox="0 0 24 24"
                       fill="none"
                       stroke="currentColor"
                       stroke-width="2"
-                      stroke-linecap="round"
-                      stroke-linejoin="round"
                     >
                       <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14" />
                       <polyline points="22 4 12 14.01 9 11.01" />
@@ -1802,19 +766,15 @@
                   <div class="stat-value" id="stat-completion">0%</div>
                   <div class="stat-label">Completion Rate</div>
                 </div>
-                <!-- Participants -->
                 <div class="race-stat-card">
                   <div class="stat-icon">
                     <svg
-                      xmlns="http://www.w3.org/2000/svg"
                       width="18"
                       height="18"
                       viewBox="0 0 24 24"
                       fill="none"
                       stroke="currentColor"
                       stroke-width="2"
-                      stroke-linecap="round"
-                      stroke-linejoin="round"
                     >
                       <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
                       <circle cx="9" cy="7" r="4" />
@@ -1825,19 +785,15 @@
                   <div class="stat-value" id="stat-participants">0</div>
                   <div class="stat-label">Participants</div>
                 </div>
-                <!-- Average Speed -->
                 <div class="race-stat-card">
                   <div class="stat-icon">
                     <svg
-                      xmlns="http://www.w3.org/2000/svg"
                       width="18"
                       height="18"
                       viewBox="0 0 24 24"
                       fill="none"
                       stroke="currentColor"
                       stroke-width="2"
-                      stroke-linecap="round"
-                      stroke-linejoin="round"
                     >
                       <path
                         d="M12 22c5.523 0 10-4.477 10-10S17.523 2 12 2 2 6.477 2 12s4.477 10 10 10z"
@@ -1850,19 +806,15 @@
                   </div>
                   <div class="stat-label">Average Speed</div>
                 </div>
-                <!-- Highest Speed -->
                 <div class="race-stat-card highlight">
                   <div class="stat-icon">
                     <svg
-                      xmlns="http://www.w3.org/2000/svg"
                       width="18"
                       height="18"
                       viewBox="0 0 24 24"
                       fill="none"
                       stroke="currentColor"
                       stroke-width="2"
-                      stroke-linecap="round"
-                      stroke-linejoin="round"
                     >
                       <polygon
                         points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"
@@ -1874,19 +826,15 @@
                   </div>
                   <div class="stat-label">Highest Speed</div>
                 </div>
-                <!-- Lowest Speed -->
                 <div class="race-stat-card">
                   <div class="stat-icon">
                     <svg
-                      xmlns="http://www.w3.org/2000/svg"
                       width="18"
                       height="18"
                       viewBox="0 0 24 24"
                       fill="none"
                       stroke="currentColor"
                       stroke-width="2"
-                      stroke-linecap="round"
-                      stroke-linejoin="round"
                     >
                       <polygon
                         points="11 22 21 10 12 10 13 2 3 14 12 14 11 22"
@@ -1898,19 +846,15 @@
                   </div>
                   <div class="stat-label">Lowest Speed</div>
                 </div>
-                <!-- Average Flight Time -->
                 <div class="race-stat-card">
                   <div class="stat-icon">
                     <svg
-                      xmlns="http://www.w3.org/2000/svg"
                       width="18"
                       height="18"
                       viewBox="0 0 24 24"
                       fill="none"
                       stroke="currentColor"
                       stroke-width="2"
-                      stroke-linecap="round"
-                      stroke-linejoin="round"
                     >
                       <circle cx="12" cy="12" r="10" />
                       <polyline points="12 6 12 12 16 14" />
@@ -1919,19 +863,15 @@
                   <div class="stat-value" id="stat-avg-flight-time">0:00</div>
                   <div class="stat-label">Avg Flight Time</div>
                 </div>
-                <!-- Winning Margin -->
                 <div class="race-stat-card highlight">
                   <div class="stat-icon">
                     <svg
-                      xmlns="http://www.w3.org/2000/svg"
                       width="18"
                       height="18"
                       viewBox="0 0 24 24"
                       fill="none"
                       stroke="currentColor"
                       stroke-width="2"
-                      stroke-linecap="round"
-                      stroke-linejoin="round"
                     >
                       <line x1="5" y1="12" x2="19" y2="12" />
                       <polyline points="15 8 19 12 15 16" />
@@ -1945,20 +885,16 @@
                 </div>
               </div>
 
-              <!-- ---- LIVE HIGHLIGHTS ---- -->
               <div class="highlights-grid" id="highlights-grid">
                 <div class="highlight-item">
                   <div class="highlight-icon">
                     <svg
-                      xmlns="http://www.w3.org/2000/svg"
                       width="20"
                       height="20"
                       viewBox="0 0 24 24"
                       fill="none"
                       stroke="currentColor"
                       stroke-width="2"
-                      stroke-linecap="round"
-                      stroke-linejoin="round"
                     >
                       <polygon
                         points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"
@@ -1973,15 +909,12 @@
                 <div class="highlight-item">
                   <div class="highlight-icon">
                     <svg
-                      xmlns="http://www.w3.org/2000/svg"
                       width="20"
                       height="20"
                       viewBox="0 0 24 24"
                       fill="none"
                       stroke="currentColor"
                       stroke-width="2"
-                      stroke-linecap="round"
-                      stroke-linejoin="round"
                     >
                       <circle cx="12" cy="12" r="10" />
                       <polyline points="12 6 12 12 8 10" />
@@ -1995,15 +928,12 @@
                 <div class="highlight-item">
                   <div class="highlight-icon">
                     <svg
-                      xmlns="http://www.w3.org/2000/svg"
                       width="20"
                       height="20"
                       viewBox="0 0 24 24"
                       fill="none"
                       stroke="currentColor"
                       stroke-width="2"
-                      stroke-linecap="round"
-                      stroke-linejoin="round"
                     >
                       <circle cx="12" cy="12" r="10" />
                       <polyline points="12 6 12 12 16 14" />
@@ -2017,15 +947,12 @@
                 <div class="highlight-item">
                   <div class="highlight-icon">
                     <svg
-                      xmlns="http://www.w3.org/2000/svg"
                       width="20"
                       height="20"
                       viewBox="0 0 24 24"
                       fill="none"
                       stroke="currentColor"
                       stroke-width="2"
-                      stroke-linecap="round"
-                      stroke-linejoin="round"
                     >
                       <path
                         d="M12 22c5.523 0 10-4.477 10-10S17.523 2 12 2 2 6.477 2 12s4.477 10 10 10z"
@@ -2044,15 +971,12 @@
                 <div class="highlight-item">
                   <div class="highlight-icon">
                     <svg
-                      xmlns="http://www.w3.org/2000/svg"
                       width="20"
                       height="20"
                       viewBox="0 0 24 24"
                       fill="none"
                       stroke="currentColor"
                       stroke-width="2"
-                      stroke-linecap="round"
-                      stroke-linejoin="round"
                     >
                       <path d="M3 3l18 18" />
                       <path d="M18 3l3 3" />
@@ -2069,15 +993,12 @@
                 <div class="highlight-item">
                   <div class="highlight-icon">
                     <svg
-                      xmlns="http://www.w3.org/2000/svg"
                       width="20"
                       height="20"
                       viewBox="0 0 24 24"
                       fill="none"
                       stroke="currentColor"
                       stroke-width="2"
-                      stroke-linecap="round"
-                      stroke-linejoin="round"
                     >
                       <polygon
                         points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"
@@ -2093,13 +1014,11 @@
                 </div>
               </div>
 
-              <!-- ---- LEADERBOARD TABLE ---- -->
               <div class="results-table-wrapper">
                 <div class="table-header-actions">
                   <div class="left">
-                    <span class="live-dot"></span>
-                    <span>Live</span>
-                    <span
+                    <span class="live-dot"></span><span>Live</span
+                    ><span
                       style="color: var(--text-muted); font-weight: 400"
                       id="results-last-updated"
                       >Updated just now</span
@@ -2114,7 +1033,6 @@
                     </button>
                   </div>
                 </div>
-
                 <div class="search-bar">
                   <input
                     id="result-search-input"
@@ -2132,7 +1050,6 @@
                     ✕ Clear
                   </button>
                 </div>
-
                 <div style="overflow-x: auto">
                   <table id="results-table">
                     <thead>
@@ -2177,16 +1094,13 @@
                   <i class="fas fa-plus"></i> Add New Player
                 </button>
               </div>
-
-              <!-- ===== ADDED SEARCH BAR FOR PLAYERS ===== -->
               <div class="admin-search-bar">
                 <input
                   id="players-search-input"
                   type="text"
                   placeholder="🔍 Search players by name or ID..."
                   oninput="app.filterPlayers()"
-                />
-                <button
+                /><button
                   class="btn btn-sm btn-secondary"
                   onclick="
                     document.getElementById('players-search-input').value = '';
@@ -2196,7 +1110,6 @@
                   ✕ Clear
                 </button>
               </div>
-
               <table id="players-table">
                 <thead>
                   <tr>
@@ -2221,16 +1134,13 @@
                   <i class="fas fa-plus"></i> Create Event
                 </button>
               </div>
-
-              <!-- ===== ADDED SEARCH BAR FOR EVENTS ===== -->
               <div class="admin-search-bar">
                 <input
                   id="events-search-input"
                   type="text"
                   placeholder="🔍 Search events by name or code..."
                   oninput="app.filterEvents()"
-                />
-                <button
+                /><button
                   class="btn btn-sm btn-secondary"
                   onclick="
                     document.getElementById('events-search-input').value = '';
@@ -2240,7 +1150,6 @@
                   ✕ Clear
                 </button>
               </div>
-
               <table id="admin-events-table">
                 <thead>
                   <tr>
@@ -2252,6 +1161,33 @@
                 </thead>
                 <tbody></tbody>
               </table>
+            </div>
+          </div>
+
+          <!-- ===== EVENT REVIEW (Admin) ===== -->
+          <div id="view-event-review" class="view-section hidden admin-only">
+            <div class="card">
+              <h2>
+                <i class="fas fa-clipboard-list"></i> Event Registration Review
+              </h2>
+              <div class="admin-search-bar">
+                <select
+                  id="review-event-select"
+                  class="form-control"
+                  onchange="app.loadAdminReview()"
+                >
+                  <option value="">-- Select Event --</option>
+                </select>
+                <button
+                  class="btn btn-success"
+                  onclick="app.generateStickersForEvent()"
+                >
+                  <i class="fas fa-tags"></i> Generate Stickers
+                </button>
+              </div>
+              <div id="review-results">
+                <p>Select an event to review registrations.</p>
+              </div>
             </div>
           </div>
 
@@ -2267,7 +1203,6 @@
                   >0 stickers</span
                 >
               </div>
-
               <div class="sticker-event-selector">
                 <select
                   id="sticker-event-select"
@@ -2279,10 +1214,9 @@
                   <span>Select an event to generate stickers</span>
                 </div>
               </div>
-
               <div class="sticker-controls">
-                <label>
-                  Sticker Width
+                <label
+                  >Sticker Width
                   <input
                     type="range"
                     id="sticker-width-slider"
@@ -2291,12 +1225,11 @@
                     value="42"
                     step="0.5"
                     oninput="app.updateStickerWidth(this.value)"
-                  />
-                  <span class="width-display" id="sticker-width-display"
+                  /><span class="width-display" id="sticker-width-display"
                     >42</span
                   >
-                  mm
-                </label>
+                  mm</label
+                >
                 <div class="btn-group">
                   <button
                     class="btn-sticker-action btn-sticker-action-primary"
@@ -2318,7 +1251,6 @@
                   </button>
                 </div>
               </div>
-
               <div id="sticker-grid-container">
                 <div class="sticker-empty-state">
                   <i
@@ -2346,7 +1278,7 @@
 
     <!-- ===== MODALS ===== -->
 
-    <!-- Player Modal -->
+    <!-- Player Modal (unchanged) -->
     <div id="modal-player" class="modal-overlay">
       <div class="modal-content">
         <div class="modal-header">
@@ -2356,8 +1288,8 @@
           </button>
         </div>
         <div class="form-group">
-          <label>Full Name</label>
-          <input
+          <label>Full Name</label
+          ><input
             type="text"
             id="modal-p-name"
             class="form-control"
@@ -2365,8 +1297,8 @@
           />
         </div>
         <div class="form-group">
-          <label>Contact Number</label>
-          <input
+          <label>Contact Number</label
+          ><input
             type="text"
             id="modal-p-contact"
             class="form-control"
@@ -2374,14 +1306,13 @@
           />
         </div>
         <div class="form-group">
-          <label><i class="fas fa-search"></i> Search Location</label>
-          <input
+          <label><i class="fas fa-search"></i> Search Location</label
+          ><input
             type="text"
             id="player-search-box"
             class="form-control"
             placeholder="Search for a location..."
-          />
-          <small style="display: block; margin-top: 4px; color: #666"
+          /><small style="display: block; margin-top: 4px; color: #666"
             >Type an address or landmark, then select from dropdown</small
           >
         </div>
@@ -2400,9 +1331,8 @@
               onclick="app.getCurrentLocation('player')"
               style="font-size: 12px"
             >
-              <i class="fas fa-location-dot"></i> Use My Location
-            </button>
-            <small
+              <i class="fas fa-location-dot"></i> Use My Location</button
+            ><small
               style="
                 color: #888;
                 font-size: 11px;
@@ -2423,7 +1353,7 @@
       </div>
     </div>
 
-    <!-- Event Modal -->
+    <!-- Event Modal (unchanged) -->
     <div id="modal-event" class="modal-overlay">
       <div class="modal-content">
         <div class="modal-header">
@@ -2435,8 +1365,8 @@
           </button>
         </div>
         <div class="form-group">
-          <label>Event Name</label>
-          <input
+          <label>Event Name</label
+          ><input
             type="text"
             id="modal-e-name"
             class="form-control"
@@ -2444,18 +1374,21 @@
           />
         </div>
         <div class="form-group">
-          <label>Release Date &amp; Time</label>
-          <input type="datetime-local" id="modal-e-time" class="form-control" />
+          <label>Release Date &amp; Time</label
+          ><input
+            type="datetime-local"
+            id="modal-e-time"
+            class="form-control"
+          />
         </div>
         <div class="form-group">
-          <label><i class="fas fa-search"></i> Search Location</label>
-          <input
+          <label><i class="fas fa-search"></i> Search Location</label
+          ><input
             type="text"
             id="event-search-box"
             class="form-control"
             placeholder="Search for a location..."
-          />
-          <small style="display: block; margin-top: 4px; color: #666"
+          /><small style="display: block; margin-top: 4px; color: #666"
             >Type an address or landmark, then select from dropdown</small
           >
         </div>
@@ -2474,9 +1407,8 @@
               onclick="app.getCurrentLocation('event')"
               style="font-size: 12px"
             >
-              <i class="fas fa-location-dot"></i> Use My Location
-            </button>
-            <small
+              <i class="fas fa-location-dot"></i> Use My Location</button
+            ><small
               style="
                 color: #888;
                 font-size: 11px;
@@ -2497,7 +1429,7 @@
       </div>
     </div>
 
-    <!-- Edit Player Modal -->
+    <!-- Edit Player Modal (unchanged) -->
     <div id="modal-edit-player" class="modal-overlay">
       <div class="modal-content">
         <div class="modal-header">
@@ -2511,8 +1443,8 @@
         </div>
         <input type="hidden" id="edit-player-id" />
         <div class="form-group">
-          <label>Full Name</label>
-          <input
+          <label>Full Name</label
+          ><input
             type="text"
             id="edit-p-name"
             class="form-control"
@@ -2520,24 +1452,22 @@
           />
         </div>
         <div class="form-group">
-          <label>Contact Number</label>
-          <input
+          <label>Contact Number</label
+          ><input
             type="text"
             id="edit-p-contact"
             class="form-control"
             placeholder="09..."
           />
         </div>
-        <!-- Map section for location update -->
         <div class="form-group">
-          <label><i class="fas fa-search"></i> Search Location</label>
-          <input
+          <label><i class="fas fa-search"></i> Search Location</label
+          ><input
             type="text"
             id="edit-player-search-box"
             class="form-control"
             placeholder="Search for a location..."
-          />
-          <small style="display: block; margin-top: 4px; color: #666"
+          /><small style="display: block; margin-top: 4px; color: #666"
             >Type an address or landmark, then select from dropdown</small
           >
         </div>
@@ -2556,9 +1486,8 @@
               onclick="app.getCurrentLocation('edit-player')"
               style="font-size: 12px"
             >
-              <i class="fas fa-location-dot"></i> Use My Location
-            </button>
-            <small
+              <i class="fas fa-location-dot"></i> Use My Location</button
+            ><small
               style="
                 color: #888;
                 font-size: 11px;
@@ -2569,9 +1498,10 @@
             >
           </div>
         </div>
-        <!-- Hidden fields to store coordinates -->
-        <input type="hidden" id="edit-p-lat" />
-        <input type="hidden" id="edit-p-lng" />
+        <input type="hidden" id="edit-p-lat" /><input
+          type="hidden"
+          id="edit-p-lng"
+        />
         <button
           class="btn btn-success"
           style="width: 100%"
@@ -2582,7 +1512,7 @@
       </div>
     </div>
 
-    <!-- Registration Modal -->
+    <!-- Legacy Registration Modal (Admin) -->
     <div id="modal-register-players" class="modal-overlay">
       <div class="modal-content" style="max-width: 700px">
         <div class="modal-header">
@@ -2592,8 +1522,8 @@
           </button>
         </div>
         <div class="form-group">
-          <label>Event Code</label>
-          <input
+          <label>Event Code</label
+          ><input
             type="text"
             id="register-event-code"
             class="form-control"
@@ -2601,14 +1531,14 @@
           />
         </div>
         <div class="form-group">
-          <label>Select Player</label>
-          <select id="register-player-select" class="form-control">
+          <label>Select Player</label
+          ><select id="register-player-select" class="form-control">
             <option value="">-- Select Player --</option>
           </select>
         </div>
         <div class="form-group">
-          <label>Number of Pigeons (max 10)</label>
-          <input
+          <label>Number of Pigeons (max 10)</label
+          ><input
             type="number"
             id="register-pigeon-count"
             class="form-control"
@@ -2624,7 +1554,6 @@
         >
           <i class="fas fa-check"></i> Register Player
         </button>
-
         <hr style="margin: 20px 0" />
         <div
           style="
@@ -2665,6 +1594,185 @@
             </tr>
           </tbody>
         </table>
+      </div>
+    </div>
+
+    <!-- ===== NEW MODALS ===== -->
+
+    <!-- Pigeon Modal -->
+    <div id="modal-pigeon" class="modal-overlay">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h3 id="pigeon-modal-title">
+            <i class="fas fa-dove"></i> Add Pigeon
+          </h3>
+          <button class="close-modal" onclick="app.closeModal('modal-pigeon')">
+            <i class="fas fa-times"></i>
+          </button>
+        </div>
+        <input type="hidden" id="pigeon-id" />
+        <div class="form-group">
+          <label>Ring Number *</label
+          ><input
+            type="text"
+            id="pigeon-ring"
+            class="form-control"
+            placeholder="e.g., PH-2026-001"
+            required
+          />
+        </div>
+        <div class="form-group">
+          <label>Nickname</label
+          ><input
+            type="text"
+            id="pigeon-nickname"
+            class="form-control"
+            placeholder="Optional"
+          />
+        </div>
+        <div class="form-group">
+          <label>Gender</label
+          ><select id="pigeon-gender" class="form-control">
+            <option value="Unknown">Unknown</option>
+            <option value="Male">Male</option>
+            <option value="Female">Female</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label>Color</label
+          ><input
+            type="text"
+            id="pigeon-color"
+            class="form-control"
+            placeholder="e.g., Blue Bar"
+          />
+        </div>
+        <div class="form-group">
+          <label>Birth Year</label
+          ><input
+            type="number"
+            id="pigeon-birthyear"
+            class="form-control"
+            min="1900"
+            max="2026"
+            placeholder="e.g., 2024"
+          />
+        </div>
+        <div class="form-group">
+          <label>Photo URL</label
+          ><input
+            type="text"
+            id="pigeon-photo"
+            class="form-control"
+            placeholder="https://example.com/pigeon.jpg"
+          />
+        </div>
+        <button
+          class="btn btn-success"
+          style="width: 100%"
+          onclick="app.savePigeon()"
+        >
+          <i class="fas fa-save"></i> Save Pigeon
+        </button>
+      </div>
+    </div>
+
+    <!-- Register for Event Modal (Player self-registration) -->
+    <div id="modal-register-event" class="modal-overlay">
+      <div class="modal-content" style="max-width: 600px">
+        <div class="modal-header">
+          <h3><i class="fas fa-calendar-plus"></i> Register for Event</h3>
+          <button
+            class="close-modal"
+            onclick="app.closeModal('modal-register-event')"
+          >
+            <i class="fas fa-times"></i>
+          </button>
+        </div>
+        <input type="hidden" id="reg-event-code" />
+        <p>
+          Select the pigeons you want to enter for
+          <strong id="reg-event-name"></strong>.
+        </p>
+        <div
+          id="pigeon-select-list"
+          style="max-height: 300px; overflow-y: auto; margin-bottom: 16px"
+        ></div>
+        <button
+          class="btn btn-success"
+          style="width: 100%"
+          onclick="app.confirmRegistration()"
+        >
+          <i class="fas fa-check"></i> Confirm Registration
+        </button>
+      </div>
+    </div>
+
+    <!-- Edit Registration Modal -->
+    <div id="modal-edit-registration" class="modal-overlay">
+      <div class="modal-content" style="max-width: 600px">
+        <div class="modal-header">
+          <h3><i class="fas fa-edit"></i> Edit Registration</h3>
+          <button
+            class="close-modal"
+            onclick="app.closeModal('modal-edit-registration')"
+          >
+            <i class="fas fa-times"></i>
+          </button>
+        </div>
+        <input type="hidden" id="edit-reg-event-code" />
+        <p>
+          Update your pigeon selection for
+          <strong id="edit-reg-event-name"></strong>.
+        </p>
+        <div
+          id="edit-pigeon-select-list"
+          style="max-height: 300px; overflow-y: auto; margin-bottom: 16px"
+        ></div>
+        <button
+          class="btn btn-success"
+          style="width: 100%"
+          onclick="app.confirmEditRegistration()"
+        >
+          <i class="fas fa-save"></i> Update Registration
+        </button>
+        <button
+          class="btn btn-danger"
+          style="width: 100%; margin-top: 8px"
+          onclick="app.withdrawRegistration()"
+        >
+          <i class="fas fa-times"></i> Withdraw Entire Registration
+        </button>
+      </div>
+    </div>
+
+    <!-- Certificate Modal -->
+    <div id="modal-certificate" class="modal-overlay">
+      <div class="modal-content" style="max-width: 700px">
+        <div class="modal-header">
+          <h3><i class="fas fa-award"></i> Certificate</h3>
+          <button
+            class="close-modal"
+            onclick="app.closeModal('modal-certificate')"
+          >
+            <i class="fas fa-times"></i>
+          </button>
+        </div>
+        <div id="certificate-detail"></div>
+        <button
+          class="btn btn-primary"
+          style="width: 100%; margin-top: 12px"
+          onclick="app.printCertificate()"
+        >
+          <i class="fas fa-print"></i> Print
+        </button>
+        <button
+          class="btn btn-secondary"
+          style="width: 100%; margin-top: 8px"
+          onclick="app.downloadCertificatePDF()"
+        >
+          <i class="fas fa-file-pdf"></i> Download PDF
+        </button>
       </div>
     </div>
 

@@ -1,5 +1,4 @@
 // ===== API Configuration =====
-//const API_URL = "http://localhost:5000/api";
 const API_URL = "https://estancia-wingsync-backend.onrender.com/api";
 
 // ===== Helper: Fetch with Authorization Header =====
@@ -293,7 +292,9 @@ function setMarker(mapType, lat, lng, map, coordsTextId, place = null) {
   return marker;
 }
 
-// ===== MAIN APP =====
+// ============================================================
+//  MAIN APP
+// ============================================================
 const app = {
   currentUser: null,
   eventLookup: {},
@@ -311,8 +312,9 @@ const app = {
   _lastEventsFetch: 0,
   _isRendering: false,
 
-  // ---- Profile stats refresh interval ----
   _profileStatsInterval: null,
+  _pigeonRefreshInterval: null,
+  _currentCert: null,
 
   init() {
     this.loadTheme();
@@ -539,7 +541,8 @@ const app = {
           "❌ Could not access camera. Please allow camera permissions.";
       });
   },
-  // ===== STICKER GENERATOR =====
+
+  // ===== STICKER GENERATOR (full original implementation) =====
   initStickerGenerator() {
     const state = {
       stickers: [],
@@ -551,8 +554,6 @@ const app = {
       isGenerating: false,
       canvasCache: [],
     };
-
-    const SCRATCH_WIDTH_MM = 22;
 
     const generateQRCanvas = (data, sizePx) => {
       return new Promise((resolve, reject) => {
@@ -928,20 +929,37 @@ const app = {
       }
 
       try {
+        // Try to fetch from new admin endpoint (if event has registrations)
         const res = await fetchWithAuth(
-          `${API_URL}/events/${eventCode}/registrations`,
+          `${API_URL}/admin/events/${eventCode}/registrations`,
         );
-        if (!res.ok) throw new Error("Failed to fetch registrations");
-        const registrations = await res.json();
+        let registrations = [];
+        if (res.ok) {
+          const data = await res.json();
+          registrations = data.registrations || [];
+        } else {
+          // Fallback: fetch from legacy endpoint
+          const resLegacy = await fetchWithAuth(
+            `${API_URL}/events/${eventCode}/registrations`,
+          );
+          if (!resLegacy.ok) throw new Error("Failed to fetch registrations");
+          const legacyData = await resLegacy.json();
+          registrations = legacyData.map((r) => ({
+            playerName: r.userName,
+            codes: r.codes,
+            statuses: r.statuses,
+          }));
+        }
 
         const stickers = [];
         for (const reg of registrations) {
-          const playerName = reg.userName || "Player";
-          for (let i = 0; i < reg.codes.length; i++) {
+          const playerName = reg.playerName || "Player";
+          const codes = reg.codes || [];
+          for (const code of codes) {
             stickers.push({
               playerName: playerName,
-              code: reg.codes[i],
-              status: reg.statuses ? reg.statuses[i] : "unused",
+              code: code,
+              status: "unused", // assume unused for display
             });
           }
         }
@@ -1069,6 +1087,9 @@ const app = {
           else if (id === "view-admin-events") this.renderEvents();
           else if (id === "view-admin-players") this.renderPlayers();
           else if (id === "view-profile") this.loadPlayerStats();
+          else if (id === "view-pigeons") this.loadPigeons();
+          else if (id === "view-entries") this.loadOpenEvents();
+          else if (id === "view-certificates") this.loadCertificates();
         }
         this.updateClockDisplay();
       }
@@ -1354,6 +1375,10 @@ const app = {
       clearInterval(this._profileStatsInterval);
       this._profileStatsInterval = null;
     }
+    if (this._pigeonRefreshInterval) {
+      clearInterval(this._pigeonRefreshInterval);
+      this._pigeonRefreshInterval = null;
+    }
     this.currentUser = null;
     sessionStorage.removeItem("wingsync_user");
     sessionStorage.removeItem("wingsync_token");
@@ -1408,6 +1433,9 @@ const app = {
           this.eventLookup[e.code] = e;
         });
         this._lastEventsFetch = Date.now();
+        // Also populate selectors
+        this.populateReviewSelector();
+        this.populateStickerSelector(events);
       })
       .catch((err) => {
         console.error("Failed to fetch events for lookup:", err);
@@ -1443,6 +1471,10 @@ const app = {
       clearInterval(this._profileStatsInterval);
       this._profileStatsInterval = null;
     }
+    if (this._pigeonRefreshInterval) {
+      clearInterval(this._pigeonRefreshInterval);
+      this._pigeonRefreshInterval = null;
+    }
 
     document
       .querySelectorAll(".view-section")
@@ -1473,6 +1505,31 @@ const app = {
           this._profileStatsInterval = null;
         }
       }, 30000);
+    }
+    if (view === "pigeons") {
+      this.loadPigeons();
+      this._pigeonRefreshInterval = setInterval(() => {
+        const currentView = document.querySelector(
+          ".view-section:not(.hidden)",
+        );
+        if (currentView && currentView.id === "view-pigeons") {
+          this.loadPigeons();
+        } else {
+          clearInterval(this._pigeonRefreshInterval);
+          this._pigeonRefreshInterval = null;
+        }
+      }, 30000);
+    }
+    if (view === "entries") {
+      this.loadOpenEvents();
+      // Also load my registrations (optional)
+    }
+    if (view === "certificates") {
+      this.loadCertificates();
+    }
+    if (view === "event-review") {
+      this.populateReviewSelector();
+      this.loadAdminReview();
     }
     if (view === "sticker-generator") {
       this.populateStickerSelector(this.allEvents);
@@ -1536,9 +1593,14 @@ const app = {
     }
   },
 
+  // ===== DASHBOARD =====
   renderDashboard() {
     Promise.all([
       fetchWithAuth(`${API_URL}/events/active`).then((res) => {
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        return res.json();
+      }),
+      fetchWithAuth(`${API_URL}/events/open`).then((res) => {
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         return res.json();
       }),
@@ -1547,8 +1609,9 @@ const app = {
         return res.json();
       }),
     ])
-      .then(([events, summary]) => {
-        if (!Array.isArray(events)) events = [];
+      .then(([activeEvents, openEvents, summary]) => {
+        if (!Array.isArray(activeEvents)) activeEvents = [];
+        if (!Array.isArray(openEvents)) openEvents = [];
         if (!Array.isArray(summary)) summary = [];
 
         this.registrationCounts = {};
@@ -1580,11 +1643,20 @@ const app = {
         const thStatus = document.createElement("th");
         thStatus.textContent = "Status";
         headerRow.appendChild(thStatus);
+        const thAction = document.createElement("th");
+        thAction.textContent = "Action";
+        headerRow.appendChild(thAction);
         thead.appendChild(headerRow);
         table.innerHTML = "";
         table.appendChild(thead);
 
         const tbody = document.createElement("tbody");
+        // Combine active and open events (unique by code)
+        const allDisplayEvents = [...activeEvents, ...openEvents];
+        const unique = new Map();
+        allDisplayEvents.forEach((e) => unique.set(e.code, e));
+        const events = Array.from(unique.values());
+
         events.forEach((e) => {
           const row = document.createElement("tr");
           if (isAdmin) {
@@ -1605,9 +1677,32 @@ const app = {
 
           const tdStatus = document.createElement("td");
           tdStatus.setAttribute("data-label", "Status");
-          tdStatus.textContent = e.status;
+          tdStatus.textContent = e.state || e.status;
           row.appendChild(tdStatus);
 
+          const tdAction = document.createElement("td");
+          tdAction.setAttribute("data-label", "Action");
+          if (!isAdmin && e.state === "Registration Open") {
+            const joinBtn = document.createElement("button");
+            joinBtn.className = "btn btn-sm btn-success";
+            joinBtn.textContent = "Join Race";
+            joinBtn.onclick = () => this.openRegisterModalNew(e.code);
+            tdAction.appendChild(joinBtn);
+          } else if (isAdmin) {
+            const reviewBtn = document.createElement("button");
+            reviewBtn.className = "btn btn-sm btn-primary";
+            reviewBtn.textContent = "Review";
+            reviewBtn.onclick = () => {
+              this.navigate("event-review");
+              const select = document.getElementById("review-event-select");
+              if (select) select.value = e.code;
+              this.loadAdminReview();
+            };
+            tdAction.appendChild(reviewBtn);
+          } else {
+            tdAction.textContent = "—";
+          }
+          row.appendChild(tdAction);
           tbody.appendChild(row);
         });
         table.appendChild(tbody);
@@ -1615,10 +1710,11 @@ const app = {
       .catch((err) => {
         console.error("Dashboard error:", err);
         const table = document.querySelector("#active-events-table");
-        table.innerHTML = `<tbody><tr><td colspan="4" style="text-align:center; color:#999; padding:20px;">Could not load events. Please refresh.</td></tr></tbody>`;
+        table.innerHTML = `<tbody><tr><td colspan="5" style="text-align:center; color:#999; padding:20px;">Could not load events. Please refresh.</td></tr></tbody>`;
       });
   },
 
+  // ===== CLOCK IN =====
   clockIn() {
     const code = document.getElementById("clock-in-code").value.trim();
     if (!code) {
@@ -1691,6 +1787,7 @@ const app = {
       });
   },
 
+  // ===== PROFILE =====
   loadProfile() {
     document.getElementById("prof-name").innerText = this.currentUser.name;
     document.getElementById("prof-id").innerText = this.currentUser.id;
@@ -1722,6 +1819,34 @@ const app = {
           stats.bestSpeed.toFixed(2);
         document.getElementById("stats-win-rate").textContent =
           stats.winRate.toFixed(1) + "%";
+        // NEW fields
+        const champEl = document.getElementById("stats-champion-titles");
+        if (champEl) champEl.textContent = stats.championTitles || 0;
+        const certEl = document.getElementById("stats-total-certificates");
+        if (certEl) certEl.textContent = stats.totalCertificates || 0;
+        // Season rank
+        if (stats.seasonRanking && stats.seasonRanking.rank) {
+          let rankEl = document.querySelector(".season-rank");
+          if (!rankEl) {
+            const container = document.querySelector(".stats-grid");
+            if (container) {
+              rankEl = document.createElement("div");
+              rankEl.className =
+                "stat-metric stat-metric-highlight stat-metric-full season-rank";
+              container.appendChild(rankEl);
+            }
+          }
+          if (rankEl) {
+            rankEl.innerHTML = `
+              <div class="stat-metric-icon stat-metric-icon-accent"><i class="fas fa-trophy"></i></div>
+              <div class="stat-metric-content">
+                <span class="stat-metric-label">Current Season Rank</span>
+                <span class="stat-metric-value stat-metric-value-accent">#${stats.seasonRanking.rank}</span>
+                <span class="stat-metric-unit">(${stats.seasonRanking.totalPoints} pts)</span>
+              </div>
+            `;
+          }
+        }
         document
           .getElementById("player-stats-container")
           .classList.remove("hidden");
@@ -1789,6 +1914,7 @@ const app = {
       });
   },
 
+  // ===== RESULTS =====
   initResultsView() {
     const loadData = () => {
       return this.fetchAllEvents()
@@ -2130,7 +2256,7 @@ const app = {
       '— <span class="unit">m/min</span>';
   },
 
-  // ===== UPDATED renderLogs() – using createdAt and Asia/Manila =====
+  // ===== LOGS =====
   renderLogs() {
     fetchWithAuth(`${API_URL}/logs`)
       .then((res) => {
@@ -2147,7 +2273,6 @@ const app = {
           li.style.padding = "10px";
           li.style.borderBottom = "1px solid #eee";
 
-          // Use createdAt (UTC) and format to Asia/Manila
           const date = new Date(log.createdAt);
           const displayTime = date.toLocaleString("en-PH", {
             timeZone: "Asia/Manila",
@@ -2178,6 +2303,7 @@ const app = {
       });
   },
 
+  // ===== PLAYERS CRUD =====
   renderPlayers() {
     fetchWithAuth(`${API_URL}/users/players`)
       .then((res) => {
@@ -2535,6 +2661,7 @@ const app = {
       });
   },
 
+  // ===== EVENTS CRUD (Admin) =====
   renderEvents() {
     fetchWithAuth(`${API_URL}/events/all`)
       .then((res) => {
@@ -3083,6 +3210,16 @@ const app = {
       selectedEditPlayerLat = null;
       selectedEditPlayerLng = null;
     }
+    // Close new modals
+    [
+      "modal-pigeon",
+      "modal-register-event",
+      "modal-edit-registration",
+      "modal-certificate",
+    ].forEach((modalId) => {
+      const el = document.getElementById(modalId);
+      if (el) el.classList.remove("show");
+    });
     document.getElementById(id).classList.remove("show");
   },
 
@@ -3194,6 +3331,810 @@ const app = {
       ? '<i class="fas fa-eye-slash"></i>'
       : '<i class="far fa-eye"></i>';
   },
+
+  // ============================================================
+  //  NEW FEATURES: PIGEON MANAGEMENT
+  // ============================================================
+  openPigeonModal(pigeonId = null) {
+    const modal = document.getElementById("modal-pigeon");
+    modal.classList.add("show");
+    const title = document.getElementById("pigeon-modal-title");
+    if (pigeonId) {
+      title.textContent = "Edit Pigeon";
+      fetchWithAuth(`${API_URL}/pigeons/${pigeonId}`)
+        .then((res) => res.json())
+        .then((pigeon) => {
+          document.getElementById("pigeon-id").value = pigeon._id;
+          document.getElementById("pigeon-ring").value = pigeon.ringNumber;
+          document.getElementById("pigeon-ring").disabled = true;
+          document.getElementById("pigeon-nickname").value =
+            pigeon.nickname || "";
+          document.getElementById("pigeon-gender").value =
+            pigeon.gender || "Unknown";
+          document.getElementById("pigeon-color").value = pigeon.color || "";
+          document.getElementById("pigeon-birthyear").value =
+            pigeon.birthYear || "";
+          document.getElementById("pigeon-photo").value = pigeon.photo || "";
+        })
+        .catch((err) => {
+          this.showModal({
+            title: "Error",
+            message: "Failed to load pigeon.",
+            icon: "❌",
+            iconColor: "#c0392b",
+          });
+        });
+    } else {
+      title.textContent = "Add Pigeon";
+      document.getElementById("pigeon-id").value = "";
+      document.getElementById("pigeon-ring").disabled = false;
+      document.getElementById("pigeon-ring").value = "";
+      document.getElementById("pigeon-nickname").value = "";
+      document.getElementById("pigeon-gender").value = "Unknown";
+      document.getElementById("pigeon-color").value = "";
+      document.getElementById("pigeon-birthyear").value = "";
+      document.getElementById("pigeon-photo").value = "";
+    }
+  },
+
+  savePigeon() {
+    const id = document.getElementById("pigeon-id").value;
+    const ringNumber = document
+      .getElementById("pigeon-ring")
+      .value.trim()
+      .toUpperCase();
+    const nickname = document.getElementById("pigeon-nickname").value.trim();
+    const gender = document.getElementById("pigeon-gender").value;
+    const color = document.getElementById("pigeon-color").value.trim();
+    const birthYear = parseInt(
+      document.getElementById("pigeon-birthyear").value,
+    );
+    const photo = document.getElementById("pigeon-photo").value.trim();
+
+    if (!ringNumber) {
+      this.showModal({
+        title: "Error",
+        message: "Ring number is required.",
+        icon: "❌",
+        iconColor: "#c0392b",
+      });
+      return;
+    }
+
+    const payload = { ringNumber, nickname, gender, color, birthYear, photo };
+    const url = id ? `${API_URL}/pigeons/${id}` : `${API_URL}/pigeons`;
+    const method = id ? "PUT" : "POST";
+
+    fetchWithAuth(url, {
+      method,
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    })
+      .then((res) => res.json())
+      .then((data) => {
+        if (data.success) {
+          this.closeModal("modal-pigeon");
+          this.loadPigeons();
+          this.showModal({
+            title: "✅ Success",
+            message: `Pigeon ${id ? "updated" : "created"} successfully.`,
+            icon: "✅",
+            iconColor: "#27ae60",
+          });
+        } else {
+          this.showModal({
+            title: "Error",
+            message: data.error || "Failed to save pigeon.",
+            icon: "❌",
+            iconColor: "#c0392b",
+          });
+        }
+      })
+      .catch((err) => {
+        this.showModal({
+          title: "Error",
+          message: "Connection error.",
+          icon: "❌",
+          iconColor: "#c0392b",
+        });
+      });
+  },
+
+  loadPigeons() {
+    fetchWithAuth(`${API_URL}/pigeons`)
+      .then((res) => res.json())
+      .then((pigeons) => {
+        const container = document.getElementById("pigeons-list");
+        if (!pigeons || pigeons.length === 0) {
+          container.innerHTML = `<div class="pigeon-empty">You have no pigeons registered. <button class="btn btn-primary" onclick="app.openPigeonModal()">Add one now</button></div>`;
+          return;
+        }
+        let html = '<div class="pigeons-grid">';
+        pigeons.forEach((p) => {
+          const statusClass = p.status === "Active" ? "" : "inactive";
+          html += `
+            <div class="pigeon-card">
+              <div class="ring">${p.ringNumber}</div>
+              <div><strong>${p.nickname || "No nickname"}</strong></div>
+              <div>${p.gender || "Unknown"} • ${p.color || "N/A"}</div>
+              <div>Born: ${p.birthYear || "N/A"}</div>
+              <div class="status ${statusClass}">${p.status}</div>
+              <div style="margin-top:8px;">
+                <button class="btn btn-sm btn-primary" onclick="app.openPigeonModal('${p._id}')">Edit</button>
+                <button class="btn btn-sm btn-danger" onclick="app.deletePigeon('${p._id}')">Delete</button>
+                <button class="btn btn-sm btn-secondary" onclick="app.viewPigeonStats('${p._id}')">Stats</button>
+              </div>
+            </div>
+          `;
+        });
+        html += "</div>";
+        container.innerHTML = html;
+      })
+      .catch((err) => {
+        document.getElementById("pigeons-list").innerHTML =
+          `<p>Failed to load pigeons.</p>`;
+      });
+  },
+
+  deletePigeon(id) {
+    if (
+      !confirm(
+        "Delete this pigeon? This cannot be undone if it's in an active event.",
+      )
+    )
+      return;
+    fetchWithAuth(`${API_URL}/pigeons/${id}`, { method: "DELETE" })
+      .then((res) => res.json())
+      .then((data) => {
+        if (data.success) {
+          this.loadPigeons();
+          this.showModal({
+            title: "🗑️ Deleted",
+            message: "Pigeon deleted.",
+            icon: "🗑️",
+            iconColor: "#c0392b",
+          });
+        } else {
+          this.showModal({
+            title: "Error",
+            message: data.error || "Failed to delete.",
+            icon: "❌",
+            iconColor: "#c0392b",
+          });
+        }
+      });
+  },
+
+  viewPigeonStats(id) {
+    fetchWithAuth(`${API_URL}/pigeons/${id}/stats`)
+      .then((res) => res.json())
+      .then((stats) => {
+        let msg = `📊 ${stats.ringNumber} (${stats.nickname || "No nickname"})\n`;
+        msg += `Races: ${stats.totalRaces} | Wins: ${stats.wins} | Podiums: ${stats.podiums}\n`;
+        msg += `Best Speed: ${stats.bestSpeed.toFixed(2)} m/min | Avg: ${stats.averageSpeed.toFixed(2)} m/min\n`;
+        msg += `Recent History:\n`;
+        stats.raceHistory.slice(0, 5).forEach((r) => {
+          msg += `  ${r.eventName}: Rank ${r.rank}, Speed ${r.speed.toFixed(2)} m/min\n`;
+        });
+        this.showModal({
+          title: "Pigeon Career Stats",
+          message: msg,
+          icon: "📊",
+          iconColor: "#2a7a62",
+        });
+      })
+      .catch((err) => {
+        this.showModal({
+          title: "Error",
+          message: "Failed to load stats.",
+          icon: "❌",
+          iconColor: "#c0392b",
+        });
+      });
+  },
+
+  // ============================================================
+  //  NEW FEATURES: SELF-REGISTRATION & ENTRIES
+  // ============================================================
+
+  loadOpenEvents() {
+    fetchWithAuth(`${API_URL}/events/open`)
+      .then((res) => res.json())
+      .then((events) => {
+        const container = document.getElementById("entries-container");
+        if (!events || events.length === 0) {
+          container.innerHTML = `<p>No open events for registration at the moment.</p>`;
+          return;
+        }
+        let html = `<h3>Open Events</h3>`;
+        events.forEach((e) => {
+          html += `
+            <div class="entry-item">
+              <div><strong>${e.name}</strong> (${e.code})<br><small>Release: ${new Date(e.releaseTime).toLocaleString()}</small></div>
+              <div>
+                <button class="btn btn-sm btn-success" onclick="app.openRegisterModalNew('${e.code}')">Join Race</button>
+                <button class="btn btn-sm btn-secondary" onclick="app.checkMyRegistration('${e.code}')">My Entry</button>
+              </div>
+            </div>
+          `;
+        });
+        container.innerHTML = html;
+      })
+      .catch((err) => {
+        document.getElementById("entries-container").innerHTML =
+          `<p>Failed to load events.</p>`;
+      });
+  },
+
+  checkMyRegistration(eventCode) {
+    fetchWithAuth(`${API_URL}/events/${eventCode}/registrations/my`)
+      .then((res) => res.json())
+      .then((data) => {
+        const reg = data.registration;
+        if (!reg) {
+          this.showModal({
+            title: "No Entry",
+            message: "You have not registered for this event yet.",
+            icon: "ℹ️",
+            iconColor: "#2a7a62",
+          });
+          return;
+        }
+        let msg = `Your registration for ${reg.eventId}:\n`;
+        msg += `Status: ${reg.status}\n`;
+        msg += `Pigeons: ${reg.pigeonIds.map((p) => p.ringNumber || p.nickname || "Unknown").join(", ")}\n`;
+        msg += `Registered: ${new Date(reg.registrationDate).toLocaleString()}`;
+        this.showModal({
+          title: "My Entry",
+          message: msg,
+          icon: "📋",
+          iconColor: "#2a7a62",
+        });
+      });
+  },
+
+  openRegisterModalNew(eventCode) {
+    Promise.all([
+      fetchWithAuth(`${API_URL}/events/all`).then((r) => r.json()),
+      fetchWithAuth(`${API_URL}/pigeons`).then((r) => r.json()),
+      fetchWithAuth(`${API_URL}/events/${eventCode}/registrations/my`).then(
+        (r) => r.json(),
+      ),
+    ])
+      .then(([events, pigeons, existingReg]) => {
+        const event = events.find((e) => e.code === eventCode);
+        if (!event) throw new Error("Event not found");
+        document.getElementById("reg-event-code").value = eventCode;
+        document.getElementById("reg-event-name").textContent = event.name;
+
+        const container = document.getElementById("pigeon-select-list");
+        const activePigeons = pigeons.filter((p) => p.status === "Active");
+        if (activePigeons.length === 0) {
+          container.innerHTML = `<p>You have no active pigeons. Please add one first.</p>`;
+          return;
+        }
+        const selectedIds = existingReg.registration
+          ? existingReg.registration.pigeonIds.map((p) => p._id || p)
+          : [];
+        let html = "";
+        activePigeons.forEach((p) => {
+          const checked = selectedIds.includes(p._id) ? "checked" : "";
+          html += `
+            <div style="margin:6px 0;">
+              <label>
+                <input type="checkbox" value="${p._id}" ${checked} class="pigeon-checkbox" />
+                ${p.ringNumber} - ${p.nickname || "No nickname"} (${p.color || "N/A"})
+              </label>
+            </div>
+          `;
+        });
+        container.innerHTML = html;
+        document.getElementById("modal-register-event").classList.add("show");
+      })
+      .catch((err) => {
+        this.showModal({
+          title: "Error",
+          message: "Failed to load data for registration.",
+          icon: "❌",
+          iconColor: "#c0392b",
+        });
+      });
+  },
+
+  confirmRegistration() {
+    const eventCode = document.getElementById("reg-event-code").value;
+    const checkboxes = document.querySelectorAll(
+      "#pigeon-select-list .pigeon-checkbox:checked",
+    );
+    const pigeonIds = Array.from(checkboxes).map((cb) => cb.value);
+    if (pigeonIds.length === 0) {
+      this.showModal({
+        title: "Error",
+        message: "Please select at least one pigeon.",
+        icon: "❌",
+        iconColor: "#c0392b",
+      });
+      return;
+    }
+
+    fetchWithAuth(`${API_URL}/events/${eventCode}/registrations/my`)
+      .then((res) => res.json())
+      .then((data) => {
+        const existing = data.registration;
+        const url = `${API_URL}/events/${eventCode}/register`;
+        const method = existing ? "PUT" : "POST";
+        return fetchWithAuth(url, {
+          method,
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ pigeonIds }),
+        });
+      })
+      .then((res) => res.json())
+      .then((data) => {
+        if (data.success) {
+          this.closeModal("modal-register-event");
+          this.showModal({
+            title: "✅ Registration Saved",
+            message: "Your entry has been recorded.",
+            icon: "✅",
+            iconColor: "#27ae60",
+          });
+          this.loadOpenEvents();
+        } else {
+          this.showModal({
+            title: "Error",
+            message: data.error || "Failed to save registration.",
+            icon: "❌",
+            iconColor: "#c0392b",
+          });
+        }
+      })
+      .catch((err) => {
+        this.showModal({
+          title: "Error",
+          message: "Connection error.",
+          icon: "❌",
+          iconColor: "#c0392b",
+        });
+      });
+  },
+
+  withdrawRegistration() {
+    const eventCode = document.getElementById("edit-reg-event-code").value;
+    if (!confirm("Withdraw your registration for this event?")) return;
+    fetchWithAuth(`${API_URL}/events/${eventCode}/register`, {
+      method: "DELETE",
+    })
+      .then((res) => res.json())
+      .then((data) => {
+        if (data.success) {
+          this.closeModal("modal-edit-registration");
+          this.showModal({
+            title: "✅ Withdrawn",
+            message: "Your registration has been removed.",
+            icon: "✅",
+            iconColor: "#27ae60",
+          });
+          this.loadOpenEvents();
+        } else {
+          this.showModal({
+            title: "Error",
+            message: data.error || "Failed to withdraw.",
+            icon: "❌",
+            iconColor: "#c0392b",
+          });
+        }
+      });
+  },
+
+  openEditRegistration(eventCode) {
+    Promise.all([
+      fetchWithAuth(`${API_URL}/pigeons`).then((r) => r.json()),
+      fetchWithAuth(`${API_URL}/events/${eventCode}/registrations/my`).then(
+        (r) => r.json(),
+      ),
+    ])
+      .then(([pigeons, regData]) => {
+        const reg = regData.registration;
+        if (!reg) {
+          this.showModal({
+            title: "Error",
+            message: "No registration found.",
+            icon: "❌",
+            iconColor: "#c0392b",
+          });
+          return;
+        }
+        document.getElementById("edit-reg-event-code").value = eventCode;
+        document.getElementById("edit-reg-event-name").textContent =
+          reg.eventId;
+        const container = document.getElementById("edit-pigeon-select-list");
+        const activePigeons = pigeons.filter((p) => p.status === "Active");
+        const selectedIds = reg.pigeonIds.map((p) => p._id || p);
+        let html = "";
+        activePigeons.forEach((p) => {
+          const checked = selectedIds.includes(p._id) ? "checked" : "";
+          html += `
+            <div style="margin:6px 0;">
+              <label>
+                <input type="checkbox" value="${p._id}" ${checked} class="edit-pigeon-checkbox" />
+                ${p.ringNumber} - ${p.nickname || "No nickname"} (${p.color || "N/A"})
+              </label>
+            </div>
+          `;
+        });
+        container.innerHTML = html;
+        document
+          .getElementById("modal-edit-registration")
+          .classList.add("show");
+      })
+      .catch((err) => {
+        this.showModal({
+          title: "Error",
+          message: "Failed to load registration data.",
+          icon: "❌",
+          iconColor: "#c0392b",
+        });
+      });
+  },
+
+  confirmEditRegistration() {
+    const eventCode = document.getElementById("edit-reg-event-code").value;
+    const checkboxes = document.querySelectorAll(
+      "#edit-pigeon-select-list .edit-pigeon-checkbox:checked",
+    );
+    const pigeonIds = Array.from(checkboxes).map((cb) => cb.value);
+    if (pigeonIds.length === 0) {
+      this.showModal({
+        title: "Error",
+        message: "Please select at least one pigeon.",
+        icon: "❌",
+        iconColor: "#c0392b",
+      });
+      return;
+    }
+    fetchWithAuth(`${API_URL}/events/${eventCode}/register`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ pigeonIds }),
+    })
+      .then((res) => res.json())
+      .then((data) => {
+        if (data.success) {
+          this.closeModal("modal-edit-registration");
+          this.showModal({
+            title: "✅ Updated",
+            message: "Registration updated.",
+            icon: "✅",
+            iconColor: "#27ae60",
+          });
+          this.loadOpenEvents();
+        } else {
+          this.showModal({
+            title: "Error",
+            message: data.error || "Failed to update.",
+            icon: "❌",
+            iconColor: "#c0392b",
+          });
+        }
+      });
+  },
+
+  // ============================================================
+  //  NEW FEATURES: CERTIFICATES
+  // ============================================================
+
+  loadCertificates() {
+    fetchWithAuth(`${API_URL}/certificates/player`)
+      .then((res) => res.json())
+      .then((certs) => {
+        const container = document.getElementById("certificates-list");
+        if (!certs || certs.length === 0) {
+          container.innerHTML = `<p>You have no certificates yet.</p>`;
+          return;
+        }
+        let html = "";
+        certs.forEach((c) => {
+          const rankLabel =
+            c.rank === 1
+              ? "🥇 Champion"
+              : c.rank === 2
+                ? "🥈 Second"
+                : c.rank === 3
+                  ? "🥉 Third"
+                  : "🏅 Participation";
+          html += `
+            <div class="certificate-card">
+              <div><strong>${c.certificateNumber}</strong> – ${rankLabel}</div>
+              <div>Event: ${c.eventId ? c.eventId.name : "Unknown"}</div>
+              <div>Pigeon: ${c.pigeonId ? c.pigeonId.ringNumber : "N/A"}</div>
+              <div>Speed: ${c.speed.toFixed(2)} m/min | Distance: ${c.distance.toFixed(2)} km</div>
+              <div style="margin-top:6px;">
+                <button class="btn btn-sm btn-primary" onclick="app.viewCertificate('${c._id}')">View</button>
+              </div>
+            </div>
+          `;
+        });
+        container.innerHTML = html;
+      })
+      .catch((err) => {
+        document.getElementById("certificates-list").innerHTML =
+          `<p>Failed to load certificates.</p>`;
+      });
+  },
+
+  viewCertificate(certId) {
+    fetchWithAuth(`${API_URL}/certificates/${certId}`)
+      .then((res) => res.json())
+      .then((cert) => {
+        const container = document.getElementById("certificate-detail");
+        const rankLabel =
+          cert.rank === 1
+            ? "🥇 Champion"
+            : cert.rank === 2
+              ? "🥈 Second"
+              : cert.rank === 3
+                ? "🥉 Third"
+                : "🏅 Participation";
+        container.innerHTML = `
+          <div style="text-align:center; padding:12px; border:2px solid #2a7a62; border-radius:8px; background:#f9f9f9;">
+            <h2>🏆 Certificate of Achievement</h2>
+            <h3>${cert.certificateNumber}</h3>
+            <p><strong>Player:</strong> ${cert.playerId ? cert.playerId.name : "N/A"}</p>
+            <p><strong>Pigeon:</strong> ${cert.pigeonId ? cert.pigeonId.ringNumber : "N/A"} (${cert.pigeonId ? cert.pigeonId.nickname : ""})</p>
+            <p><strong>Event:</strong> ${cert.eventId ? cert.eventId.name : "Unknown"}</p>
+            <p><strong>Rank:</strong> ${rankLabel}</p>
+            <p><strong>Speed:</strong> ${cert.speed.toFixed(2)} m/min</p>
+            <p><strong>Distance:</strong> ${cert.distance.toFixed(2)} km</p>
+            <p><strong>Issue Date:</strong> ${new Date(cert.issueDate).toLocaleDateString()}</p>
+            <p><small>QR Verification: ${cert.qrHash ? "✅" : "N/A"}</small></p>
+          </div>
+        `;
+        document.getElementById("modal-certificate").classList.add("show");
+        this._currentCert = cert;
+      })
+      .catch((err) => {
+        this.showModal({
+          title: "Error",
+          message: "Failed to load certificate.",
+          icon: "❌",
+          iconColor: "#c0392b",
+        });
+      });
+  },
+
+  printCertificate() {
+    const content = document.getElementById("certificate-detail").innerHTML;
+    const win = window.open("", "_blank");
+    win.document.write(`
+      <html><head><title>Certificate</title>
+      <style>body { font-family: Arial, sans-serif; padding:20px; }</style>
+      </head><body>${content}</body></html>
+    `);
+    win.document.close();
+    win.print();
+  },
+
+  downloadCertificatePDF() {
+    if (!this._currentCert) {
+      this.showModal({
+        title: "Error",
+        message: "No certificate to download.",
+        icon: "❌",
+        iconColor: "#c0392b",
+      });
+      return;
+    }
+    const { jsPDF } = window.jspdf;
+    const doc = new jsPDF("p", "mm", "a4");
+    const cert = this._currentCert;
+    doc.setFontSize(18);
+    doc.text("Certificate of Achievement", 105, 30, { align: "center" });
+    doc.setFontSize(14);
+    doc.text(cert.certificateNumber, 105, 45, { align: "center" });
+    doc.setFontSize(12);
+    doc.text(`Player: ${cert.playerId ? cert.playerId.name : "N/A"}`, 20, 70);
+    doc.text(
+      `Pigeon: ${cert.pigeonId ? cert.pigeonId.ringNumber : "N/A"}`,
+      20,
+      85,
+    );
+    doc.text(`Event: ${cert.eventId ? cert.eventId.name : "Unknown"}`, 20, 100);
+    doc.text(
+      `Rank: ${cert.rank === 1 ? "Champion" : cert.rank === 2 ? "Second" : cert.rank === 3 ? "Third" : "Participation"}`,
+      20,
+      115,
+    );
+    doc.text(`Speed: ${cert.speed.toFixed(2)} m/min`, 20, 130);
+    doc.text(`Distance: ${cert.distance.toFixed(2)} km`, 20, 145);
+    doc.text(
+      `Issue Date: ${new Date(cert.issueDate).toLocaleDateString()}`,
+      20,
+      160,
+    );
+    doc.save(`certificate_${cert.certificateNumber}.pdf`);
+  },
+
+  // ============================================================
+  //  NEW FEATURES: ADMIN EVENT REVIEW
+  // ============================================================
+
+  populateReviewSelector() {
+    const select = document.getElementById("review-event-select");
+    const current = select.value;
+    select.innerHTML = '<option value="">-- Select Event --</option>';
+    this.allEvents.forEach((e) => {
+      const opt = document.createElement("option");
+      opt.value = e.code;
+      opt.textContent = `${e.name} (${e.code}) - ${e.state || e.status}`;
+      select.appendChild(opt);
+    });
+    if (current) select.value = current;
+  },
+
+  loadAdminReview() {
+    const select = document.getElementById("review-event-select");
+    const eventCode = select.value;
+    if (!eventCode) {
+      document.getElementById("review-results").innerHTML =
+        `<p>Select an event to review registrations.</p>`;
+      return;
+    }
+    fetchWithAuth(`${API_URL}/admin/events/${eventCode}/registrations`)
+      .then((res) => res.json())
+      .then((data) => {
+        const { event, registrations } = data;
+        if (!registrations || registrations.length === 0) {
+          document.getElementById("review-results").innerHTML =
+            `<p>No registrations for this event.</p>`;
+          return;
+        }
+        let html = `<h4>${event.name} (${event.state})</h4>`;
+        html += `<table class="review-table"><thead><tr><th>Player</th><th>Pigeons (Ring Numbers)</th><th>Status</th><th>Valid</th><th>Actions</th></tr></thead><tbody>`;
+        registrations.forEach((r) => {
+          const validBadge = r.valid
+            ? '<span class="badge-valid">✅</span>'
+            : '<span class="badge-invalid">❌</span>';
+          const issues = [];
+          if (r.duplicateRing) issues.push("Duplicate Ring");
+          if (r.invalidStatus) issues.push("Invalid Status");
+          if (r.missingInfo) issues.push("Missing Info");
+          const issueText = issues.length ? ` (${issues.join(", ")})` : "";
+          html += `
+            <tr>
+              <td>${r.playerName}</td>
+              <td>${r.ringNumbers.join(", ")}</td>
+              <td>${r.status}</td>
+              <td>${validBadge}${issueText}</td>
+              <td>
+                <button class="btn btn-sm btn-danger" onclick="app.removeRegistration('${eventCode}','${r.playerId}')">Remove Player</button>
+                ${r.pigeonIds
+                  .map(
+                    (pid, idx) => `
+                  <button class="btn btn-sm btn-warning" onclick="app.removePigeonFromRegistration('${eventCode}','${r.playerId}','${pid}')">Remove ${r.ringNumbers[idx]}</button>
+                `,
+                  )
+                  .join("")}
+              </td>
+            </tr>
+          `;
+        });
+        html += `</tbody></table>`;
+        if (event.state === "Registration Closed") {
+          html += `<button class="btn btn-success" onclick="app.generateStickersForEvent()"><i class="fas fa-tags"></i> Generate Stickers</button>`;
+        }
+        document.getElementById("review-results").innerHTML = html;
+      })
+      .catch((err) => {
+        document.getElementById("review-results").innerHTML =
+          `<p>Failed to load review data.</p>`;
+      });
+  },
+
+  removeRegistration(eventCode, playerId) {
+    if (!confirm(`Remove player ${playerId} from this event?`)) return;
+    fetchWithAuth(
+      `${API_URL}/admin/events/${eventCode}/registrations/${playerId}`,
+      { method: "DELETE" },
+    )
+      .then((res) => res.json())
+      .then((data) => {
+        if (data.success) {
+          this.loadAdminReview();
+          this.showModal({
+            title: "✅ Removed",
+            message: "Player registration removed.",
+            icon: "✅",
+            iconColor: "#27ae60",
+          });
+        } else {
+          this.showModal({
+            title: "Error",
+            message: data.error || "Failed to remove.",
+            icon: "❌",
+            iconColor: "#c0392b",
+          });
+        }
+      });
+  },
+
+  removePigeonFromRegistration(eventCode, playerId, pigeonId) {
+    if (!confirm(`Remove this pigeon from the registration?`)) return;
+    fetchWithAuth(
+      `${API_URL}/admin/events/${eventCode}/registrations/${playerId}/pigeons/${pigeonId}`,
+      { method: "DELETE" },
+    )
+      .then((res) => res.json())
+      .then((data) => {
+        if (data.success) {
+          this.loadAdminReview();
+          this.showModal({
+            title: "✅ Removed",
+            message: "Pigeon removed from registration.",
+            icon: "✅",
+            iconColor: "#27ae60",
+          });
+        } else {
+          this.showModal({
+            title: "Error",
+            message: data.error || "Failed to remove.",
+            icon: "❌",
+            iconColor: "#c0392b",
+          });
+        }
+      });
+  },
+
+  generateStickersForEvent() {
+    const select = document.getElementById("review-event-select");
+    const eventCode = select.value;
+    if (!eventCode) {
+      this.showModal({
+        title: "Error",
+        message: "Please select an event.",
+        icon: "❌",
+        iconColor: "#c0392b",
+      });
+      return;
+    }
+    if (
+      !confirm(
+        `Generate stickers for event ${eventCode}? This will lock all registrations.`,
+      )
+    )
+      return;
+    fetchWithAuth(`${API_URL}/admin/events/${eventCode}/generate-stickers`, {
+      method: "POST",
+    })
+      .then((res) => res.json())
+      .then((data) => {
+        if (data.success) {
+          this.showModal({
+            title: "✅ Stickers Generated",
+            message: `${data.codes.length} stickers generated.`,
+            icon: "✅",
+            iconColor: "#27ae60",
+          });
+          this.loadAdminReview();
+          this.renderEvents();
+          this.renderDashboard();
+        } else {
+          this.showModal({
+            title: "Error",
+            message: data.error || "Failed to generate stickers.",
+            icon: "❌",
+            iconColor: "#c0392b",
+          });
+        }
+      });
+  },
+
+  // ============================================================
+  //  LEGACY STICKER GENERATOR SUPPORT (already defined above)
+  // ============================================================
+  // The existing loadStickersForEvent, generateStickers, downloadStickerPDF,
+  // updateStickerWidth, populateStickerSelector, navigateToStickerGenerator
+  // are already defined in initStickerGenerator.
 };
 
 // ===== Service Worker =====
