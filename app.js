@@ -2130,6 +2130,7 @@ const app = {
       '— <span class="unit">m/min</span>';
   },
 
+  // ===== UPDATED renderLogs() – using createdAt and Asia/Manila =====
   renderLogs() {
     fetchWithAuth(`${API_URL}/logs`)
       .then((res) => {
@@ -2140,12 +2141,27 @@ const app = {
         if (!Array.isArray(logs)) logs = [];
         const list = document.getElementById("log-list");
         list.innerHTML = "";
+
         logs.forEach((log) => {
           const li = document.createElement("li");
           li.style.padding = "10px";
           li.style.borderBottom = "1px solid #eee";
+
+          // Use createdAt (UTC) and format to Asia/Manila
+          const date = new Date(log.createdAt);
+          const displayTime = date.toLocaleString("en-PH", {
+            timeZone: "Asia/Manila",
+            hour12: true,
+            year: "numeric",
+            month: "2-digit",
+            day: "2-digit",
+            hour: "2-digit",
+            minute: "2-digit",
+            second: "2-digit",
+          });
+
           const small = document.createElement("small");
-          small.textContent = `[${log.time}]`;
+          small.textContent = `[${displayTime}]`;
           li.appendChild(small);
           li.appendChild(document.createElement("br"));
           const textSpan = document.createElement("span");
@@ -2154,7 +2170,12 @@ const app = {
           list.appendChild(li);
         });
       })
-      .catch((err) => console.error("Logs error:", err));
+      .catch((err) => {
+        console.error("Logs error:", err);
+        const list = document.getElementById("log-list");
+        list.innerHTML =
+          '<li style="padding:10px;color:#999;">Could not load logs.</li>';
+      });
   },
 
   renderPlayers() {

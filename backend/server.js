@@ -6,7 +6,7 @@ const bcrypt = require("bcrypt");
 const jwt = require("jsonwebtoken");
 const { body, validationResult, matchedData } = require("express-validator");
 const rateLimit = require("express-rate-limit");
-const helmet = require("helmet"); // NEW
+const helmet = require("helmet");
 
 const app = express();
 
@@ -29,7 +29,7 @@ app.use(
   }),
 );
 
-app.use(helmet()); // NEW – security headers
+app.use(helmet());
 app.use(express.json({ limit: "10mb" }));
 
 app.use("/api", (req, res, next) => {
@@ -114,7 +114,6 @@ const EventSchema = new mongoose.Schema({
   lat: { type: Number, required: true, min: -90, max: 90 },
   lng: { type: Number, required: true, min: -180, max: 180 },
 });
-// removed unused 'codes' field
 
 const RaceCodeSchema = new mongoose.Schema({
   eventId: { type: String, required: true, index: true },
@@ -124,7 +123,7 @@ const RaceCodeSchema = new mongoose.Schema({
   generatedAt: { type: Date, default: Date.now },
   usedAt: { type: Date },
 });
-RaceCodeSchema.index({ eventId: 1, userId: 1, status: 1 }); // compound index for speed
+RaceCodeSchema.index({ eventId: 1, userId: 1, status: 1 });
 
 const CounterSchema = new mongoose.Schema({
   eventId: { type: String, required: true },
@@ -148,8 +147,8 @@ const ResultSchema = new mongoose.Schema({
 ResultSchema.index({ eventId: 1, userId: 1, clockInCode: 1 }, { unique: true });
 ResultSchema.index({ eventId: 1, speedMPM: -1 });
 
+// ===== UPDATED LOG SCHEMA (no 'time' field) =====
 const LogSchema = new mongoose.Schema({
-  time: { type: String, required: true },
   message: { type: String, required: true },
   createdAt: { type: Date, default: Date.now },
 });
@@ -284,8 +283,8 @@ app.post("/api/login", loginLimiter, validateLogin, async (req, res) => {
       process.env.JWT_SECRET,
       { expiresIn: "24h" },
     );
+    // Log without 'time' – createdAt will be set automatically
     await Log.create({
-      time: new Date().toLocaleString(),
       message: `${id} logged in.`,
     });
     res.json({
@@ -310,7 +309,6 @@ app.post("/api/login", loginLimiter, validateLogin, async (req, res) => {
 
 let timeApiFailed = false;
 app.get("/api/time", async (req, res) => {
-  // Prevent any caching
   res.setHeader("Cache-Control", "no-cache, no-store, must-revalidate");
   res.setHeader("Pragma", "no-cache");
   res.setHeader("Expires", "0");
@@ -507,10 +505,10 @@ app.post(
         results.push({ userId, userName: user.name, codes: generatedCodes });
       }
 
+      // Log without 'time'
       await Log.create(
         [
           {
-            time: new Date().toLocaleString(),
             message: `Registered ${registrations.length} player(s) for event ${event.name}`,
           },
         ],
@@ -726,10 +724,10 @@ app.post(
         { session },
       );
 
+      // Log without 'time'
       await Log.create(
         [
           {
-            time: new Date().toLocaleString(),
             message: `${userId} clocked in with code ${eventCode}. Distance: ${distanceKm.toFixed(4)}km, Speed: ${speedMPM.toFixed(4)} m/min`,
           },
         ],
@@ -780,7 +778,7 @@ app.get("/api/results/:eventCode", async (req, res) => {
   }
 });
 
-// LOGS
+// LOGS – no change needed, returns full log objects with createdAt
 app.get("/api/logs", async (req, res) => {
   try {
     const logs = await Log.find().sort({ _id: -1 }).limit(100);
@@ -794,7 +792,6 @@ app.get("/api/logs", async (req, res) => {
 });
 
 // ===== PLAYERS CRUD =====
-// SECURE: now requireAdmin for GET all players
 app.get("/api/users/players", requireAdmin, async (req, res) => {
   try {
     const users = await User.find({ role: "player" }).select("-passwordHash");
@@ -850,6 +847,10 @@ app.post(
       });
       const userResponse = user.toObject();
       delete userResponse.passwordHash;
+      // Log without 'time'
+      await Log.create({
+        message: `Admin created player ${user.id} (${user.name})`,
+      });
       res.json({ success: true, user: userResponse });
     } catch (error) {
       console.error("Player creation error:", error);
@@ -900,7 +901,6 @@ app.put(
       await user.save();
 
       await Log.create({
-        time: new Date().toLocaleString(),
         message: `Admin updated player ${id}`,
       });
 
@@ -931,7 +931,6 @@ app.delete("/api/users/player/:id", requireAdmin, async (req, res) => {
     await Counter.deleteMany({ userId: id });
 
     await Log.create({
-      time: new Date().toLocaleString(),
       message: `Admin deleted player ${id}`,
     });
 
@@ -955,7 +954,6 @@ app.delete("/api/events/:code", requireAdmin, async (req, res) => {
     await Counter.deleteMany({ eventId: code });
 
     await Log.create({
-      time: new Date().toLocaleString(),
       message: `Admin deleted event ${event.name} (${code})`,
     });
 
@@ -1005,7 +1003,6 @@ app.post(
       });
 
       await Log.create({
-        time: new Date().toLocaleString(),
         message: `Admin created event ${event.name} (${event.code})`,
       });
 
@@ -1027,7 +1024,6 @@ app.put("/api/events/:code/toggle", requireAdmin, async (req, res) => {
     await event.save();
 
     await Log.create({
-      time: new Date().toLocaleString(),
       message: `Admin toggled event ${event.name} (${event.code}) to ${event.status}`,
     });
 
@@ -1069,7 +1065,6 @@ app.put(
       await user.save();
 
       await Log.create({
-        time: new Date().toLocaleString(),
         message: `User ${userId} updated password`,
       });
 
@@ -1202,7 +1197,7 @@ async function getUniqueRaceCode() {
   return code;
 }
 
-// ===== GLOBAL ERROR HANDLER (NEW) =====
+// ===== GLOBAL ERROR HANDLER =====
 app.use((err, req, res, next) => {
   console.error("Global error:", err.stack || err);
   res.status(500).json({
