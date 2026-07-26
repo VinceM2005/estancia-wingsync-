@@ -529,7 +529,8 @@ app.get("/api/events/all", async (req, res) => {
 
 app.get("/api/events/registrations-summary", async (req, res) => {
   try {
-    const summary = await RaceCode.aggregate([
+    // Get counts from RaceCode (legacy admin registrations)
+    const raceCodeSummary = await RaceCode.aggregate([
       {
         $group: {
           _id: "$eventId",
@@ -545,139 +546,58 @@ app.get("/api/events/registrations-summary", async (req, res) => {
         },
       },
     ]);
-    res.json(summary);
+
+    // Get counts from EventRegistration (self-registration)
+    const eventRegSummary = await EventRegistration.aggregate([
+      {
+        $group: {
+          _id: "$eventId",
+          playerIds: { $addToSet: "$playerId" },
+          pigeonIds: { $push: "$pigeonIds" },
+        },
+      },
+      {
+        $project: {
+          eventId: "$_id",
+          playerCount: { $size: "$playerIds" },
+          pigeonCount: {
+            $size: {
+              $reduce: {
+                input: "$pigeonIds",
+                initialValue: [],
+                in: { $concatArrays: ["$$value", "$$this"] },
+              },
+            },
+          },
+        },
+      },
+    ]);
+
+    // Combine: for each event, take the maximum player count (union) and sum pigeon counts
+    const allEventIds = new Set([
+      ...raceCodeSummary.map((r) => r.eventId),
+      ...eventRegSummary.map((r) => r.eventId),
+    ]);
+
+    const result = [];
+    for (const eventId of allEventIds) {
+      const race = raceCodeSummary.find((r) => r.eventId === eventId);
+      const reg = eventRegSummary.find((r) => r.eventId === eventId);
+      const playerCount = Math.max(
+        race ? race.playerCount : 0,
+        reg ? reg.playerCount : 0,
+      );
+      const pigeonCount =
+        (race ? race.pigeonCount : 0) + (reg ? reg.pigeonCount : 0);
+      result.push({ eventId, playerCount, pigeonCount });
+    }
+
+    res.json(result);
   } catch (error) {
     console.error("Registrations summary error:", error);
     res.status(500).json({ error: "An internal error occurred." });
   }
 });
-
-app.get("/api/events/:eventId/registrations", async (req, res) => {
-  try {
-    const { eventId } = req.params;
-    const event = await Event.findOne({ code: eventId });
-    if (!event) return res.status(404).json({ error: "Event not found" });
-    const registrations = await RaceCode.aggregate([
-      { $match: { eventId } },
-      {
-        $group: {
-          _id: "$userId",
-          codes: { $push: "$code" },
-          statuses: { $push: "$status" },
-        },
-      },
-      {
-        $lookup: {
-          from: "users",
-          localField: "_id",
-          foreignField: "id",
-          as: "user",
-        },
-      },
-      { $unwind: "$user" },
-      {
-        $project: {
-          userId: "$_id",
-          userName: "$user.name",
-          codes: 1,
-          statuses: 1,
-        },
-      },
-    ]);
-    res.json(registrations);
-  } catch (error) {
-    console.error("Get registrations error:", error);
-    res.status(500).json({ error: "An internal error occurred." });
-  }
-});
-
-// ----- Admin registration (legacy, kept for backward compatibility) -----
-app.post(
-  "/api/events/:eventId/register-players",
-  registrationLimiter,
-  [
-    body("registrations")
-      .isArray({ min: 1 })
-      .withMessage("At least one registration required"),
-    body("registrations.*.userId")
-      .notEmpty()
-      .withMessage("Each registration must have a userId"),
-    body("registrations.*.pigeonCount")
-      .isInt({ min: 1, max: 10 })
-      .withMessage("Pigeon count must be between 1 and 10"),
-  ],
-  async (req, res) => {
-    const session = await mongoose.startSession();
-    session.startTransaction();
-    try {
-      const errors = validationResult(req);
-      if (!errors.isEmpty()) {
-        await session.abortTransaction();
-        session.endSession();
-        return res.status(400).json({ error: errors.array()[0].msg });
-      }
-      const { eventId } = req.params;
-      const { registrations } = matchedData(req);
-      const event = await Event.findOne({ code: eventId }).session(session);
-      if (!event) {
-        await session.abortTransaction();
-        session.endSession();
-        return res.status(404).json({ error: "Event not found" });
-      }
-      if (event.status !== "Active") {
-        await session.abortTransaction();
-        session.endSession();
-        return res.status(400).json({ error: "Event is not active" });
-      }
-      const results = [];
-      for (const reg of registrations) {
-        const { userId, pigeonCount } = reg;
-        const user = await User.findOne({ id: userId }).session(session);
-        if (!user) {
-          await session.abortTransaction();
-          session.endSession();
-          return res.status(400).json({ error: `User ${userId} not found` });
-        }
-        const existingCount = await RaceCode.countDocuments({
-          eventId,
-          userId,
-        }).session(session);
-        if (existingCount > 0) {
-          await session.abortTransaction();
-          session.endSession();
-          return res.status(400).json({
-            error: `Player ${user.name} already registered for this event`,
-          });
-        }
-        const generatedCodes = [];
-        for (let i = 0; i < pigeonCount; i++) {
-          const code = await getUniqueRaceCode();
-          await RaceCode.create([{ eventId, userId, code, status: "unused" }], {
-            session,
-          });
-          generatedCodes.push(code);
-        }
-        results.push({ userId, userName: user.name, codes: generatedCodes });
-      }
-      await Log.create(
-        [
-          {
-            message: `Registered ${registrations.length} player(s) for event ${event.name}`,
-          },
-        ],
-        { session },
-      );
-      await session.commitTransaction();
-      session.endSession();
-      res.json({ success: true, registrations: results });
-    } catch (error) {
-      await session.abortTransaction();
-      session.endSession();
-      console.error("Register players error:", error);
-      res.status(500).json({ error: "An internal error occurred." });
-    }
-  },
-);
 
 // ============================================================
 //  ENHANCED CLOCK-IN (Phase 5)
@@ -1716,20 +1636,19 @@ app.delete("/api/events/:eventId/register", async (req, res) => {
 // ============================================================
 // ===== FIX: handle missing player gracefully =====
 async function validateRegistrations(eventId) {
-  const registrations = await EventRegistration.find({ eventId })
-    .populate("pigeonIds")
-    .populate("playerId", "id name");
+  const registrations = await EventRegistration.find({ eventId }).populate(
+    "pigeonIds",
+  ); // only populate pigeons
 
   const ringMap = new Map();
   const results = [];
 
   for (const reg of registrations) {
-    const player = reg.playerId;
+    const playerId = reg.playerId; // string like "P-001"
+    // Fetch user name manually
+    const user = await User.findOne({ id: playerId });
+    const playerName = user ? user.name : "Unknown Player";
     const pigeons = reg.pigeonIds;
-
-    // Determine player ID and name (fallback if player deleted)
-    const playerId = player ? player.id : reg.playerId;
-    const playerName = player ? player.name : "Unknown Player";
 
     // ===== LEGACY CHECK =====
     const isLegacy = pigeons.every(
@@ -1752,7 +1671,7 @@ async function validateRegistrations(eventId) {
       continue;
     }
 
-    // --- existing validation for non-legacy ---
+    // --- existing validation ---
     let valid = true;
     let duplicateRing = false;
     let invalidStatus = false;
