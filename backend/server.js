@@ -806,7 +806,7 @@ app.post(
           session.endSession();
           return res.status(400).json({ error: "Registration is not locked." });
         }
-        if (raceCode.pigeonId) {
+        if (!raceCode.pigeonId.startsWith("LEGACY_")) {
           const pigeon = await Pigeon.findOne({
             _id: raceCode.pigeonId,
             ownerId: userId,
@@ -1690,6 +1690,31 @@ async function validateRegistrations(eventId) {
   for (const reg of registrations) {
     const player = reg.playerId;
     const pigeons = reg.pigeonIds;
+
+    // ===== NEW CHECK FOR LEGACY =====
+    // If all pigeonIds are strings starting with "LEGACY_", treat as valid.
+    const isLegacy = pigeons.every(
+      (p) => typeof p === "string" && p.startsWith("LEGACY_"),
+    );
+    if (isLegacy) {
+      // Mark as valid and skip all validation
+      results.push({
+        registrationId: reg._id,
+        playerId: player.id,
+        playerName: player.name,
+        pigeonIds: pigeons.map((p) => p._id || p),
+        ringNumbers: pigeons.map((p) => p.ringNumber || "LEGACY"),
+        valid: true,
+        duplicateRing: false,
+        invalidStatus: false,
+        missingInfo: false,
+        status: reg.status,
+        registrationDate: reg.registrationDate,
+      });
+      continue; // skip the rest of the loop
+    }
+
+    // --- existing validation for non-legacy ---
     let valid = true;
     let duplicateRing = false;
     let invalidStatus = false;

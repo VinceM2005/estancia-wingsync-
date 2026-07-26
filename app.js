@@ -917,43 +917,28 @@ const app = {
       const eventCode = select ? select.value : "";
       if (!eventCode) {
         document.getElementById("sticker-grid-container").innerHTML = `
-          <div class="sticker-empty-state">
-            <i class="fas fa-list-ul" style="font-size:56px; display:block; margin-bottom:12px; color:#ccc;"></i>
-            <h3>Select an Event</h3>
-            <p>Choose an event from the dropdown to generate stickers.</p>
-          </div>
-        `;
+      <div class="sticker-empty-state">
+        <i class="fas fa-list-ul" style="font-size:56px; display:block; margin-bottom:12px; color:#ccc;"></i>
+        <h3>Select an Event</h3>
+        <p>Choose an event from the dropdown to generate stickers.</p>
+      </div>
+    `;
         document.getElementById("sticker-total-count").textContent =
           "0 stickers";
         return;
       }
 
       try {
-        // Try to fetch from new admin endpoint (if event has registrations)
+        // Always fetch from legacy endpoint which returns actual RaceCode data
         const res = await fetchWithAuth(
-          `${API_URL}/admin/events/${eventCode}/registrations`,
+          `${API_URL}/events/${eventCode}/registrations`,
         );
-        let registrations = [];
-        if (res.ok) {
-          const data = await res.json();
-          registrations = data.registrations || [];
-        } else {
-          // Fallback: fetch from legacy endpoint
-          const resLegacy = await fetchWithAuth(
-            `${API_URL}/events/${eventCode}/registrations`,
-          );
-          if (!resLegacy.ok) throw new Error("Failed to fetch registrations");
-          const legacyData = await resLegacy.json();
-          registrations = legacyData.map((r) => ({
-            playerName: r.userName,
-            codes: r.codes,
-            statuses: r.statuses,
-          }));
-        }
+        if (!res.ok) throw new Error("Failed to fetch registrations");
+        const registrations = await res.json();
 
         const stickers = [];
         for (const reg of registrations) {
-          const playerName = reg.playerName || "Player";
+          const playerName = reg.userName || "Player";
           const codes = reg.codes || [];
           for (const code of codes) {
             stickers.push({
@@ -968,11 +953,20 @@ const app = {
         const events = await eventRes.json();
         const evt = events.find((e) => e.code === eventCode);
         if (evt) {
-          state.eventName = evt.name;
-          state.eventId = eventCode;
+          this._stickerState.eventName = evt.name;
+          this._stickerState.eventId = eventCode;
         }
 
-        state.stickers = stickers;
+        this._stickerState.stickers = stickers;
+        // renderAllStickers is defined in the closure; we need to call it
+        // Assuming you have a reference to the render function:
+        // This part is inside initStickerGenerator, so we can use the local renderAllStickers.
+        // However, renderAllStickers is a local function inside initStickerGenerator.
+        // We need to make it accessible. But since the whole function is inside initStickerGenerator,
+        // we can just call renderAllStickers directly.
+        // In your code, you already have `await renderAllStickers(stickers, state.widthMm);`
+        // So just use that.
+        const state = this._stickerState;
         await renderAllStickers(stickers, state.widthMm);
       } catch (e) {
         console.error("Load stickers error:", e);
@@ -1682,13 +1676,15 @@ const app = {
 
           const tdAction = document.createElement("td");
           tdAction.setAttribute("data-label", "Action");
-          if (!isAdmin && e.state === "Registration Open") {
-            const joinBtn = document.createElement("button");
-            joinBtn.className = "btn btn-sm btn-success";
-            joinBtn.textContent = "Join Race";
-            joinBtn.onclick = () => this.openRegisterModalNew(e.code);
-            tdAction.appendChild(joinBtn);
-          } else if (isAdmin) {
+          if (!isAdmin) {
+            // Player view: show "View" button (not "Join Race")
+            const viewBtn = document.createElement("button");
+            viewBtn.className = "btn btn-sm btn-primary";
+            viewBtn.textContent = "View";
+            viewBtn.onclick = () => this.openEventDetailsModal(e.code);
+            tdAction.appendChild(viewBtn);
+          } else {
+            // Admin: show "Review" button (no "Register Players")
             const reviewBtn = document.createElement("button");
             reviewBtn.className = "btn btn-sm btn-primary";
             reviewBtn.textContent = "Review";
@@ -1699,8 +1695,6 @@ const app = {
               this.loadAdminReview();
             };
             tdAction.appendChild(reviewBtn);
-          } else {
-            tdAction.textContent = "—";
           }
           row.appendChild(tdAction);
           tbody.appendChild(row);
@@ -2743,11 +2737,8 @@ const app = {
 
       const tdActions = document.createElement("td");
       tdActions.setAttribute("data-label", "Actions");
-      const regBtn = document.createElement("button");
-      regBtn.className = "btn btn-primary btn-sm";
-      regBtn.textContent = "📝 Register Players";
-      regBtn.onclick = () => app.openRegisterModal(e.code);
-      tdActions.appendChild(regBtn);
+
+      // "Register Players" button REMOVED – admin uses Event Review
 
       const toggleBtn = document.createElement("button");
       toggleBtn.className = "btn btn-danger btn-sm";
@@ -3216,6 +3207,7 @@ const app = {
       "modal-register-event",
       "modal-edit-registration",
       "modal-certificate",
+      "modal-event-details",
     ].forEach((modalId) => {
       const el = document.getElementById(modalId);
       if (el) el.classList.remove("show");
@@ -4127,6 +4119,42 @@ const app = {
           });
         }
       });
+  },
+
+  // ============================================================
+  //  NEW: EVENT DETAILS MODAL
+  // ============================================================
+  openEventDetailsModal(eventCode) {
+    const event = this.eventLookup[eventCode];
+    if (!event) {
+      this.showModal({
+        title: "Error",
+        message: "Event not found.",
+        icon: "❌",
+        iconColor: "#c0392b",
+      });
+      return;
+    }
+    document.getElementById("view-event-name").textContent = event.name;
+    document.getElementById("view-event-code").textContent = event.code;
+    document.getElementById("view-event-release").textContent = new Date(
+      event.releaseTime,
+    ).toLocaleString();
+    document.getElementById("view-event-location").textContent =
+      `${event.lat.toFixed(6)}, ${event.lng.toFixed(6)}`;
+    document.getElementById("view-event-status").textContent =
+      event.state || event.status;
+    const joinBtn = document.getElementById("view-event-join-btn");
+    if (event.state === "Registration Open") {
+      joinBtn.style.display = "block";
+      joinBtn.onclick = () => {
+        this.closeModal("modal-event-details");
+        this.openRegisterModalNew(eventCode);
+      };
+    } else {
+      joinBtn.style.display = "none";
+    }
+    document.getElementById("modal-event-details").classList.add("show");
   },
 
   // ============================================================
