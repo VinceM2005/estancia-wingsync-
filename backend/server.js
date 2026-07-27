@@ -217,7 +217,7 @@ const EventRegistrationSchema = new mongoose.Schema(
     registrationDate: { type: Date, default: Date.now },
     updatedAt: { type: Date, default: Date.now },
   },
-  { versionKey: false }, // <-- Disable __v
+  { versionKey: false },
 );
 EventRegistrationSchema.index(
   { eventId: 1, playerId: 1, pigeonIds: 1 },
@@ -225,6 +225,7 @@ EventRegistrationSchema.index(
 );
 EventRegistrationSchema.index({ eventId: 1, playerId: 1 });
 
+// ===== CERTIFICATE SCHEMA =====
 const CertificateSchema = new mongoose.Schema({
   certificateNumber: { type: String, required: true, unique: true },
   eventId: { type: String, required: true, index: true },
@@ -529,7 +530,6 @@ app.get("/api/events/all", async (req, res) => {
 
 app.get("/api/events/registrations-summary", async (req, res) => {
   try {
-    // Get counts from RaceCode (legacy admin registrations)
     const raceCodeSummary = await RaceCode.aggregate([
       {
         $group: {
@@ -547,7 +547,6 @@ app.get("/api/events/registrations-summary", async (req, res) => {
       },
     ]);
 
-    // Get counts from EventRegistration (self-registration)
     const eventRegSummary = await EventRegistration.aggregate([
       {
         $group: {
@@ -573,7 +572,6 @@ app.get("/api/events/registrations-summary", async (req, res) => {
       },
     ]);
 
-    // Combine: for each event, take the maximum player count (union) and sum pigeon counts
     const allEventIds = new Set([
       ...raceCodeSummary.map((r) => r.eventId),
       ...eventRegSummary.map((r) => r.eventId),
@@ -600,7 +598,7 @@ app.get("/api/events/registrations-summary", async (req, res) => {
 });
 
 // ============================================================
-//  ENHANCED CLOCK-IN (Phase 5)
+//  ENHANCED CLOCK-IN
 // ============================================================
 app.post(
   "/api/clockin",
@@ -899,7 +897,7 @@ app.post(
 );
 
 // ============================================================
-//  RESULTS (with pigeon population – Phase 6)
+//  RESULTS
 // ============================================================
 app.get("/api/results/:eventCode", async (req, res) => {
   try {
@@ -980,7 +978,7 @@ app.get("/api/logs", async (req, res) => {
 });
 
 // ============================================================
-//  PLAYERS CRUD (unchanged)
+//  PLAYERS CRUD
 // ============================================================
 app.get("/api/users/players", requireAdmin, async (req, res) => {
   try {
@@ -1111,7 +1109,7 @@ app.delete("/api/users/player/:id", requireAdmin, async (req, res) => {
 });
 
 // ============================================================
-//  EVENT MANAGEMENT (with state and new fields)
+//  EVENT MANAGEMENT
 // ============================================================
 app.delete("/api/events/:code", requireAdmin, async (req, res) => {
   try {
@@ -1230,7 +1228,7 @@ app.put(
 );
 
 // ============================================================
-//  PHASE 2: PIGEON REGISTRY API
+//  PIGEON REGISTRY API
 // ============================================================
 async function isPigeonInActiveEvent(pigeonId) {
   const registration = await EventRegistration.findOne({
@@ -1401,10 +1399,8 @@ app.delete("/api/pigeons/:id", async (req, res) => {
 });
 
 // ============================================================
-//  PHASE 3: PLAYER SELF-REGISTRATION
+//  PLAYER SELF-REGISTRATION
 // ============================================================
-
-// ================ FIXED VALIDATION FUNCTION ================
 async function validateRegistrationEligibility(
   eventId,
   playerId,
@@ -1432,7 +1428,6 @@ async function validateRegistrationEligibility(
       "One or more pigeons are invalid, inactive, or do not belong to you.",
     );
   }
-  // Check for duplicates, excluding the current registration if updating
   const query = {
     eventId,
     playerId,
@@ -1449,7 +1444,6 @@ async function validateRegistrationEligibility(
   }
   return { event, pigeons };
 }
-// =====================================================
 
 app.get("/api/events/open", async (req, res) => {
   try {
@@ -1501,7 +1495,6 @@ app.post(
       const { eventId } = req.params;
       const { pigeonIds } = matchedData(req);
       const playerId = req.user.id;
-      // For new registration, no exclusion
       await validateRegistrationEligibility(eventId, playerId, pigeonIds);
       const existing = await EventRegistration.findOne({
         eventId,
@@ -1536,7 +1529,6 @@ app.post(
   },
 );
 
-// ================ FIXED PUT ENDPOINT (uses findOneAndUpdate) ================
 app.put(
   "/api/events/:eventId/register",
   [
@@ -1554,7 +1546,6 @@ app.put(
       const { pigeonIds } = matchedData(req);
       const playerId = req.user.id;
 
-      // Find existing draft registration
       const registration = await EventRegistration.findOne({
         eventId,
         playerId,
@@ -1566,7 +1557,6 @@ app.put(
           .json({ error: "No draft registration found for this event." });
       }
 
-      // Validate, excluding the current registration
       await validateRegistrationEligibility(
         eventId,
         playerId,
@@ -1574,7 +1564,6 @@ app.put(
         registration._id,
       );
 
-      // Use findOneAndUpdate to avoid version conflicts
       const updated = await EventRegistration.findOneAndUpdate(
         { _id: registration._id },
         { pigeonIds, updatedAt: new Date() },
@@ -1598,7 +1587,6 @@ app.put(
     }
   },
 );
-// =====================================================
 
 app.delete("/api/events/:eventId/register", async (req, res) => {
   try {
@@ -1632,25 +1620,22 @@ app.delete("/api/events/:eventId/register", async (req, res) => {
 });
 
 // ============================================================
-//  PHASE 4: ADMIN REVIEW & STICKER GENERATION
+//  ADMIN REVIEW & STICKER GENERATION
 // ============================================================
-// ===== FIX: handle missing player gracefully =====
 async function validateRegistrations(eventId) {
   const registrations = await EventRegistration.find({ eventId }).populate(
     "pigeonIds",
-  ); // only populate pigeons
+  );
 
   const ringMap = new Map();
   const results = [];
 
   for (const reg of registrations) {
-    const playerId = reg.playerId; // string like "P-001"
-    // Fetch user name manually
+    const playerId = reg.playerId;
     const user = await User.findOne({ id: playerId });
     const playerName = user ? user.name : "Unknown Player";
     const pigeons = reg.pigeonIds;
 
-    // ===== LEGACY CHECK =====
     const isLegacy = pigeons.every(
       (p) => typeof p === "string" && p.startsWith("LEGACY_"),
     );
@@ -1671,7 +1656,6 @@ async function validateRegistrations(eventId) {
       continue;
     }
 
-    // --- existing validation ---
     let valid = true;
     let duplicateRing = false;
     let invalidStatus = false;
@@ -1738,7 +1722,6 @@ app.get(
   },
 );
 
-// ===== FIX: handle undefined playerId =====
 app.delete(
   "/api/admin/events/:eventId/registrations/:playerId",
   requireAdmin,
@@ -1770,7 +1753,6 @@ app.delete(
         playerId,
       });
       if (!result) {
-        // Fallback: try case-insensitive match (rare)
         const altResult = await EventRegistration.findOneAndDelete({
           eventId,
           playerId: { $regex: new RegExp(`^${playerId}$`, "i") },
@@ -1844,6 +1826,7 @@ app.delete(
   },
 );
 
+// ===== STICKER GENERATION (with debug logs) =====
 app.post(
   "/api/admin/events/:eventId/generate-stickers",
   requireAdmin,
@@ -1852,40 +1835,78 @@ app.post(
     session.startTransaction();
     try {
       const { eventId } = req.params;
+      console.log("🔍 [STICKERS] Received eventId:", eventId);
+
       const event = await Event.findOne({ code: eventId }).session(session);
       if (!event) {
         await session.abortTransaction();
         session.endSession();
+        console.warn("❌ [STICKERS] Event not found for code:", eventId);
         return res.status(404).json({ error: "Event not found." });
       }
-      if (event.state !== "Registration Closed") {
+      console.log(
+        "✅ [STICKERS] Event found:",
+        event.name,
+        "state:",
+        event.state,
+      );
+
+      if (
+        event.state !== "Registration Closed" &&
+        event.state !== "Sticker Generated"
+      ) {
         await session.abortTransaction();
         session.endSession();
-        return res
-          .status(400)
-          .json({ error: "Event must be in Registration Closed state." });
+        console.warn("❌ [STICKERS] Invalid state:", event.state);
+        return res.status(400).json({
+          error: `Event must be in Registration Closed state (current: ${event.state}).`,
+        });
       }
+
       const registrations = await EventRegistration.find({
         eventId,
-        status: { $ne: "locked" },
+        status: { $nin: ["locked"] },
       }).session(session);
+
+      console.log(
+        `📊 [STICKERS] Found ${registrations.length} registrations with status != "locked"`,
+      );
+
       if (registrations.length === 0) {
+        const allRegs = await EventRegistration.find({ eventId }).session(
+          session,
+        );
+        console.log(
+          `🔍 [STICKERS] Total registrations for this event: ${allRegs.length}`,
+        );
+        if (allRegs.length > 0) {
+          const statuses = allRegs.map((r) => r.status);
+          console.log(`   Statuses: ${statuses.join(", ")}`);
+          await session.abortTransaction();
+          session.endSession();
+          return res.status(400).json({
+            error: `No registrations with status 'draft' or 'confirmed' found. Found ${allRegs.length} registration(s) with status(es): ${statuses.join(", ")}. Please ensure registrations are not locked.`,
+          });
+        }
         await session.abortTransaction();
         session.endSession();
         return res
           .status(400)
-          .json({ error: "No registrations to generate stickers for." });
+          .json({ error: "No registrations found for this event at all." });
       }
+
       const validation = await validateRegistrations(eventId);
       const invalid = validation.filter((r) => !r.valid);
       if (invalid.length > 0) {
         await session.abortTransaction();
         session.endSession();
+        console.warn("❌ [STICKERS] Invalid registrations:", invalid);
         return res.status(400).json({
           error: "Some registrations are invalid. Please review and fix.",
           invalid,
         });
       }
+
       await lockAllRegistrations(eventId);
       const generatedCodes = [];
       for (const reg of registrations) {
@@ -1903,16 +1924,23 @@ app.post(
           generatedCodes.push({ playerId: reg.playerId, pigeonId, code });
         }
       }
+
       event.state = "Sticker Generated";
       await event.save({ session });
+
       await Log.create(
         {
           message: `Admin generated ${generatedCodes.length} stickers for event ${event.name} (${eventId}).`,
         },
         { session },
       );
+
       await session.commitTransaction();
       session.endSession();
+
+      console.log(
+        `✅ [STICKERS] Successfully generated ${generatedCodes.length} stickers.`,
+      );
       res.json({
         success: true,
         message: `Generated ${generatedCodes.length} stickers.`,
@@ -1921,7 +1949,7 @@ app.post(
     } catch (error) {
       await session.abortTransaction();
       session.endSession();
-      console.error("Error generating stickers:", error);
+      console.error("❌ [STICKERS] Error generating stickers:", error);
       res.status(500).json({ error: "Failed to generate stickers." });
     }
   },
@@ -1970,9 +1998,7 @@ app.put(
   },
 );
 
-// ============================================================
-//  NEW: Admin update registration settings (state + deadline)
-// ============================================================
+// ===== NEW: Admin update registration settings (state + deadline) =====
 app.put(
   "/api/admin/events/:eventId/registration-settings",
   requireAdmin,
@@ -2027,7 +2053,7 @@ app.put(
 );
 
 // ============================================================
-//  PHASE 7: CERTIFICATES
+//  CERTIFICATES
 // ============================================================
 async function generateCertificateNumber() {
   const year = new Date().getFullYear();
@@ -2177,7 +2203,7 @@ app.get("/api/certificates/verify/:hash", async (req, res) => {
 });
 
 // ============================================================
-//  PHASE 8: EXTENDED PLAYER & PIGEON STATS
+//  EXTENDED PLAYER & PIGEON STATS
 // ============================================================
 async function getChampionTitles(playerId) {
   const results = await Result.aggregate([
