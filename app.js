@@ -4004,16 +4004,40 @@ const app = {
   //  NEW: EVENT DETAILS MODAL
   // ============================================================
   openEventDetailsModal(eventCode) {
-    const event = this.eventLookup[eventCode];
+    // Try to get event from cache
+    let event = this.eventLookup[eventCode];
     if (!event) {
-      this.showModal({
-        title: "Error",
-        message: "Event not found.",
-        icon: "❌",
-        iconColor: "#c0392b",
-      });
+      // Cache miss – refresh all events and try again
+      this.fetchAllEvents()
+        .then(() => {
+          event = this.eventLookup[eventCode];
+          if (!event) {
+            this.showModal({
+              title: "Error",
+              message:
+                "Event not found. Please refresh the page and try again.",
+              icon: "❌",
+              iconColor: "#c0392b",
+            });
+            return;
+          }
+          this._openEventDetailsModalWithEvent(event);
+        })
+        .catch(() => {
+          this.showModal({
+            title: "Error",
+            message: "Failed to load event data. Please refresh the page.",
+            icon: "❌",
+            iconColor: "#c0392b",
+          });
+        });
       return;
     }
+    this._openEventDetailsModalWithEvent(event);
+  },
+
+  // Helper to actually open the modal with event data
+  _openEventDetailsModalWithEvent(event) {
     document.getElementById("view-event-name").textContent = event.name;
     document.getElementById("view-event-code").textContent = event.code;
     document.getElementById("view-event-release").textContent = new Date(
@@ -4026,7 +4050,6 @@ const app = {
     const joinBtn = document.getElementById("view-event-join-btn");
     // Only show join button if event is "Registration Open" and deadline not passed
     if (event.state === "Registration Open") {
-      // Also check deadline
       if (
         event.registrationDeadline &&
         new Date() > new Date(event.registrationDeadline)
@@ -4038,7 +4061,7 @@ const app = {
         joinBtn.style.display = "block";
         joinBtn.onclick = () => {
           this.closeModal("modal-event-details");
-          this.openRegisterModalNew(eventCode);
+          this.openRegisterModalNew(event.code);
         };
       }
     } else {
