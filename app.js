@@ -3035,6 +3035,7 @@ const app = {
   saveEvent() {
     const name = document.getElementById("modal-e-name").value.trim();
     const time = document.getElementById("modal-e-time").value;
+    const deadline = document.getElementById("modal-e-deadline").value; // NEW
 
     if (!name) {
       this.showModal({
@@ -3054,6 +3055,29 @@ const app = {
       });
       return;
     }
+    if (!deadline) {
+      this.showModal({
+        title: "Incomplete",
+        message: "Registration deadline is required.",
+        icon: "❌",
+        iconColor: "#c0392b",
+      });
+      return;
+    }
+
+    // Check that deadline is before release time
+    const releaseDate = new Date(time);
+    const deadlineDate = new Date(deadline);
+    if (deadlineDate >= releaseDate) {
+      this.showModal({
+        title: "Invalid Deadline",
+        message: "Registration deadline must be before the release time.",
+        icon: "❌",
+        iconColor: "#c0392b",
+      });
+      return;
+    }
+
     if (!selectedEventLat || !selectedEventLng) {
       this.showModal({
         title: "Missing Location",
@@ -3092,6 +3116,7 @@ const app = {
       body: JSON.stringify({
         name,
         releaseTime: new Date(time).toISOString(),
+        registrationDeadline: new Date(deadline).toISOString(),
         lat,
         lng,
       }),
@@ -3170,6 +3195,13 @@ const app = {
   openEventModal() {
     const modal = document.getElementById("modal-event");
     modal.classList.add("show");
+    // Optionally pre-fill deadline with a default (e.g., 30 minutes from now)
+    const now = new Date();
+    const defaultDeadline = new Date(now.getTime() + 30 * 60 * 1000);
+    document.getElementById("modal-e-deadline").value = defaultDeadline
+      .toISOString()
+      .slice(0, 16);
+
     setTimeout(() => {
       if (!eventMap) {
         eventMap = createGoogleMap(
