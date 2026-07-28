@@ -1810,16 +1810,15 @@ app.post(
       await validateRegistrationEligibility(eventId, playerId, pigeonIds);
 
       // Use atomic findOneAndUpdate with upsert to prevent duplicates
+      // FIX: Remove pigeonIds from $setOnInsert to avoid conflict with $set
       const registration = await EventRegistration.findOneAndUpdate(
         { eventId, playerId },
         {
           $setOnInsert: {
             eventId,
             playerId,
-            pigeonIds,
             status: "draft",
             registrationDate: new Date(),
-            updatedAt: new Date(),
           },
           $set: {
             pigeonIds,
@@ -1888,11 +1887,9 @@ app.put(
         status: { $in: ["draft", "confirmed"] },
       });
       if (!registration) {
-        return res
-          .status(404)
-          .json({
-            error: "No draft or confirmed registration found for this event.",
-          });
+        return res.status(404).json({
+          error: "No draft or confirmed registration found for this event.",
+        });
       }
 
       await validateRegistrationEligibility(
