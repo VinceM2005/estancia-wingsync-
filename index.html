@@ -1706,12 +1706,7 @@
                 >
                   <option value="">-- Select Event --</option>
                 </select>
-                <button
-                  class="btn btn-success"
-                  onclick="app.generateStickersForEvent()"
-                >
-                  <i class="fas fa-tags"></i> Generate Stickers
-                </button>
+          
               </div>
               <div id="review-results">
                 <p>Select an event to review registrations.</p>
@@ -2041,15 +2036,6 @@
       </div>
     </div>
 
-    <!-- Legacy Registration Modal (Admin) -->
-    <div id="modal-register-players" class="modal-overlay">
-      <div class="modal-content" style="max-width: 700px">
-        <div class="modal-header">
-          <h3><i class="fas fa-user-plus"></i> Register Players for Event</h3>
-          <button class="close-modal" onclick="app.closeRegisterModal()">
-            <i class="fas fa-times"></i>
-          </button>
-        </div>
         <div class="form-group">
           <label>Event Code</label>
           <input

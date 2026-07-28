@@ -1089,6 +1089,105 @@ const app = {
     };
   },
 
+  populateReviewSelector: function (events) {
+    const select = document.getElementById("review-event-select");
+    if (!select) return;
+    const current = select.value;
+    select.innerHTML = '<option value="">-- Select Event --</option>';
+    (events || this.allEvents).forEach((e) => {
+      const opt = document.createElement("option");
+      opt.value = e.code;
+      opt.textContent = `${e.name} (${e.code})`;
+      select.appendChild(opt);
+    });
+    if (current) select.value = current;
+  },
+
+  loadAdminReview: async function () {
+    const select = document.getElementById("review-event-select");
+    const eventCode = select ? select.value : "";
+    if (!eventCode) {
+      document.getElementById("review-results").innerHTML =
+        "<p>Select an event to review registrations.</p>";
+      return;
+    }
+
+    try {
+      const res = await fetchWithAuth(
+        `${API_URL}/admin/events/${eventCode}/registrations?statuses=draft,confirmed,locked`,
+      );
+      if (!res.ok) throw new Error("Failed to fetch registrations");
+      const data = await res.json();
+      const registrations = data.registrations || [];
+
+      let html = `
+      <div style="overflow-x:auto; margin-top:12px;">
+        <table class="review-table" style="width:100%; font-size:14px;">
+          <thead>
+            <tr>
+              <th>Player</th>
+              <th>Ring Numbers</th>
+              <th>Status</th>
+              <th>Valid</th>
+              <th>Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+    `;
+
+      if (registrations.length === 0) {
+        html += `<tr><td colspan="5" style="text-align:center; color:#999;">No registrations yet.</td></tr>`;
+      } else {
+        for (const reg of registrations) {
+          const validClass = reg.valid ? "badge-valid" : "badge-invalid";
+          html += `
+          <tr>
+            <td>${reg.playerName}</td>
+            <td>${reg.ringNumbers.join(", ")}</td>
+            <td>${reg.status}</td>
+            <td><span class="${validClass}">${reg.valid ? "✅" : "❌"}</span></td>
+            <td>
+              ${!reg.valid ? `<button class="btn btn-sm btn-danger" onclick="app.removeRegistration('${eventCode}', '${reg.playerId}')">Remove</button>` : ""}
+            </td>
+          </tr>
+        `;
+        }
+      }
+      html += `</tbody></table></div>`;
+      document.getElementById("review-results").innerHTML = html;
+    } catch (err) {
+      console.error("Load admin review error:", err);
+      document.getElementById("review-results").innerHTML =
+        `<p style="color:red;">Failed to load registrations.</p>`;
+    }
+  },
+
+  removeRegistration: async function (eventCode, playerId) {
+    if (!confirm(`Remove all registrations for ${playerId} from this event?`))
+      return;
+    try {
+      const res = await fetchWithAuth(
+        `${API_URL}/admin/events/${eventCode}/registrations/${playerId}`,
+        { method: "DELETE" },
+      );
+      if (!res.ok) throw new Error("Failed to remove");
+      this.loadAdminReview();
+      this.showModal({
+        title: "Removed",
+        message: "Registration removed.",
+        icon: "🗑️",
+        iconColor: "#c0392b",
+      });
+    } catch (err) {
+      this.showModal({
+        title: "Error",
+        message: "Could not remove registration.",
+        icon: "❌",
+        iconColor: "#c0392b",
+      });
+    }
+  },
+
   // ===== VISIBILITY LISTENER =====
   setupVisibilityListener() {
     document.addEventListener("visibilitychange", () => {
@@ -1933,26 +2032,15 @@ const app = {
 
   // ===== RESULTS =====
   initResultsView() {
-    const loadData = () => {
-      return this.fetchAllEvents()
-        .then(() => this.fetchRegistrationCounts())
-        .then(() => this.setupResultsView())
-        .catch((err) => {
-          console.error("Results init error:", err);
-          this.allEvents = [];
-          this.setupResultsView();
-        });
-    };
-
-    if (this.allEvents.length === 0) {
-      loadData();
-    } else {
-      if (Object.keys(this.registrationCounts).length === 0) {
-        this.fetchRegistrationCounts().then(() => this.setupResultsView());
-      } else {
+    // Always fetch fresh events to avoid stale cache
+    this.fetchAllEvents()
+      .then(() => this.fetchRegistrationCounts())
+      .then(() => this.setupResultsView())
+      .catch((err) => {
+        console.error("Results init error:", err);
+        this.allEvents = [];
         this.setupResultsView();
-      }
-    }
+      });
   },
 
   buildEventLookup(events) {
@@ -2018,8 +2106,17 @@ const app = {
         return;
       }
 
-      if (Date.now() - this._lastEventsFetch > 10000) {
+      // If event not found in cache, force refresh
+      if (!this.eventLookup[this.selectedEventCode]) {
         await this.fetchAllEvents();
+        if (!this.eventLookup[this.selectedEventCode]) {
+          // Still not found – maybe event was deleted
+          this.selectedEventCode = null;
+          tbody.innerHTML = "";
+          this.clearAnalyticsSections();
+          this._isRendering = false;
+          return;
+        }
       }
 
       const event = this.eventLookup[this.selectedEventCode];
@@ -2161,7 +2258,6 @@ const app = {
       document.getElementById("hl-last-arrival").textContent = lastArrival
         ? `${lastArrival.userName} (${lastArrival.arrivalTime.toLocaleTimeString()})`
         : "—";
-      // Fixed: use single quotes around the string with double quotes inside
       document.getElementById("hl-longest-dist").innerHTML =
         '— <span class="unit">km</span>';
       document.getElementById("hl-closest-finish").textContent =
@@ -2266,7 +2362,6 @@ const app = {
     document.getElementById("hl-fastest-bird").textContent = "—";
     document.getElementById("hl-first-arrival").textContent = "—";
     document.getElementById("hl-last-arrival").textContent = "—";
-    // Fixed: use single quotes
     document.getElementById("hl-longest-dist").innerHTML =
       '— <span class="unit">km</span>';
     document.getElementById("hl-closest-finish").textContent = "—";
@@ -2872,6 +2967,7 @@ const app = {
         if (data.success) {
           this.renderEvents();
           this.renderDashboard();
+          this.fetchAllEvents(); // ← refresh cache
           this.showModal({
             title: "🔄 Event Updated",
             message: `Event status changed to ${data.event.status}.`,
@@ -2910,6 +3006,7 @@ const app = {
         if (data.success) {
           this.renderEvents();
           this.renderDashboard();
+          this.fetchAllEvents(); // ← refresh cache
           this.showModal({
             title: "Event Deleted",
             message: "Event has been removed.",
