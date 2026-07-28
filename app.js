@@ -304,6 +304,7 @@ const app = {
   allResults: {},
   selectedEventCode: null,
   currentRegistrations: [],
+  currentEventCode: null,
   registrationCounts: {},
   _eventsWithSummary: [],
 
@@ -2799,6 +2800,214 @@ const app = {
       });
   },
 
+  // ===== ADMIN REGISTRATION UI (RESTORED) =====
+
+  openRegisterModal(eventCode) {
+    this.currentEventCode = eventCode;
+    const modal = document.getElementById("modal-register-players");
+    modal.classList.add("show");
+    this.loadRegistrations(eventCode);
+  },
+
+  loadRegistrations(eventCode) {
+    fetchWithAuth(`${API_URL}/events/${eventCode}/registrations`)
+      .then((res) => {
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        return res.json();
+      })
+      .then((registrations) => {
+        if (!Array.isArray(registrations)) registrations = [];
+        this.currentRegistrations = registrations;
+        this.populateRegisterModal(eventCode);
+      })
+      .catch((err) => {
+        console.error("❌ Error loading registrations:", err);
+        this.currentRegistrations = [];
+        this.populateRegisterModal(eventCode);
+        this.showModal({
+          title: "Warning",
+          message: "Could not load existing registrations. Please refresh.",
+          icon: "⚠️",
+          iconColor: "#e67e22",
+        });
+      });
+  },
+
+  populateRegisterModal(eventCode) {
+    fetchWithAuth(`${API_URL}/users/players`)
+      .then((res) => {
+        if (!res.ok) throw new Error("Failed to fetch players");
+        return res.json();
+      })
+      .then((players) => {
+        if (!Array.isArray(players)) players = [];
+        const registeredIds = this.currentRegistrations
+          ? this.currentRegistrations.map((r) => r.userId)
+          : [];
+        const available = players.filter((p) => !registeredIds.includes(p.id));
+
+        const select = document.getElementById("register-player-select");
+        select.innerHTML =
+          '<option value="">-- Select Player --</option>' +
+          available
+            .map((p) => `<option value="${p.id}">${p.name} (${p.id})</option>`)
+            .join("");
+
+        this.updateRegistrationTable();
+        document.getElementById("register-pigeon-count").value = 1;
+        document.getElementById("register-event-code").value = eventCode;
+      })
+      .catch((err) => {
+        console.error("❌ Error loading players:", err);
+        this.showModal({
+          title: "Error",
+          message: "Could not load player list. Please refresh the page.",
+          icon: "❌",
+          iconColor: "#c0392b",
+        });
+      });
+  },
+
+  updateRegistrationTable() {
+    const tbody = document.querySelector("#registrations-table tbody");
+    if (!tbody) return;
+
+    tbody.innerHTML = "";
+    if (this.currentRegistrations && this.currentRegistrations.length > 0) {
+      this.currentRegistrations.forEach((r) => {
+        const tr = document.createElement("tr");
+        const tdPlayer = document.createElement("td");
+        const strong = document.createElement("strong");
+        strong.textContent = r.userName;
+        tdPlayer.appendChild(strong);
+        tr.appendChild(tdPlayer);
+
+        const tdCodes = document.createElement("td");
+        r.codes.forEach((code, idx) => {
+          const status = r.statuses[idx];
+          const span = document.createElement("span");
+          span.className = "code-item";
+
+          const codeSpan = document.createElement("span");
+          codeSpan.textContent = code;
+          span.appendChild(codeSpan);
+          span.appendChild(document.createTextNode(" "));
+
+          const badge = document.createElement("span");
+          badge.className = status === "unused" ? "badge-unused" : "badge-used";
+          badge.textContent = status === "unused" ? "✅ Unused" : "⏳ Used";
+          span.appendChild(badge);
+
+          tdCodes.appendChild(span);
+          if (idx < r.codes.length - 1) {
+            tdCodes.appendChild(document.createTextNode(" "));
+          }
+        });
+        tr.appendChild(tdCodes);
+
+        const tdStatus = document.createElement("td");
+        const total = r.codes.length;
+        const used = r.statuses.filter((s) => s === "used").length;
+        const unused = total - used;
+        tdStatus.innerHTML = `
+          <span class="badge-total">${total} total</span>
+          <span class="badge-unused">${unused} unused</span>
+          <span class="badge-used">${used} used</span>
+        `;
+        tr.appendChild(tdStatus);
+
+        tbody.appendChild(tr);
+      });
+    } else {
+      const tr = document.createElement("tr");
+      const td = document.createElement("td");
+      td.colSpan = 3;
+      td.style.textAlign = "center";
+      td.style.color = "#999";
+      td.style.padding = "20px";
+      td.textContent = "No players registered yet.";
+      tr.appendChild(td);
+      tbody.appendChild(tr);
+    }
+  },
+
+  registerPlayers() {
+    const eventCode = document.getElementById("register-event-code").value;
+    const userId = document.getElementById("register-player-select").value;
+    const pigeonCount = parseInt(
+      document.getElementById("register-pigeon-count").value,
+      10,
+    );
+
+    if (!userId) {
+      this.showModal({
+        title: "Incomplete",
+        message: "Please select a player.",
+        icon: "❌",
+        iconColor: "#c0392b",
+      });
+      return;
+    }
+    if (isNaN(pigeonCount) || pigeonCount < 1 || pigeonCount > 10) {
+      this.showModal({
+        title: "Invalid Count",
+        message: "Pigeon count must be between 1 and 10.",
+        icon: "❌",
+        iconColor: "#c0392b",
+      });
+      return;
+    }
+
+    const btn = document.querySelector("#modal-register-players .btn-success");
+    if (btn) {
+      btn.disabled = true;
+      btn.textContent = "⏳ Registering...";
+    }
+
+    fetchWithAuth(`${API_URL}/events/${eventCode}/register-players`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ registrations: [{ userId, pigeonCount }] }),
+    })
+      .then(async (res) => {
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || "Registration failed");
+        return data;
+      })
+      .then((data) => {
+        if (data.success) {
+          this.showModal({
+            title: "✅ Registration Successful",
+            message: `Generated ${pigeonCount} codes for player.\nCodes: ${data.registrations[0].codes.join(", ")}`,
+            icon: "✅",
+            iconColor: "#27ae60",
+          });
+          this.loadRegistrations(eventCode);
+        } else {
+          throw new Error(data.error || "Unknown error");
+        }
+      })
+      .catch((err) => {
+        console.error("❌ Registration error:", err);
+        this.showModal({
+          title: "Registration Failed",
+          message: err.message || "Unable to connect to the server.",
+          icon: "❌",
+          iconColor: "#c0392b",
+        });
+      })
+      .finally(() => {
+        if (btn) {
+          btn.disabled = false;
+          btn.textContent = "✅ Register Player";
+        }
+      });
+  },
+
+  closeRegisterModal() {
+    document.getElementById("modal-register-players").classList.remove("show");
+  },
+
   // ===== EVENTS CRUD (Admin) =====
   renderEvents() {
     fetchWithAuth(`${API_URL}/events/all`)
@@ -2881,6 +3090,13 @@ const app = {
 
       const tdActions = document.createElement("td");
       tdActions.setAttribute("data-label", "Actions");
+
+      // Register Players button
+      const regBtn = document.createElement("button");
+      regBtn.className = "btn btn-sm btn-success";
+      regBtn.textContent = "📝 Register Players";
+      regBtn.onclick = () => app.openRegisterModal(e.code);
+      tdActions.appendChild(regBtn);
 
       // ===== NEW: Manage Registration button =====
       const manageBtn = document.createElement("button");

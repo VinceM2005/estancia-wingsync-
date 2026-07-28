@@ -2048,12 +2048,91 @@
       </div>
     </div>
 
-    <!-- ===== BROKEN LEGACY MODAL – you can remove this entire block safely ===== -->
-    <!--
+    <!-- Registration Modal (Restored) -->
     <div id="modal-register-players" class="modal-overlay">
-      ... (remove this entire modal)
+      <div class="modal-content" style="max-width: 700px">
+        <div class="modal-header">
+          <h3><i class="fas fa-user-plus"></i> Register Players for Event</h3>
+          <button class="close-modal" onclick="app.closeRegisterModal()">
+            <i class="fas fa-times"></i>
+          </button>
+        </div>
+        <div class="form-group">
+          <label>Event Code</label>
+          <input
+            type="text"
+            id="register-event-code"
+            class="form-control"
+            disabled
+          />
+        </div>
+        <div class="form-group">
+          <label>Select Player</label>
+          <select id="register-player-select" class="form-control">
+            <option value="">-- Select Player --</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label>Number of Pigeons (max 10)</label>
+          <input
+            type="number"
+            id="register-pigeon-count"
+            class="form-control"
+            min="1"
+            max="10"
+            value="1"
+          />
+        </div>
+        <button
+          class="btn btn-success"
+          style="width: 100%"
+          onclick="app.registerPlayers()"
+        >
+          <i class="fas fa-check"></i> Register Player
+        </button>
+
+        <hr style="margin: 20px 0" />
+        <div
+          style="
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 8px;
+          "
+        >
+          <h4 style="margin: 0">Registered Players &amp; Codes</h4>
+          <button
+            class="btn-generate-stickers"
+            onclick="app.navigateToStickerGenerator()"
+          >
+            <i class="fas fa-tags"></i> Generate Stickers
+          </button>
+        </div>
+        <table
+          id="registrations-table"
+          style="width: 100%; font-size: 14px; margin-top: 10px"
+        >
+          <thead>
+            <tr>
+              <th>Player</th>
+              <th>Codes</th>
+              <th>Status</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td
+                colspan="3"
+                style="text-align: center; color: #999; padding: 20px"
+              >
+                No players registered yet.
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
     </div>
-    -->
 
     <!-- ===== NEW MODALS ===== -->
 
