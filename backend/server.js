@@ -2278,7 +2278,7 @@ app.put(
       // - From Draft to Registration Open (open)
       // - From Registration Open to Registration Closed (close)
       // - From Registration Closed to Registration Open (reopen)
-      const allowed = false;
+      let allowed = false; // ✅ FIX: changed from 'const' to 'let'
       if (state === "Registration Open") {
         if (event.state === "Draft" || event.state === "Registration Closed") {
           allowed = true;
