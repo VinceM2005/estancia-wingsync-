@@ -1,3 +1,4 @@
+// ===== server.js – MODIFIED VERSION =====
 require("dotenv").config();
 const express = require("express");
 const mongoose = require("mongoose");
@@ -100,6 +101,15 @@ async function ensureIndexes() {
     console.log(
       "✅ Unique index on EventRegistration (eventId, playerId) ensured.",
     );
+
+    // NEW: Ensure unique index on RaceCode (eventId, pigeonId) to prevent duplicates
+    // Drop any existing index that might conflict
+    await RaceCode.collection.dropIndex("eventId_1_pigeonId_1").catch(() => {});
+    await RaceCode.collection.createIndex(
+      { eventId: 1, pigeonId: 1 },
+      { unique: true, sparse: true },
+    );
+    console.log("✅ Unique index on RaceCode (eventId, pigeonId) ensured.");
   } catch (err) {
     console.error("❌ Error creating index:", err);
   }
@@ -170,6 +180,12 @@ const RaceCodeSchema = new mongoose.Schema({
   pigeonId: { type: String, ref: "Pigeon" },
 });
 RaceCodeSchema.index({ eventId: 1, userId: 1, status: 1 });
+// NEW: Unique index for (eventId, pigeonId) is created in ensureIndexes()
+// but we also keep the schema-level index for query performance
+RaceCodeSchema.index(
+  { eventId: 1, pigeonId: 1 },
+  { unique: true, sparse: true },
+);
 
 const CounterSchema = new mongoose.Schema({
   eventId: { type: String, required: true },
@@ -240,8 +256,6 @@ const EventRegistrationSchema = new mongoose.Schema(
   },
   { versionKey: false },
 );
-// Unique index on eventId + playerId will be created in ensureIndexes()
-// but we also keep the schema-level index for query performance
 EventRegistrationSchema.index({ eventId: 1, playerId: 1 });
 
 const CertificateSchema = new mongoose.Schema({
@@ -361,7 +375,7 @@ async function generateStickersForEvent(eventId) {
       const event = await Event.findOne({ code: eventId }).session(session);
       if (!event) throw new Error("Event not found");
 
-      // Check if stickers already exist
+      // Check if stickers already exist – now using distinct pigeonIds to be safe
       const existingCount = await RaceCode.countDocuments({ eventId }).session(
         session,
       );
@@ -416,9 +430,9 @@ async function generateStickersForEvent(eventId) {
           if (processedSet.has(key)) continue;
           processedSet.add(key);
 
+          // Check if a code already exists for this pigeon and event (shouldn't happen, but safe)
           const existing = await RaceCode.findOne({
             eventId,
-            registrationId: reg._id.toString(),
             pigeonId: pigeonId.toString(),
           }).session(session);
           if (existing) continue;
@@ -846,46 +860,40 @@ app.get("/api/events/all", async (req, res) => {
   }
 });
 
+// ===== FIXED: REGISTRATIONS SUMMARY ENDPOINT =====
 app.get("/api/events/registrations-summary", async (req, res) => {
   try {
+    // Count distinct pigeons that have a RaceCode (i.e., stickers generated)
     const raceCodeSummary = await RaceCode.aggregate([
       {
         $group: {
           _id: "$eventId",
           playerCount: { $addToSet: "$userId" },
-          pigeonCount: { $sum: 1 },
+          // Count distinct pigeon IDs per event to avoid duplicates
+          pigeonIds: { $addToSet: "$pigeonId" },
         },
       },
       {
         $project: {
           eventId: "$_id",
           playerCount: { $size: "$playerCount" },
-          pigeonCount: 1,
+          pigeonCount: { $size: "$pigeonIds" },
         },
       },
     ]);
 
+    // Also get player count from EventRegistration for events without stickers yet
     const eventRegSummary = await EventRegistration.aggregate([
       {
         $group: {
           _id: "$eventId",
           playerIds: { $addToSet: "$playerId" },
-          pigeonIds: { $push: "$pigeonIds" },
         },
       },
       {
         $project: {
           eventId: "$_id",
           playerCount: { $size: "$playerIds" },
-          pigeonCount: {
-            $size: {
-              $reduce: {
-                input: "$pigeonIds",
-                initialValue: [],
-                in: { $concatArrays: ["$$value", "$$this"] },
-              },
-            },
-          },
         },
       },
     ]);
@@ -899,12 +907,22 @@ app.get("/api/events/registrations-summary", async (req, res) => {
     for (const eventId of allEventIds) {
       const race = raceCodeSummary.find((r) => r.eventId === eventId);
       const reg = eventRegSummary.find((r) => r.eventId === eventId);
-      const playerCount = Math.max(
-        race ? race.playerCount : 0,
-        reg ? reg.playerCount : 0,
-      );
-      const pigeonCount =
-        (race ? race.pigeonCount : 0) + (reg ? reg.pigeonCount : 0);
+
+      // Player count: prefer RaceCode (stickers generated) else EventRegistration
+      const playerCount = race ? race.playerCount : reg ? reg.playerCount : 0;
+      // Pigeon count: use RaceCode distinct pigeons, fallback to EventRegistration if no stickers yet
+      let pigeonCount = race ? race.pigeonCount : 0;
+      if (!race && reg) {
+        // If no stickers, count pigeons from registrations
+        // We need to get pigeonIds from EventRegistration for this event
+        const regDocs = await EventRegistration.find({ eventId });
+        const allPigeonIds = regDocs.reduce((acc, doc) => {
+          doc.pigeonIds.forEach((pid) => acc.add(pid.toString()));
+          return acc;
+        }, new Set());
+        pigeonCount = allPigeonIds.size;
+      }
+
       result.push({ eventId, playerCount, pigeonCount });
     }
 
@@ -915,9 +933,7 @@ app.get("/api/events/registrations-summary", async (req, res) => {
   }
 });
 
-// ============================================================
-//  ENHANCED CLOCK-IN
-// ============================================================
+// ===== ENHANCED CLOCK-IN =====
 app.post(
   "/api/clockin",
   clockinLimiter,
@@ -1810,7 +1826,6 @@ app.post(
       await validateRegistrationEligibility(eventId, playerId, pigeonIds);
 
       // Use atomic findOneAndUpdate with upsert to prevent duplicates
-      // FIX: Remove pigeonIds from $setOnInsert to avoid conflict with $set
       const registration = await EventRegistration.findOneAndUpdate(
         { eventId, playerId },
         {
