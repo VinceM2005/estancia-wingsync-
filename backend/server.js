@@ -1622,10 +1622,14 @@ app.delete("/api/events/:eventId/register", async (req, res) => {
 // ============================================================
 //  ADMIN REVIEW & STICKER GENERATION
 // ============================================================
-async function validateRegistrations(eventId) {
-  const registrations = await EventRegistration.find({ eventId }).populate(
-    "pigeonIds",
-  );
+async function validateRegistrations(eventId, statusFilter = null) {
+  const query = { eventId };
+  if (statusFilter && statusFilter.length) {
+    query.status = { $in: statusFilter };
+  }
+
+  const registrations =
+    await EventRegistration.find(query).populate("pigeonIds");
 
   const ringMap = new Map();
   const results = [];
@@ -1710,7 +1714,20 @@ app.get(
       if (!event) {
         return res.status(404).json({ error: "Event not found." });
       }
-      const validation = await validateRegistrations(eventId);
+      const requestedStatuses = (
+        req.query.statuses ||
+        req.query.status ||
+        "draft,confirmed,locked"
+      )
+        .split(",")
+        .map((s) => s.trim())
+        .filter(Boolean);
+
+      const validation = await validateRegistrations(
+        eventId,
+        requestedStatuses.length ? requestedStatuses : null,
+      );
+
       res.json({
         event: { name: event.name, state: event.state },
         registrations: validation,
