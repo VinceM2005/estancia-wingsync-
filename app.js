@@ -1,4 +1,4 @@
-// app.js – full file with the above modifications
+// app.js – full file with button protection
 // ===== API Configuration =====
 const API_URL = "https://estancia-wingsync-backend.onrender.com/api";
 
@@ -2159,7 +2159,7 @@ const app = {
       if (results.length === 0) {
         const tr = document.createElement("tr");
         const td = document.createElement("td");
-        td.colSpan = 8; // Updated from 6 to 8
+        td.colSpan = 8;
         td.style.textAlign = "center";
         td.style.color = "#999";
         td.style.padding = "20px";
@@ -2273,11 +2273,9 @@ const app = {
         ? `${highestSpeed.speedMPM.toFixed(2)} <span class="unit">m/min</span>`
         : '— <span class="unit">m/min</span>';
 
-      // ===== ROW BUILDING =====
       safeResults.forEach((r, i) => {
         const tr = document.createElement("tr");
 
-        // Rank
         const tdRank = document.createElement("td");
         tdRank.setAttribute("data-label", "Rank");
         let rankClass = "";
@@ -2297,43 +2295,36 @@ const app = {
         tdRank.className = rankClass;
         tr.appendChild(tdRank);
 
-        // Player
         const tdPlayer = document.createElement("td");
         tdPlayer.setAttribute("data-label", "Player");
         tdPlayer.textContent = r.userName;
         tr.appendChild(tdPlayer);
 
-        // ===== NEW: Pigeon Name =====
         const tdPigeonName = document.createElement("td");
         tdPigeonName.setAttribute("data-label", "Pigeon Name");
         tdPigeonName.textContent = r.pigeonId?.nickname || "N/A";
         tr.appendChild(tdPigeonName);
 
-        // ===== NEW: Ring Number =====
         const tdRingNumber = document.createElement("td");
         tdRingNumber.setAttribute("data-label", "Ring Number");
         tdRingNumber.textContent = r.pigeonId?.ringNumber || "N/A";
         tr.appendChild(tdRingNumber);
 
-        // Air Distance
         const tdDist = document.createElement("td");
         tdDist.setAttribute("data-label", "Air Dist");
         tdDist.textContent = r.distanceKm.toFixed(2) + " km";
         tr.appendChild(tdDist);
 
-        // Arrival
         const tdArr = document.createElement("td");
         tdArr.setAttribute("data-label", "Arr");
         tdArr.textContent = r.arrivalTime.toLocaleTimeString();
         tr.appendChild(tdArr);
 
-        // Flight Hrs
         const tdFlight = document.createElement("td");
         tdFlight.setAttribute("data-label", "Flight Hrs");
         tdFlight.textContent = formatFlightHours(r.flightTimeHours);
         tr.appendChild(tdFlight);
 
-        // Speed
         const tdSpeed = document.createElement("td");
         tdSpeed.setAttribute("data-label", "Speed m/min");
         tdSpeed.className = "speed-cell";
@@ -3626,6 +3617,15 @@ const app = {
   },
 
   openRegisterModalNew(eventCode) {
+    // Disable the button to prevent double-clicks
+    const joinBtn = document.querySelector(
+      `#entries-container .btn-success[onclick*="${eventCode}"]`,
+    );
+    if (joinBtn) {
+      joinBtn.disabled = true;
+      joinBtn.textContent = "⏳ Registering...";
+    }
+
     Promise.all([
       fetchWithAuth(`${API_URL}/events/all`).then((r) => r.json()),
       fetchWithAuth(`${API_URL}/pigeons`).then((r) => r.json()),
@@ -3670,6 +3670,12 @@ const app = {
           icon: "❌",
           iconColor: "#c0392b",
         });
+      })
+      .finally(() => {
+        if (joinBtn) {
+          joinBtn.disabled = false;
+          joinBtn.textContent = "Join Race";
+        }
       });
   },
 
@@ -3687,6 +3693,15 @@ const app = {
         iconColor: "#c0392b",
       });
       return;
+    }
+
+    // Disable the confirm button to prevent double-clicks
+    const confirmBtn = document.querySelector(
+      "#modal-register-event .btn-success",
+    );
+    if (confirmBtn) {
+      confirmBtn.disabled = true;
+      confirmBtn.textContent = "⏳ Saving...";
     }
 
     fetchWithAuth(`${API_URL}/events/${eventCode}/registrations/my`)
@@ -3728,12 +3743,27 @@ const app = {
           icon: "❌",
           iconColor: "#c0392b",
         });
+      })
+      .finally(() => {
+        if (confirmBtn) {
+          confirmBtn.disabled = false;
+          confirmBtn.textContent = "Confirm Registration";
+        }
       });
   },
 
   withdrawRegistration() {
     const eventCode = document.getElementById("edit-reg-event-code").value;
     if (!confirm("Withdraw your registration for this event?")) return;
+
+    const withdrawBtn = document.querySelector(
+      "#modal-edit-registration .btn-danger",
+    );
+    if (withdrawBtn) {
+      withdrawBtn.disabled = true;
+      withdrawBtn.textContent = "⏳ Withdrawing...";
+    }
+
     fetchWithAuth(`${API_URL}/events/${eventCode}/register`, {
       method: "DELETE",
     })
@@ -3755,6 +3785,12 @@ const app = {
             icon: "❌",
             iconColor: "#c0392b",
           });
+        }
+      })
+      .finally(() => {
+        if (withdrawBtn) {
+          withdrawBtn.disabled = false;
+          withdrawBtn.textContent = "Withdraw Entire Registration";
         }
       });
   },
@@ -3825,6 +3861,15 @@ const app = {
       });
       return;
     }
+
+    const updateBtn = document.querySelector(
+      "#modal-edit-registration .btn-success",
+    );
+    if (updateBtn) {
+      updateBtn.disabled = true;
+      updateBtn.textContent = "⏳ Updating...";
+    }
+
     fetchWithAuth(`${API_URL}/events/${eventCode}/register`, {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
@@ -3857,6 +3902,12 @@ const app = {
           icon: "❌",
           iconColor: "#c0392b",
         });
+      })
+      .finally(() => {
+        if (updateBtn) {
+          updateBtn.disabled = false;
+          updateBtn.textContent = "Update Registration";
+        }
       });
   },
 

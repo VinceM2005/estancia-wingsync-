@@ -78,9 +78,32 @@ mongoose
     console.log("✅ Connected to MongoDB Atlas");
     await seedDatabase();
     await migrateEvents();
+    await ensureIndexes();
     startStateUpdater();
   })
   .catch((err) => console.error("❌ DB Error:", err));
+
+// ============================================================
+//  ENSURE INDEXES
+// ============================================================
+async function ensureIndexes() {
+  try {
+    // Drop the old sparse unique index if it exists
+    await EventRegistration.collection
+      .dropIndex("eventId_1_playerId_1_pigeonIds_1")
+      .catch(() => {});
+    // Create the new unique index on eventId + playerId
+    await EventRegistration.collection.createIndex(
+      { eventId: 1, playerId: 1 },
+      { unique: true },
+    );
+    console.log(
+      "✅ Unique index on EventRegistration (eventId, playerId) ensured.",
+    );
+  } catch (err) {
+    console.error("❌ Error creating index:", err);
+  }
+}
 
 // ============================================================
 //  SCHEMAS & MODELS
@@ -217,10 +240,8 @@ const EventRegistrationSchema = new mongoose.Schema(
   },
   { versionKey: false },
 );
-EventRegistrationSchema.index(
-  { eventId: 1, playerId: 1, pigeonIds: 1 },
-  { unique: true, sparse: true },
-);
+// Unique index on eventId + playerId will be created in ensureIndexes()
+// but we also keep the schema-level index for query performance
 EventRegistrationSchema.index({ eventId: 1, playerId: 1 });
 
 const CertificateSchema = new mongoose.Schema({
@@ -386,9 +407,15 @@ async function generateStickersForEvent(eventId) {
       }
 
       const generatedCodes = [];
+      // Use a Set to track processed pigeon IDs per player to avoid duplicates
+      const processedSet = new Set();
       for (const reg of registrations) {
         const pigeonIds = reg.pigeonIds || [];
         for (const pigeonId of pigeonIds) {
+          const key = `${reg.playerId}_${pigeonId}`;
+          if (processedSet.has(key)) continue;
+          processedSet.add(key);
+
           const existing = await RaceCode.findOne({
             eventId,
             registrationId: reg._id.toString(),
@@ -799,7 +826,6 @@ app.use("/api", authenticateToken);
 // ----- Existing routes (with minor extensions) -----
 app.get("/api/events/active", async (req, res) => {
   try {
-    // Return events that are not in Draft or Result Verification (or any closed state)
     const events = await Event.find({
       state: { $nin: ["Draft", "Result Verification"] },
     }).sort({ releaseTime: -1 });
@@ -1475,7 +1501,6 @@ app.put("/api/events/:code/toggle", requireAdmin, async (req, res) => {
   try {
     const event = await Event.findOne({ code: req.params.code });
     if (!event) return res.status(404).json({ error: "Not found" });
-    // Toggle status (legacy) but also update state? We'll keep status but rely on state.
     event.status = event.status === "Active" ? "Closed" : "Active";
     await event.save();
     await Log.create({
@@ -1694,7 +1719,7 @@ app.delete("/api/pigeons/:id", async (req, res) => {
 });
 
 // ============================================================
-//  PLAYER SELF-REGISTRATION
+//  PLAYER SELF-REGISTRATION – FIXED
 // ============================================================
 async function validateRegistrationEligibility(
   eventId,
@@ -1723,19 +1748,9 @@ async function validateRegistrationEligibility(
       "One or more pigeons are invalid, inactive, or do not belong to you.",
     );
   }
-  const query = {
-    eventId,
-    playerId,
-    pigeonIds: { $in: pigeonIds },
-  };
-  if (excludeRegistrationId) {
-    query._id = { $ne: excludeRegistrationId };
-  }
-  const existing = await EventRegistration.findOne(query);
-  if (existing) {
-    throw new Error(
-      "One or more pigeons are already registered in this event.",
-    );
+  // Additional check: ensure no duplicate pigeon IDs in the request
+  if (new Set(pigeonIds).size !== pigeonIds.length) {
+    throw new Error("Duplicate pigeon IDs are not allowed.");
   }
   return { event, pigeons };
 }
@@ -1790,33 +1805,59 @@ app.post(
       const { eventId } = req.params;
       const { pigeonIds } = matchedData(req);
       const playerId = req.user.id;
+
+      // Validate eligibility
       await validateRegistrationEligibility(eventId, playerId, pigeonIds);
-      const existing = await EventRegistration.findOne({
-        eventId,
-        playerId,
-        status: "draft",
-      });
-      if (existing) {
-        return res.status(400).json({
-          error:
-            "You already have a draft registration. Please update it or withdraw.",
-        });
+
+      // Use atomic findOneAndUpdate with upsert to prevent duplicates
+      const registration = await EventRegistration.findOneAndUpdate(
+        { eventId, playerId },
+        {
+          $setOnInsert: {
+            eventId,
+            playerId,
+            pigeonIds,
+            status: "draft",
+            registrationDate: new Date(),
+            updatedAt: new Date(),
+          },
+          $set: {
+            pigeonIds,
+            updatedAt: new Date(),
+          },
+        },
+        {
+          upsert: true,
+          new: true,
+          runValidators: true,
+        },
+      );
+
+      // If the document already existed with a different status, check status
+      if (
+        registration.status !== "draft" &&
+        registration.status !== "confirmed"
+      ) {
+        // If it's locked or something else, we may want to prevent updates
+        if (registration.status === "locked") {
+          return res.status(400).json({
+            error: "Registration is locked and cannot be modified.",
+          });
+        }
       }
-      const registration = new EventRegistration({
-        eventId,
-        playerId,
-        pigeonIds,
-        status: "draft",
-        registrationDate: new Date(),
-        updatedAt: new Date(),
-      });
-      await registration.save();
+
       await Log.create({
         message: `Player ${playerId} registered for event ${eventId} with ${pigeonIds.length} pigeons.`,
       });
+
       res.status(201).json({ success: true, registration });
     } catch (error) {
       console.error("Error creating registration:", error);
+      if (error.code === 11000) {
+        return res.status(400).json({
+          error: "You are already registered for this event.",
+        });
+      }
       res
         .status(400)
         .json({ error: error.message || "Failed to create registration." });
@@ -1844,12 +1885,14 @@ app.put(
       const registration = await EventRegistration.findOne({
         eventId,
         playerId,
-        status: "draft",
+        status: { $in: ["draft", "confirmed"] },
       });
       if (!registration) {
         return res
           .status(404)
-          .json({ error: "No draft registration found for this event." });
+          .json({
+            error: "No draft or confirmed registration found for this event.",
+          });
       }
 
       await validateRegistrationEligibility(
@@ -2150,7 +2193,6 @@ app.post(
         return res.status(404).json({ error: "Event not found." });
       }
 
-      // Use the helper function to generate stickers
       const result = await generateStickersForEvent(eventId);
       if (result.generated === 0 && result.message) {
         return res.json({ success: true, message: result.message });
@@ -2248,7 +2290,6 @@ app.put(
         return res.status(404).json({ error: "Event not found." });
       }
 
-      // Only allow setting to "Registration Open" if currently "Draft"
       if (state === "Registration Open") {
         if (event.state !== "Draft") {
           return res.status(400).json({
@@ -2263,7 +2304,6 @@ app.put(
         return res.json({ success: true, event });
       }
 
-      // For any other state, refuse
       return res.status(400).json({
         error:
           "Manual state change is not allowed. The system will manage states automatically.",
@@ -2313,10 +2353,6 @@ app.put(
         return res.status(404).json({ error: "Event not found." });
       }
 
-      // Allowed manual transitions:
-      // - From Draft to Registration Open (open)
-      // - From Registration Open to Registration Closed (close)
-      // - From Registration Closed to Registration Open (reopen)
       let allowed = false;
       if (state === "Registration Open") {
         if (event.state === "Draft" || event.state === "Registration Closed") {
@@ -2327,7 +2363,6 @@ app.put(
           allowed = true;
         }
       }
-      // For any other state, disallow.
       if (!allowed) {
         return res.status(400).json({
           error: `Cannot set state to ${state} from current state ${event.state}. Only allowed: Draft→Registration Open, Registration Open↔Registration Closed.`,
@@ -2708,7 +2743,6 @@ app.get("/api/users/player/:id/stats", authenticateToken, async (req, res) => {
   }
 });
 
-// ===== FIXED: Pigeon stats endpoint =====
 app.get("/api/pigeons/:id/stats", async (req, res) => {
   try {
     const pigeonId = req.params.id;
@@ -2722,7 +2756,6 @@ app.get("/api/pigeons/:id/stats", async (req, res) => {
         .json({ error: "Pigeon not found or does not belong to you." });
     }
 
-    // Fetch all results for this pigeon
     const results = await Result.find({ pigeonId })
       .sort({ arrivalTime: -1 })
       .lean();
@@ -2742,7 +2775,6 @@ app.get("/api/pigeons/:id/stats", async (req, res) => {
       });
     }
 
-    // Get unique event IDs and fetch corresponding events
     const eventIds = [...new Set(results.map((r) => r.eventId))];
     const events = await Event.find({ code: { $in: eventIds } }).lean();
     const eventMap = {};
@@ -2750,7 +2782,6 @@ app.get("/api/pigeons/:id/stats", async (req, res) => {
       eventMap[e.code] = e;
     });
 
-    // Build race history with correct event names
     const raceHistory = results.map((r) => ({
       eventName: eventMap[r.eventId]
         ? eventMap[r.eventId].name
@@ -2762,7 +2793,6 @@ app.get("/api/pigeons/:id/stats", async (req, res) => {
       distance: r.distanceKm,
     }));
 
-    // Compute wins, podiums, and ranks
     let wins = 0,
       podiums = 0;
     const speeds = results.map((r) => r.speedMPM);
@@ -2788,7 +2818,6 @@ app.get("/api/pigeons/:id/stats", async (req, res) => {
       if (pos >= 1 && pos <= 3) podiums++;
     }
 
-    // Fetch certificates with correct event names
     const certs = await Certificate.find({ pigeonId }).lean();
     const certEventIds = [...new Set(certs.map((c) => c.eventId))];
     const certEvents = await Event.find({ code: { $in: certEventIds } }).lean();
