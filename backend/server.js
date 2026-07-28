@@ -134,7 +134,7 @@ const EventSchema = new mongoose.Schema({
     ],
     default: "Draft",
   },
-  registrationDeadline: { type: Date, required: true }, // now required
+  registrationDeadline: { type: Date, required: true },
   certificatesGenerated: { type: Boolean, default: false },
 });
 
@@ -339,9 +339,6 @@ async function computeTargetState(event, now) {
     ? new Date(event.registrationDeadline)
     : null;
 
-  // If no deadline, default to "Registration Open"? Actually we require deadline.
-  // But for safety, if missing, we treat as already closed? Not needed.
-
   // Determine "day after release" milestones
   const releaseDate = new Date(releaseTime);
   releaseDate.setHours(0, 0, 0, 0);
@@ -472,7 +469,6 @@ async function seedDatabase() {
           lng: 123.639876,
         },
       ]);
-      // Create a sample event with registration deadline (set to now + 1 day)
       const now = new Date();
       const release = new Date(now);
       release.setHours(release.getHours() + 2);
@@ -805,7 +801,7 @@ app.post(
         return res.status(400).json({ error: "Event not found" });
       }
 
-      // ---------- NEW: Only allow clock-in when state is "Live Race" ----------
+      // Only allow clock-in when state is "Live Race"
       if (event.state !== "Live Race") {
         await RaceCode.updateOne(
           { _id: raceCode._id },
@@ -2118,8 +2114,6 @@ app.post(
 );
 
 // ===== DEPRECATED: Manual state update – now handled automatically =====
-// We will keep the route but restrict it severely: only allow setting "Registration Open" from "Draft".
-// This is to allow the admin to open registration.
 app.put(
   "/api/admin/events/:eventId/state",
   requireAdmin,
@@ -2178,7 +2172,7 @@ app.put(
   },
 );
 
-// ===== NEW: Admin update registration settings (state + deadline) =====
+// ===== NEW: Admin update registration settings (state only) =====
 app.put(
   "/api/admin/events/:eventId/registration-settings",
   requireAdmin,
@@ -2197,10 +2191,6 @@ app.put(
         "Archived",
       ])
       .withMessage("Invalid state."),
-    body("registrationDeadline")
-      .optional()
-      .isISO8601()
-      .withMessage("Invalid date format. Use ISO 8601."),
   ],
   async (req, res) => {
     try {
@@ -2209,58 +2199,40 @@ app.put(
         return res.status(400).json({ error: errors.array()[0].msg });
       }
       const { eventId } = req.params;
-      const { state, registrationDeadline } = matchedData(req);
+      const { state } = matchedData(req);
+
+      // If state is not provided, return current event (no change)
+      if (state === undefined) {
+        const event = await Event.findOne({ code: eventId });
+        if (!event) return res.status(404).json({ error: "Event not found." });
+        return res.json({ success: true, event });
+      }
+
       const event = await Event.findOne({ code: eventId });
       if (!event) {
         return res.status(404).json({ error: "Event not found." });
       }
 
-      // ----- PREVENT changing registration deadline once set -----
-      if (registrationDeadline !== undefined) {
-        if (event.registrationDeadline) {
+      // Only allow setting to "Registration Open" if currently "Draft"
+      if (state === "Registration Open") {
+        if (event.state !== "Draft") {
           return res.status(400).json({
-            error:
-              "Registration deadline is already set and cannot be changed.",
+            error: `Cannot set state to Registration Open; current state is ${event.state}. Only Draft can be opened.`,
           });
         }
-        const newDeadline = new Date(registrationDeadline);
-        if (newDeadline >= event.releaseTime) {
-          return res.status(400).json({
-            error: "Registration deadline must be before the release time.",
-          });
-        }
-        event.registrationDeadline = newDeadline;
+        event.state = "Registration Open";
         await event.save();
         await Log.create({
-          message: `Admin set registration deadline for ${event.name} (${eventId}) to ${newDeadline.toISOString()}`,
+          message: `Admin manually opened registration for event ${event.name} (${eventId}).`,
         });
         return res.json({ success: true, event });
       }
 
-      // If only state is provided, we restrict to opening registration as in the /state endpoint.
-      if (state !== undefined) {
-        if (state === "Registration Open") {
-          if (event.state !== "Draft") {
-            return res.status(400).json({
-              error: `Cannot set state to Registration Open; current state is ${event.state}. Only Draft can be opened.`,
-            });
-          }
-          event.state = "Registration Open";
-          await event.save();
-          await Log.create({
-            message: `Admin manually opened registration for event ${event.name} (${eventId}).`,
-          });
-          return res.json({ success: true, event });
-        } else {
-          return res.status(400).json({
-            error:
-              "Manual state change is not allowed. Only opening registration (to Registration Open) is permitted.",
-          });
-        }
-      }
-
-      // If neither deadline nor state changed, just return current event
-      res.json({ success: true, event });
+      // For any other state, refuse
+      return res.status(400).json({
+        error:
+          "Manual state change is not allowed. The system will manage states automatically.",
+      });
     } catch (error) {
       console.error("Error updating registration settings:", error);
       res

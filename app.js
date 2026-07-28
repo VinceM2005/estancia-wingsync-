@@ -2913,12 +2913,9 @@ const app = {
   saveRegistrationSettings() {
     const eventCode = document.getElementById("manage-event-code").value;
     const state = document.getElementById("manage-state-select").value;
-    const deadline = document.getElementById("manage-deadline-input").value;
 
+    // Do NOT send registrationDeadline; it is set only at creation.
     const payload = { state };
-    if (deadline) {
-      payload.registrationDeadline = new Date(deadline).toISOString();
-    }
 
     fetchWithAuth(
       `${API_URL}/admin/events/${eventCode}/registration-settings`,
@@ -2937,7 +2934,7 @@ const app = {
           this.fetchAllEvents(); // refresh eventLookup
           this.showModal({
             title: "✅ Registration Settings Updated",
-            message: `Event state: ${data.event.state}\nDeadline: ${data.event.registrationDeadline ? new Date(data.event.registrationDeadline).toLocaleString() : "Not set"}`,
+            message: `Event state: ${data.event.state}`,
             icon: "✅",
             iconColor: "#27ae60",
           });
