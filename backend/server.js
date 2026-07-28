@@ -326,111 +326,138 @@ function getStateIndex(state) {
 /**
  * Generate stickers for all registrations of an event.
  * Called automatically when deadline passes, or manually by admin.
+ * Implements retry logic for transient transaction errors (WriteConflict).
  */
 async function generateStickersForEvent(eventId) {
-  const session = await mongoose.startSession();
-  session.startTransaction();
-  try {
-    const event = await Event.findOne({ code: eventId }).session(session);
-    if (!event) throw new Error("Event not found");
+  const MAX_RETRIES = 3;
+  let attempt = 0;
+  let delay = 100;
 
-    // Check if stickers already exist
-    const existingCount = await RaceCode.countDocuments({ eventId }).session(
-      session,
-    );
-    if (existingCount > 0) {
-      await session.abortTransaction();
-      session.endSession();
-      return {
-        generated: 0,
-        message:
-          "Stickers already exist for this event. Use 'Regenerate' only if state is Sticker Generated.",
-      };
-    }
+  while (attempt < MAX_RETRIES) {
+    const session = await mongoose.startSession();
+    session.startTransaction();
+    try {
+      const event = await Event.findOne({ code: eventId }).session(session);
+      if (!event) throw new Error("Event not found");
 
-    // Determine if we can generate based on state
-    const allowedStates = ["Registration Closed", "Sticker Generated"];
-    if (!allowedStates.includes(event.state)) {
-      if (event.state === "Draft") {
+      // Check if stickers already exist
+      const existingCount = await RaceCode.countDocuments({ eventId }).session(
+        session,
+      );
+      if (existingCount > 0) {
         await session.abortTransaction();
         session.endSession();
         return {
           generated: 0,
-          message: "Cannot generate stickers for Draft event.",
+          message:
+            "Stickers already exist for this event. Use 'Regenerate' only if state is Sticker Generated.",
         };
       }
-      if (event.state === "Result Verification") {
+
+      // Determine if we can generate based on state
+      const allowedStates = ["Registration Closed", "Sticker Generated"];
+      if (!allowedStates.includes(event.state)) {
+        if (event.state === "Draft") {
+          await session.abortTransaction();
+          session.endSession();
+          return {
+            generated: 0,
+            message: "Cannot generate stickers for Draft event.",
+          };
+        }
+        if (event.state === "Result Verification") {
+          await session.abortTransaction();
+          session.endSession();
+          return {
+            generated: 0,
+            message: "Cannot generate stickers after result verification.",
+          };
+        }
+        // For Ready for Release, Live Race – allow if no stickers exist
+      }
+
+      const registrations = await EventRegistration.find({ eventId }).session(
+        session,
+      );
+      if (registrations.length === 0) {
         await session.abortTransaction();
         session.endSession();
-        return {
-          generated: 0,
-          message: "Cannot generate stickers after result verification.",
-        };
+        return { generated: 0, message: "No registrations found." };
       }
-      // For Ready for Release, Live Race – allow if no stickers exist
-    }
 
-    const registrations = await EventRegistration.find({ eventId }).session(
-      session,
-    );
-    if (registrations.length === 0) {
+      const generatedCodes = [];
+      for (const reg of registrations) {
+        const pigeonIds = reg.pigeonIds || [];
+        for (const pigeonId of pigeonIds) {
+          const existing = await RaceCode.findOne({
+            eventId,
+            registrationId: reg._id.toString(),
+            pigeonId: pigeonId.toString(),
+          }).session(session);
+          if (existing) continue;
+
+          const code = await getUniqueRaceCode();
+          const raceCode = new RaceCode({
+            eventId,
+            userId: reg.playerId,
+            code,
+            status: "unused",
+            registrationId: reg._id,
+            pigeonId,
+          });
+          await raceCode.save({ session });
+          generatedCodes.push({ playerId: reg.playerId, pigeonId, code });
+        }
+      }
+
+      // Lock registrations
+      await EventRegistration.updateMany(
+        { eventId },
+        { status: "locked", updatedAt: new Date() },
+      ).session(session);
+
+      // Update event state to Sticker Generated if not already
+      if (event.state !== "Sticker Generated") {
+        event.state = "Sticker Generated";
+        await event.save({ session });
+      }
+
+      // Create log entry – use explicit save to guarantee message field
+      const log = new Log({
+        message: `Generated ${generatedCodes.length} stickers for event ${event.name || eventId} (${eventId}).`,
+      });
+      await log.save({ session });
+
+      await session.commitTransaction();
+      session.endSession();
+      return { generated: generatedCodes.length, codes: generatedCodes };
+    } catch (error) {
       await session.abortTransaction();
       session.endSession();
-      return { generated: 0, message: "No registrations found." };
-    }
-
-    const generatedCodes = [];
-    for (const reg of registrations) {
-      const pigeonIds = reg.pigeonIds || [];
-      for (const pigeonId of pigeonIds) {
-        const existing = await RaceCode.findOne({
-          eventId,
-          registrationId: reg._id.toString(),
-          pigeonId: pigeonId.toString(),
-        }).session(session);
-        if (existing) continue;
-
-        const code = await getUniqueRaceCode();
-        const raceCode = new RaceCode({
-          eventId,
-          userId: reg.playerId,
-          code,
-          status: "unused",
-          registrationId: reg._id,
-          pigeonId,
-        });
-        await raceCode.save({ session });
-        generatedCodes.push({ playerId: reg.playerId, pigeonId, code });
+      // If it's a transient transaction error (WriteConflict), retry
+      if (
+        error.code === 112 ||
+        (error.errorLabels &&
+          error.errorLabels.includes("TransientTransactionError"))
+      ) {
+        attempt++;
+        if (attempt < MAX_RETRIES) {
+          console.warn(
+            `WriteConflict in sticker generation for event ${eventId}, retrying in ${delay}ms (attempt ${attempt}/${MAX_RETRIES})`,
+          );
+          await new Promise((resolve) => setTimeout(resolve, delay));
+          delay *= 2; // exponential backoff
+          continue;
+        }
       }
+      // For other errors or if retries exhausted, throw
+      console.error("Sticker generation error:", error);
+      throw error;
     }
-
-    // Lock registrations
-    await EventRegistration.updateMany(
-      { eventId },
-      { status: "locked", updatedAt: new Date() },
-    ).session(session);
-
-    // Update event state to Sticker Generated if not already
-    if (event.state !== "Sticker Generated") {
-      event.state = "Sticker Generated";
-      await event.save({ session });
-    }
-
-    // Create log entry – use explicit save to guarantee message field
-    const log = new Log({
-      message: `Generated ${generatedCodes.length} stickers for event ${event.name || eventId} (${eventId}).`,
-    });
-    await log.save({ session });
-
-    await session.commitTransaction();
-    session.endSession();
-    return { generated: generatedCodes.length, codes: generatedCodes };
-  } catch (error) {
-    await session.abortTransaction();
-    session.endSession();
-    console.error("Sticker generation error:", error);
-    throw error;
   }
+  throw new Error(
+    `Failed to generate stickers after ${MAX_RETRIES} attempts due to write conflicts.`,
+  );
 }
 
 /**
