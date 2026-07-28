@@ -397,13 +397,47 @@ async function computeTargetState(event, now) {
   return STATE_ORDER[finalIndex];
 }
 
+// ===== CACHED TIME WITH EXTERNAL SYNC (with timeout) =====
+let cachedServerTime = null;
+let timeCacheTimestamp = 0;
+
+async function getCurrentTime() {
+  const now = Date.now();
+  if (cachedServerTime && now - timeCacheTimestamp < 60000) {
+    return new Date(cachedServerTime + (now - timeCacheTimestamp));
+  }
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 5000);
+  try {
+    const response = await fetch(
+      "https://worldtimeapi.org/api/timezone/Asia/Manila",
+      { signal: controller.signal },
+    );
+    clearTimeout(timeoutId);
+    if (response.ok) {
+      const data = await response.json();
+      cachedServerTime = new Date(data.dateTime).getTime();
+      timeCacheTimestamp = now;
+      return new Date(cachedServerTime + (now - timeCacheTimestamp));
+    }
+  } catch (e) {
+    // ignore timeout or network errors
+  }
+  // fallback to server time
+  return new Date();
+}
+
 async function updateAllEventStates() {
   try {
-    const now = new Date();
+    const now = await getCurrentTime();
+    console.log(`⏰ State updater running at ${now.toISOString()}`);
     const events = await Event.find({});
     let updatedCount = 0;
     for (const event of events) {
       const targetState = await computeTargetState(event, now);
+      console.log(
+        `📌 Event ${event.code} (${event.name}): current=${event.state}, target=${targetState}, release=${event.releaseTime.toISOString()}`,
+      );
       if (targetState !== event.state) {
         const currentIdx = getStateIndex(event.state);
         const targetIdx = getStateIndex(targetState);
@@ -2112,6 +2146,56 @@ app.post(
     }
   },
 );
+
+// ===== GET ALL RACE CODES FOR AN EVENT (with correct lookups) =====
+app.get("/api/admin/events/:eventId/codes", requireAdmin, async (req, res) => {
+  try {
+    const { eventId } = req.params;
+    const event = await Event.findOne({ code: eventId });
+    if (!event) {
+      return res.status(404).json({ error: "Event not found." });
+    }
+
+    const raceCodes = await RaceCode.aggregate([
+      { $match: { eventId } },
+      {
+        $lookup: {
+          from: "users",
+          localField: "userId",
+          foreignField: "id",
+          as: "user",
+        },
+      },
+      { $unwind: { path: "$user", preserveNullAndEmptyArrays: true } },
+      {
+        $lookup: {
+          from: "pigeons",
+          localField: "pigeonId",
+          foreignField: "_id",
+          as: "pigeon",
+        },
+      },
+      { $unwind: { path: "$pigeon", preserveNullAndEmptyArrays: true } },
+      {
+        $project: {
+          code: 1,
+          status: 1,
+          usedAt: 1,
+          generatedAt: 1,
+          playerName: { $ifNull: ["$user.name", "Unknown"] },
+          playerId: { $ifNull: ["$user.id", null] },
+          pigeonId: { $ifNull: ["$pigeon._id", null] },
+          ringNumber: { $ifNull: ["$pigeon.ringNumber", null] },
+        },
+      },
+    ]);
+
+    res.json({ success: true, codes: raceCodes, eventName: event.name });
+  } catch (error) {
+    console.error("Error fetching race codes:", error);
+    res.status(500).json({ error: "Failed to fetch codes." });
+  }
+});
 
 // ===== DEPRECATED: Manual state update – now handled automatically =====
 app.put(

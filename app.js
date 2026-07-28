@@ -931,35 +931,28 @@ const app = {
         const loadingDiv = document.getElementById("sticker-grid-container");
         if (loadingDiv) {
           loadingDiv.innerHTML = `
-            <div class="sticker-loading">
-              <div class="spinner"></div>
-              <p>Loading registrations...</p>
-            </div>
-          `;
+        <div class="sticker-loading">
+          <div class="spinner"></div>
+          <p>Loading stickers...</p>
+        </div>
+      `;
         }
 
-        // Fetch registrations with all statuses (draft, confirmed, locked)
+        // Fetch the actual race codes for this event
         const res = await fetchWithAuth(
-          `${API_URL}/admin/events/${eventCode}/registrations?statuses=draft,confirmed,locked`,
+          `${API_URL}/admin/events/${eventCode}/codes`,
         );
 
         if (!res.ok) {
           const errData = await res.json();
-          throw new Error(errData.error || "Failed to fetch registrations");
+          throw new Error(errData.error || "Failed to fetch codes");
         }
 
         const data = await res.json();
-        if (!data.registrations || !Array.isArray(data.registrations)) {
-          throw new Error("Invalid response format");
-        }
-
-        // Filter only valid registrations
-        const validRegs = data.registrations.filter((r) => r.valid);
-        if (validRegs.length === 0) {
+        if (!data.codes || data.codes.length === 0) {
           app.showModal({
-            title: "No Valid Registrations",
-            message:
-              "All registrations have validation issues. Please review them first.",
+            title: "No Stickers",
+            message: "No race codes have been generated for this event yet.",
             icon: "⚠️",
             iconColor: "#e67e22",
           });
@@ -968,22 +961,18 @@ const app = {
           return;
         }
 
-        // Build sticker data
-        const stickers = [];
-        for (const reg of validRegs) {
-          const playerName = reg.playerName || "Unknown";
-          for (const ringNumber of reg.ringNumbers) {
-            stickers.push({
-              eventName: data.event.name,
-              playerName: playerName,
-              code: Math.random().toString(36).substring(2, 10).toUpperCase(), // Placeholder
-            });
-          }
-        }
+        // Use the actual codes
+        const stickers = data.codes.map((c) => ({
+          eventName: data.eventName || "Event",
+          playerName: c.playerName || "Unknown Player",
+          code: c.code, // actual stored code
+          pigeonId: c.pigeonId,
+          ringNumber: c.ringNumber,
+        }));
 
         state.stickers = stickers;
         state.eventId = eventCode;
-        state.eventName = data.event.name;
+        state.eventName = data.eventName;
 
         await renderAllStickers(stickers, state.widthMm);
         state.isGenerating = false;
@@ -992,8 +981,7 @@ const app = {
         state.isGenerating = false;
         app.showModal({
           title: "Failed to Load Stickers",
-          message:
-            e.message || "Unable to load registrations. Please try again.",
+          message: e.message || "Unable to load codes. Please try again.",
           icon: "❌",
           iconColor: "#c0392b",
         });
@@ -1001,7 +989,6 @@ const app = {
         if (container) container.innerHTML = "";
       }
     };
-
     this.generateStickers = function () {
       const select = document.getElementById("sticker-event-select");
       const eventCode = select ? select.value : "";
