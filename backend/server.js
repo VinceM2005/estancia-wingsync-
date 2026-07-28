@@ -2010,6 +2010,176 @@ app.delete(
   },
 );
 
+// ============================================================
+//  ADMIN: REGISTER PLAYERS (MANUAL) – ADDED ENDPOINT
+// ============================================================
+app.post(
+  "/api/events/:eventId/register-players",
+  requireAdmin,
+  [
+    body("registrations")
+      .isArray({ min: 1 })
+      .withMessage("At least one registration required"),
+    body("registrations.*.userId")
+      .notEmpty()
+      .withMessage("Each registration must have a userId"),
+    body("registrations.*.pigeonCount")
+      .isInt({ min: 1, max: 10 })
+      .withMessage("Pigeon count must be between 1 and 10"),
+  ],
+  async (req, res) => {
+    const session = await mongoose.startSession();
+    session.startTransaction();
+
+    try {
+      const errors = validationResult(req);
+      if (!errors.isEmpty()) {
+        await session.abortTransaction();
+        session.endSession();
+        return res.status(400).json({ error: errors.array()[0].msg });
+      }
+
+      const { eventId } = req.params;
+      const { registrations } = matchedData(req);
+
+      const event = await Event.findOne({ code: eventId }).session(session);
+      if (!event) {
+        await session.abortTransaction();
+        session.endSession();
+        return res.status(404).json({ error: "Event not found" });
+      }
+
+      // Admin can register even if event is not "Registration Open", but we restrict to Draft/Registration Open/Registration Closed to avoid confusion.
+      // Allow any state except Completed/Archived.
+      if (["Completed", "Archived"].includes(event.state)) {
+        await session.abortTransaction();
+        session.endSession();
+        return res.status(400).json({
+          error: `Cannot register players for a ${event.state} event.`,
+        });
+      }
+
+      const results = [];
+      for (const reg of registrations) {
+        const { userId, pigeonCount } = reg;
+
+        // Check if user exists
+        const user = await User.findOne({ id: userId }).session(session);
+        if (!user) {
+          await session.abortTransaction();
+          session.endSession();
+          return res.status(400).json({ error: `User ${userId} not found` });
+        }
+
+        // Check if already registered (optional – prevent duplicates)
+        const existing = await EventRegistration.findOne({
+          eventId,
+          playerId: userId,
+        }).session(session);
+        if (existing) {
+          await session.abortTransaction();
+          session.endSession();
+          return res.status(400).json({
+            error: `Player ${user.name} already registered for this event`,
+          });
+        }
+
+        // Create EventRegistration entry
+        const registration = new EventRegistration({
+          eventId,
+          playerId: userId,
+          pigeonIds: [], // will fill later
+          status: "locked", // admin registrations are locked immediately
+          registrationDate: new Date(),
+          updatedAt: new Date(),
+        });
+        await registration.save({ session });
+
+        // Fetch the player's active pigeons (or create placeholder ones)
+        const pigeons = await Pigeon.find({
+          ownerId: userId,
+          status: "Active",
+        })
+          .limit(pigeonCount)
+          .session(session);
+
+        // If not enough pigeons, create placeholder pigeons (LEGACY_)
+        const pigeonIds = [];
+        for (let i = 0; i < pigeonCount; i++) {
+          let pigeon;
+          if (i < pigeons.length) {
+            pigeon = pigeons[i];
+          } else {
+            // Create a temporary/placeholder pigeon
+            const ring = `LEGACY_${Date.now()}_${userId}_${i}`;
+            pigeon = new Pigeon({
+              ringNumber: ring,
+              ownerId: userId,
+              nickname: `Auto ${i + 1}`,
+              gender: "Unknown",
+              color: "Unknown",
+              birthYear: null,
+              photo: "",
+              status: "Active",
+            });
+            await pigeon.save({ session });
+          }
+          pigeonIds.push(pigeon._id);
+        }
+
+        // Update registration with pigeonIds
+        registration.pigeonIds = pigeonIds;
+        await registration.save({ session });
+
+        // Generate RaceCode entries for each pigeon
+        const generatedCodes = [];
+        for (const pigeonId of pigeonIds) {
+          const code = await getUniqueRaceCode();
+          const raceCode = new RaceCode({
+            eventId,
+            userId: userId,
+            code,
+            status: "unused",
+            registrationId: registration._id,
+            pigeonId: pigeonId,
+          });
+          await raceCode.save({ session });
+          generatedCodes.push(code);
+        }
+
+        results.push({
+          userId,
+          userName: user.name,
+          codes: generatedCodes,
+          pigeonIds: pigeonIds.map((id) => id.toString()),
+        });
+      }
+
+      // Log the action
+      await Log.create(
+        [
+          {
+            message: `Admin registered ${registrations.length} player(s) for event ${event.name}`,
+          },
+        ],
+        { session },
+      );
+
+      await session.commitTransaction();
+      session.endSession();
+
+      res.json({ success: true, registrations: results });
+    } catch (error) {
+      await session.abortTransaction();
+      session.endSession();
+      console.error("Register players error:", error);
+      res.status(500).json({
+        error: "An internal error occurred. Please try again later.",
+      });
+    }
+  },
+);
+
 // ===== STICKER GENERATION (with debug logs) =====
 app.post(
   "/api/admin/events/:eventId/generate-stickers",
