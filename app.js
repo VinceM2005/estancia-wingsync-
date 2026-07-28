@@ -780,8 +780,8 @@ const app = {
         container.innerHTML = `
           <div class="sticker-empty-state">
             <i class="fas fa-tags" style="font-size:56px; display:block; margin-bottom:12px; color:#ccc;"></i>
-            <h3>No Stickers to Generate</h3>
-            <p>Register players to an event first, then click "Generate Stickers".</p>
+            <h3>No Stickers Generated</h3>
+            <p>Click the "Generate Stickers" button to create stickers for this event.</p>
           </div>
         `;
         document.getElementById("sticker-total-count").textContent =
@@ -931,11 +931,11 @@ const app = {
         const loadingDiv = document.getElementById("sticker-grid-container");
         if (loadingDiv) {
           loadingDiv.innerHTML = `
-        <div class="sticker-loading">
-          <div class="spinner"></div>
-          <p>Loading stickers...</p>
-        </div>
-      `;
+            <div class="sticker-loading">
+              <div class="spinner"></div>
+              <p>Loading stickers...</p>
+            </div>
+          `;
         }
 
         // Fetch the actual race codes for this event
@@ -950,13 +950,18 @@ const app = {
 
         const data = await res.json();
         if (!data.codes || data.codes.length === 0) {
-          app.showModal({
-            title: "No Stickers",
-            message: "No race codes have been generated for this event yet.",
-            icon: "⚠️",
-            iconColor: "#e67e22",
-          });
-          if (loadingDiv) loadingDiv.innerHTML = "";
+          // Show a friendly message in the container instead of a modal
+          if (loadingDiv) {
+            loadingDiv.innerHTML = `
+              <div class="sticker-empty-state">
+                <i class="fas fa-tags" style="font-size:56px; display:block; margin-bottom:12px; color:#ccc;"></i>
+                <h3>No Stickers Generated</h3>
+                <p>Click the "Generate Stickers" button to create stickers for this event.</p>
+              </div>
+            `;
+          }
+          document.getElementById("sticker-total-count").textContent =
+            "0 stickers";
           state.isGenerating = false;
           return;
         }
@@ -989,7 +994,9 @@ const app = {
         if (container) container.innerHTML = "";
       }
     };
-    this.generateStickers = function () {
+
+    // ===== FIXED: Generate Stickers (POST) =====
+    this.generateStickers = async function () {
       const select = document.getElementById("sticker-event-select");
       const eventCode = select ? select.value : "";
       if (!eventCode) {
@@ -1001,7 +1008,38 @@ const app = {
         });
         return;
       }
-      this.loadStickersForEvent();
+
+      try {
+        const res = await fetchWithAuth(
+          `${API_URL}/admin/events/${eventCode}/generate-stickers`,
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+          },
+        );
+        if (!res.ok) {
+          const errData = await res.json();
+          throw new Error(errData.error || "Failed to generate stickers");
+        }
+        const data = await res.json();
+        app.showModal({
+          title: "✅ Stickers Generated",
+          message: data.message || "Stickers generated successfully.",
+          icon: "✅",
+          iconColor: "#27ae60",
+        });
+        // Reload stickers to display the new codes
+        this.loadStickersForEvent();
+      } catch (e) {
+        console.error("Generate stickers error:", e);
+        app.showModal({
+          title: "Generation Failed",
+          message:
+            e.message || "Unable to generate stickers. Please try again.",
+          icon: "❌",
+          iconColor: "#c0392b",
+        });
+      }
     };
 
     this.downloadStickerPDF = async function () {
