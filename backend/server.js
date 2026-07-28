@@ -339,9 +339,6 @@ async function generateStickersForEvent(eventId) {
       session,
     );
     if (existingCount > 0) {
-      // If state is Sticker Generated, we allow regeneration? No, we return.
-      // But if state is not Sticker Generated, we might want to allow regeneration only if state is Sticker Generated.
-      // Since we already have stickers, we don't want to create duplicates.
       await session.abortTransaction();
       session.endSession();
       return {
@@ -352,11 +349,8 @@ async function generateStickersForEvent(eventId) {
     }
 
     // Determine if we can generate based on state
-    // Allowed: Registration Closed, Sticker Generated (but we already handled existing)
-    // Also allow: Ready for Release, Live Race if no stickers exist (but not Draft or Result Verification)
     const allowedStates = ["Registration Closed", "Sticker Generated"];
     if (!allowedStates.includes(event.state)) {
-      // Not in allowed states
       if (event.state === "Draft") {
         await session.abortTransaction();
         session.endSession();
@@ -373,8 +367,7 @@ async function generateStickersForEvent(eventId) {
           message: "Cannot generate stickers after result verification.",
         };
       }
-      // For states like Ready for Release, Live Race, we allow if no stickers exist
-      // (already checked above)
+      // For Ready for Release, Live Race – allow if no stickers exist
     }
 
     const registrations = await EventRegistration.find({ eventId }).session(
@@ -390,7 +383,6 @@ async function generateStickersForEvent(eventId) {
     for (const reg of registrations) {
       const pigeonIds = reg.pigeonIds || [];
       for (const pigeonId of pigeonIds) {
-        // Double-check that this pigeon doesn't already have a code (shouldn't happen)
         const existing = await RaceCode.findOne({
           eventId,
           registrationId: reg._id.toString(),
@@ -424,12 +416,11 @@ async function generateStickersForEvent(eventId) {
       await event.save({ session });
     }
 
-    await Log.create(
-      {
-        message: `Generated ${generatedCodes.length} stickers for event ${event.name} (${eventId}).`,
-      },
-      { session },
-    );
+    // Create log entry – use explicit save to guarantee message field
+    const log = new Log({
+      message: `Generated ${generatedCodes.length} stickers for event ${event.name || eventId} (${eventId}).`,
+    });
+    await log.save({ session });
 
     await session.commitTransaction();
     session.endSession();
@@ -545,10 +536,8 @@ async function updateAllEventStates() {
             try {
               await generateStickersForEvent(event.code);
               // State will be set to Sticker Generated inside generateStickersForEvent
-              // But we need to re-fetch to see updated state
             } catch (genErr) {
               console.error("Failed to auto-generate stickers:", genErr);
-              // keep state as Registration Closed, but we may want to retry later
             }
             updatedCount++;
           } else {
@@ -2135,11 +2124,8 @@ app.post(
       }
 
       // Use the helper function to generate stickers
-      // The helper will check state and existing stickers, and return appropriate message.
       const result = await generateStickersForEvent(eventId);
       if (result.generated === 0 && result.message) {
-        // If no stickers were generated but it's not an error (e.g., no registrations)
-        // we still return success with the message.
         return res.json({ success: true, message: result.message });
       }
 
@@ -2304,7 +2290,7 @@ app.put(
       // - From Draft to Registration Open (open)
       // - From Registration Open to Registration Closed (close)
       // - From Registration Closed to Registration Open (reopen)
-      let allowed = false; // ✅ FIX: changed from 'const' to 'let'
+      let allowed = false;
       if (state === "Registration Open") {
         if (event.state === "Draft" || event.state === "Registration Closed") {
           allowed = true;
