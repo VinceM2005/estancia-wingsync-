@@ -78,6 +78,7 @@ mongoose
     console.log("✅ Connected to MongoDB Atlas");
     await seedDatabase();
     await migrateEvents();
+    startStateUpdater();
   })
   .catch((err) => console.error("❌ DB Error:", err));
 
@@ -133,7 +134,7 @@ const EventSchema = new mongoose.Schema({
     ],
     default: "Draft",
   },
-  registrationDeadline: { type: Date },
+  registrationDeadline: { type: Date, required: true }, // now required
   certificatesGenerated: { type: Boolean, default: false },
 });
 
@@ -309,6 +310,131 @@ async function getUniqueRaceCode() {
 }
 
 // ============================================================
+//  STATE MACHINE – AUTOMATIC TRANSITIONS
+// ============================================================
+
+const STATE_ORDER = [
+  "Draft",
+  "Registration Open",
+  "Registration Closed",
+  "Sticker Generated",
+  "Ready for Release",
+  "Live Race",
+  "Result Verification",
+  "Completed",
+  "Archived",
+];
+
+function getStateIndex(state) {
+  return STATE_ORDER.indexOf(state);
+}
+
+/**
+ * Compute the intended state based on current time and event fields.
+ * This function is called periodically (every minute) to update states automatically.
+ */
+async function computeTargetState(event, now) {
+  const releaseTime = new Date(event.releaseTime);
+  const deadline = event.registrationDeadline
+    ? new Date(event.registrationDeadline)
+    : null;
+
+  // If no deadline, default to "Registration Open"? Actually we require deadline.
+  // But for safety, if missing, we treat as already closed? Not needed.
+
+  // Determine "day after release" milestones
+  const releaseDate = new Date(releaseTime);
+  releaseDate.setHours(0, 0, 0, 0);
+  const dayAfterMidnight = new Date(releaseDate);
+  dayAfterMidnight.setDate(dayAfterMidnight.getDate() + 1);
+  const dayAfter1030 = new Date(dayAfterMidnight);
+  dayAfter1030.setHours(10, 30, 0, 0);
+
+  let targetIndex = 0; // Draft
+
+  // Check if stickers have been generated (at least one RaceCode exists)
+  const hasStickers =
+    (await RaceCode.countDocuments({ eventId: event.code })) > 0;
+
+  // ---- Time-based thresholds ----
+  if (deadline && now > deadline) {
+    targetIndex = Math.max(targetIndex, getStateIndex("Registration Closed"));
+  }
+
+  // Ready for Release: 1 minute before release
+  const oneMinBefore = new Date(releaseTime.getTime() - 60 * 1000);
+  if (now >= oneMinBefore) {
+    targetIndex = Math.max(targetIndex, getStateIndex("Ready for Release"));
+  }
+
+  // Live Race: at release time
+  if (now >= releaseTime) {
+    targetIndex = Math.max(targetIndex, getStateIndex("Live Race"));
+  }
+
+  // Result Verification: 6 hours after release
+  const sixHoursAfter = new Date(releaseTime.getTime() + 6 * 60 * 60 * 1000);
+  if (now >= sixHoursAfter) {
+    targetIndex = Math.max(targetIndex, getStateIndex("Result Verification"));
+  }
+
+  // Completed: midnight of the day after release
+  if (now >= dayAfterMidnight) {
+    targetIndex = Math.max(targetIndex, getStateIndex("Completed"));
+  }
+
+  // Archived: 10:30 AM of the day after release
+  if (now >= dayAfter1030) {
+    targetIndex = Math.max(targetIndex, getStateIndex("Archived"));
+  }
+
+  // If stickers are not generated yet, we cannot go beyond "Sticker Generated"
+  if (!hasStickers && targetIndex > getStateIndex("Sticker Generated")) {
+    targetIndex = Math.min(targetIndex, getStateIndex("Sticker Generated"));
+  }
+
+  // We must never go backwards – take max of current state index and target
+  const currentIndex = getStateIndex(event.state);
+  const finalIndex = Math.max(currentIndex, targetIndex);
+
+  return STATE_ORDER[finalIndex];
+}
+
+async function updateAllEventStates() {
+  try {
+    const now = new Date();
+    const events = await Event.find({});
+    let updatedCount = 0;
+    for (const event of events) {
+      const targetState = await computeTargetState(event, now);
+      if (targetState !== event.state) {
+        const currentIdx = getStateIndex(event.state);
+        const targetIdx = getStateIndex(targetState);
+        if (targetIdx > currentIdx) {
+          event.state = targetState;
+          await event.save();
+          updatedCount++;
+          await Log.create({
+            message: `Event ${event.name} (${event.code}) automatically transitioned from ${event.state} to ${targetState}`,
+          });
+        }
+      }
+    }
+    if (updatedCount > 0) {
+      console.log(`🔄 Auto‑state updater: ${updatedCount} event(s) changed.`);
+    }
+  } catch (err) {
+    console.error("❌ Error in automatic state updater:", err);
+  }
+}
+
+function startStateUpdater() {
+  updateAllEventStates(); // run immediately
+  setInterval(updateAllEventStates, 60 * 1000); // then every minute
+  console.log("⏰ Automatic state updater started (every minute).");
+}
+
+// ============================================================
 //  SEED & MIGRATION
 // ============================================================
 async function seedDatabase() {
@@ -346,15 +472,21 @@ async function seedDatabase() {
           lng: 123.639876,
         },
       ]);
+      // Create a sample event with registration deadline (set to now + 1 day)
+      const now = new Date();
+      const release = new Date(now);
+      release.setHours(release.getHours() + 2);
+      const deadline = new Date(now);
+      deadline.setHours(deadline.getHours() + 1);
       await Event.create({
         code: "EST2026",
         name: "Estancia Opening Race",
-        releaseTime: new Date(Date.now() - 6 * 60 * 60 * 1000),
+        releaseTime: release,
         status: "Active",
         lat: 12.9744,
         lng: 124.0058,
-        state: "Live Race",
-        registrationDeadline: new Date(Date.now() - 7 * 60 * 60 * 1000),
+        state: "Draft",
+        registrationDeadline: deadline,
       });
       console.log("✅ Sample data seeded with hashed passwords!");
     }
@@ -673,30 +805,18 @@ app.post(
         return res.status(400).json({ error: "Event not found" });
       }
 
-      if (event.state) {
-        if (!["Live Race", "Ready for Release"].includes(event.state)) {
-          await RaceCode.updateOne(
-            { _id: raceCode._id },
-            { status: "unused", usedAt: null },
-            { session },
-          );
-          await session.abortTransaction();
-          session.endSession();
-          return res
-            .status(400)
-            .json({ error: "Event is not in a clockable state." });
-        }
-      } else {
-        if (event.status !== "Active") {
-          await RaceCode.updateOne(
-            { _id: raceCode._id },
-            { status: "unused", usedAt: null },
-            { session },
-          );
-          await session.abortTransaction();
-          session.endSession();
-          return res.status(400).json({ error: "Event is not active." });
-        }
+      // ---------- NEW: Only allow clock-in when state is "Live Race" ----------
+      if (event.state !== "Live Race") {
+        await RaceCode.updateOne(
+          { _id: raceCode._id },
+          { status: "unused", usedAt: null },
+          { session },
+        );
+        await session.abortTransaction();
+        session.endSession();
+        return res.status(400).json({
+          error: `Clock‑in is only allowed during Live Race (current state: ${event.state}).`,
+        });
       }
 
       if (raceCode.registrationId) {
@@ -1139,6 +1259,9 @@ app.post(
     body("releaseTime").isISO8601().withMessage("Valid release time required"),
     body("lat").isFloat({ min: -90, max: 90 }),
     body("lng").isFloat({ min: -180, max: 180 }),
+    body("registrationDeadline")
+      .isISO8601()
+      .withMessage("Valid registration deadline required"),
   ],
   async (req, res) => {
     try {
@@ -1146,7 +1269,17 @@ app.post(
       if (!errors.isEmpty()) {
         return res.status(400).json({ error: errors.array()[0].msg });
       }
-      let { name, releaseTime, lat, lng } = matchedData(req);
+      let { name, releaseTime, lat, lng, registrationDeadline } =
+        matchedData(req);
+
+      const release = new Date(releaseTime);
+      const deadline = new Date(registrationDeadline);
+      if (deadline >= release) {
+        return res.status(400).json({
+          error: "Registration deadline must be before the release time.",
+        });
+      }
+
       let dummyCode = "EVT" + Date.now().toString(36).toUpperCase();
       let existing = await Event.findOne({ code: dummyCode });
       while (existing) {
@@ -1156,15 +1289,16 @@ app.post(
           Math.random().toString(36).substring(2, 5).toUpperCase();
         existing = await Event.findOne({ code: dummyCode });
       }
+
       const event = await Event.create({
         code: dummyCode,
         name: name.trim(),
-        releaseTime: new Date(releaseTime),
+        releaseTime: release,
         status: "Active",
         lat: parseFloat(lat.toFixed(6)),
         lng: parseFloat(lng.toFixed(6)),
         state: "Draft",
-        registrationDeadline: new Date(releaseTime),
+        registrationDeadline: deadline,
       });
       await Log.create({
         message: `Admin created event ${event.name} (${event.code})`,
@@ -1865,13 +1999,14 @@ app.post(
         return res.status(404).json({ error: "Event not found." });
       }
 
+      // Allowed states: "Registration Closed" or "Sticker Generated" (to regenerate)
       const allowedStates = ["Registration Closed", "Sticker Generated"];
       if (!allowedStates.includes(event.state)) {
         await session.abortTransaction();
         session.endSession();
         console.warn("❌ [STICKERS] Invalid state:", event.state);
         return res.status(400).json({
-          error: `Event must be in Registration Closed state (current: ${event.state}).`,
+          error: `Event must be in Registration Closed or Sticker Generated state (current: ${event.state}).`,
         });
       }
 
@@ -1948,6 +2083,7 @@ app.post(
         { status: "locked", updatedAt: new Date() },
       ).session(session);
 
+      // Set state to "Sticker Generated" – this will later be overwritten automatically if time has passed.
       event.state = "Sticker Generated";
       await event.save({ session });
 
@@ -1981,6 +2117,9 @@ app.post(
   },
 );
 
+// ===== DEPRECATED: Manual state update – now handled automatically =====
+// We will keep the route but restrict it severely: only allow setting "Registration Open" from "Draft".
+// This is to allow the admin to open registration.
 app.put(
   "/api/admin/events/:eventId/state",
   requireAdmin,
@@ -2011,12 +2150,27 @@ app.put(
       if (!event) {
         return res.status(404).json({ error: "Event not found." });
       }
-      event.state = state;
-      await event.save();
-      await Log.create({
-        message: `Admin changed event ${eventId} state to ${state}.`,
+
+      // Only allow setting to "Registration Open" if currently "Draft"
+      if (state === "Registration Open") {
+        if (event.state !== "Draft") {
+          return res.status(400).json({
+            error: `Cannot set state to Registration Open; current state is ${event.state}. Only Draft can be opened.`,
+          });
+        }
+        event.state = "Registration Open";
+        await event.save();
+        await Log.create({
+          message: `Admin manually opened registration for event ${event.name} (${eventId}).`,
+        });
+        return res.json({ success: true, event });
+      }
+
+      // For any other state, refuse
+      return res.status(400).json({
+        error:
+          "Manual state change is not allowed. The system will manage states automatically.",
       });
-      res.json({ success: true, event });
     } catch (error) {
       console.error("Error updating event state:", error);
       res.status(500).json({ error: "Failed to update event state." });
@@ -2060,14 +2214,52 @@ app.put(
       if (!event) {
         return res.status(404).json({ error: "Event not found." });
       }
-      if (state !== undefined) event.state = state;
+
+      // ----- PREVENT changing registration deadline once set -----
       if (registrationDeadline !== undefined) {
-        event.registrationDeadline = new Date(registrationDeadline);
+        if (event.registrationDeadline) {
+          return res.status(400).json({
+            error:
+              "Registration deadline is already set and cannot be changed.",
+          });
+        }
+        const newDeadline = new Date(registrationDeadline);
+        if (newDeadline >= event.releaseTime) {
+          return res.status(400).json({
+            error: "Registration deadline must be before the release time.",
+          });
+        }
+        event.registrationDeadline = newDeadline;
+        await event.save();
+        await Log.create({
+          message: `Admin set registration deadline for ${event.name} (${eventId}) to ${newDeadline.toISOString()}`,
+        });
+        return res.json({ success: true, event });
       }
-      await event.save();
-      await Log.create({
-        message: `Admin updated registration settings for event ${event.name} (${eventId})`,
-      });
+
+      // If only state is provided, we restrict to opening registration as in the /state endpoint.
+      if (state !== undefined) {
+        if (state === "Registration Open") {
+          if (event.state !== "Draft") {
+            return res.status(400).json({
+              error: `Cannot set state to Registration Open; current state is ${event.state}. Only Draft can be opened.`,
+            });
+          }
+          event.state = "Registration Open";
+          await event.save();
+          await Log.create({
+            message: `Admin manually opened registration for event ${event.name} (${eventId}).`,
+          });
+          return res.json({ success: true, event });
+        } else {
+          return res.status(400).json({
+            error:
+              "Manual state change is not allowed. Only opening registration (to Registration Open) is permitted.",
+          });
+        }
+      }
+
+      // If neither deadline nor state changed, just return current event
       res.json({ success: true, event });
     } catch (error) {
       console.error("Error updating registration settings:", error);
