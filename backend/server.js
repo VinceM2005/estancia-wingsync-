@@ -2708,6 +2708,7 @@ app.get("/api/users/player/:id/stats", authenticateToken, async (req, res) => {
   }
 });
 
+// ===== FIXED: Pigeon stats endpoint =====
 app.get("/api/pigeons/:id/stats", async (req, res) => {
   try {
     const pigeonId = req.params.id;
@@ -2720,10 +2721,12 @@ app.get("/api/pigeons/:id/stats", async (req, res) => {
         .status(404)
         .json({ error: "Pigeon not found or does not belong to you." });
     }
+
+    // Fetch all results for this pigeon
     const results = await Result.find({ pigeonId })
       .sort({ arrivalTime: -1 })
-      .populate("eventId", "name releaseTime")
       .lean();
+
     if (results.length === 0) {
       return res.json({
         pigeonId: pigeon._id,
@@ -2738,34 +2741,34 @@ app.get("/api/pigeons/:id/stats", async (req, res) => {
         certificates: [],
       });
     }
+
+    // Get unique event IDs and fetch corresponding events
     const eventIds = [...new Set(results.map((r) => r.eventId))];
-    let wins = 0,
-      podiums = 0;
-    const speeds = results.map((r) => r.speedMPM);
-    const bestSpeed = Math.max(...speeds);
-    const averageSpeed = speeds.reduce((a, b) => a + b, 0) / speeds.length;
-    for (const eventId of eventIds) {
-      const eventResults = await Result.find({
-        eventId,
-        pigeonId: { $ne: null },
-      })
-        .sort({ speedMPM: -1 })
-        .lean();
-      const position =
-        eventResults.findIndex(
-          (r) => r.pigeonId.toString() === pigeonId.toString(),
-        ) + 1;
-      if (position === 1) wins++;
-      if (position >= 1 && position <= 3) podiums++;
-    }
+    const events = await Event.find({ code: { $in: eventIds } }).lean();
+    const eventMap = {};
+    events.forEach((e) => {
+      eventMap[e.code] = e;
+    });
+
+    // Build race history with correct event names
     const raceHistory = results.map((r) => ({
-      eventName: r.eventId ? r.eventId.name : "Unknown Event",
-      eventCode: r.eventId ? r.eventId.code : "N/A",
+      eventName: eventMap[r.eventId]
+        ? eventMap[r.eventId].name
+        : "Unknown Event",
+      eventCode: r.eventId,
       date: r.arrivalTime,
       rank: null,
       speed: r.speedMPM,
       distance: r.distanceKm,
     }));
+
+    // Compute wins, podiums, and ranks
+    let wins = 0,
+      podiums = 0;
+    const speeds = results.map((r) => r.speedMPM);
+    const bestSpeed = Math.max(...speeds);
+    const averageSpeed = speeds.reduce((a, b) => a + b, 0) / speeds.length;
+
     for (let i = 0; i < raceHistory.length; i++) {
       const eventResults = await Result.find({
         eventId: results[i].eventId,
@@ -2773,15 +2776,36 @@ app.get("/api/pigeons/:id/stats", async (req, res) => {
       })
         .sort({ speedMPM: -1 })
         .lean();
+
       const pos =
         eventResults.findIndex(
           (r) => r.pigeonId.toString() === pigeonId.toString(),
         ) + 1;
+
       raceHistory[i].rank = pos;
+
+      if (pos === 1) wins++;
+      if (pos >= 1 && pos <= 3) podiums++;
     }
-    const certificates = await Certificate.find({ pigeonId })
-      .populate("eventId", "name")
-      .sort({ issueDate: -1 });
+
+    // Fetch certificates with correct event names
+    const certs = await Certificate.find({ pigeonId }).lean();
+    const certEventIds = [...new Set(certs.map((c) => c.eventId))];
+    const certEvents = await Event.find({ code: { $in: certEventIds } }).lean();
+    const certEventMap = {};
+    certEvents.forEach((e) => {
+      certEventMap[e.code] = e;
+    });
+
+    const certificates = certs.map((c) => ({
+      certificateNumber: c.certificateNumber,
+      eventName: certEventMap[c.eventId]
+        ? certEventMap[c.eventId].name
+        : "Unknown",
+      rank: c.rank,
+      issueDate: c.issueDate,
+    }));
+
     res.json({
       pigeonId: pigeon._id,
       ringNumber: pigeon.ringNumber,
@@ -2796,12 +2820,7 @@ app.get("/api/pigeons/:id/stats", async (req, res) => {
       bestSpeed: parseFloat(bestSpeed.toFixed(4)),
       averageSpeed: parseFloat(averageSpeed.toFixed(4)),
       raceHistory: raceHistory.slice(0, 20),
-      certificates: certificates.map((c) => ({
-        certificateNumber: c.certificateNumber,
-        eventName: c.eventId ? c.eventId.name : "Unknown",
-        rank: c.rank,
-        issueDate: c.issueDate,
-      })),
+      certificates: certificates,
     });
   } catch (error) {
     console.error("Pigeon stats error:", error);
