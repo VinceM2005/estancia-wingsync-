@@ -2893,19 +2893,10 @@ const app = {
       });
       return;
     }
-    // Populate modal with current state and deadline
+    // Populate modal with current state (deadline is not editable)
     document.getElementById("manage-event-code").value = eventCode;
     document.getElementById("manage-state-select").value =
       event.state || "Draft";
-    const deadline = event.registrationDeadline
-      ? new Date(event.registrationDeadline)
-      : null;
-    const deadlineInput = document.getElementById("manage-deadline-input");
-    if (deadline) {
-      deadlineInput.value = deadline.toISOString().slice(0, 16);
-    } else {
-      deadlineInput.value = "";
-    }
     // Show modal
     document.getElementById("modal-manage-registration").classList.add("show");
   },
