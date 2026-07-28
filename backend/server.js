@@ -325,7 +325,7 @@ function getStateIndex(state) {
 
 /**
  * Generate stickers for all registrations of an event.
- * Called automatically when deadline passes.
+ * Called automatically when deadline passes, or manually by admin.
  */
 async function generateStickersForEvent(eventId) {
   const session = await mongoose.startSession();
@@ -334,18 +334,47 @@ async function generateStickersForEvent(eventId) {
     const event = await Event.findOne({ code: eventId }).session(session);
     if (!event) throw new Error("Event not found");
 
-    // Only generate if state is Registration Closed or Sticker Generated (regen allowed)
-    if (
-      !["Registration Closed", "Sticker Generated"].includes(event.state) &&
-      event.state !== "Registration Closed"
-    ) {
-      // If not in these states, skip.
+    // Check if stickers already exist
+    const existingCount = await RaceCode.countDocuments({ eventId }).session(
+      session,
+    );
+    if (existingCount > 0) {
+      // If state is Sticker Generated, we allow regeneration? No, we return.
+      // But if state is not Sticker Generated, we might want to allow regeneration only if state is Sticker Generated.
+      // Since we already have stickers, we don't want to create duplicates.
       await session.abortTransaction();
       session.endSession();
       return {
         generated: 0,
-        message: "Not in a state that requires generation.",
+        message:
+          "Stickers already exist for this event. Use 'Regenerate' only if state is Sticker Generated.",
       };
+    }
+
+    // Determine if we can generate based on state
+    // Allowed: Registration Closed, Sticker Generated (but we already handled existing)
+    // Also allow: Ready for Release, Live Race if no stickers exist (but not Draft or Result Verification)
+    const allowedStates = ["Registration Closed", "Sticker Generated"];
+    if (!allowedStates.includes(event.state)) {
+      // Not in allowed states
+      if (event.state === "Draft") {
+        await session.abortTransaction();
+        session.endSession();
+        return {
+          generated: 0,
+          message: "Cannot generate stickers for Draft event.",
+        };
+      }
+      if (event.state === "Result Verification") {
+        await session.abortTransaction();
+        session.endSession();
+        return {
+          generated: 0,
+          message: "Cannot generate stickers after result verification.",
+        };
+      }
+      // For states like Ready for Release, Live Race, we allow if no stickers exist
+      // (already checked above)
     }
 
     const registrations = await EventRegistration.find({ eventId }).session(
@@ -361,6 +390,7 @@ async function generateStickersForEvent(eventId) {
     for (const reg of registrations) {
       const pigeonIds = reg.pigeonIds || [];
       for (const pigeonId of pigeonIds) {
+        // Double-check that this pigeon doesn't already have a code (shouldn't happen)
         const existing = await RaceCode.findOne({
           eventId,
           registrationId: reg._id.toString(),
@@ -396,7 +426,7 @@ async function generateStickersForEvent(eventId) {
 
     await Log.create(
       {
-        message: `Auto-generated ${generatedCodes.length} stickers for event ${event.name} (${eventId}).`,
+        message: `Generated ${generatedCodes.length} stickers for event ${event.name} (${eventId}).`,
       },
       { session },
     );
@@ -407,7 +437,7 @@ async function generateStickersForEvent(eventId) {
   } catch (error) {
     await session.abortTransaction();
     session.endSession();
-    console.error("Auto sticker generation error:", error);
+    console.error("Sticker generation error:", error);
     throw error;
   }
 }
@@ -2104,16 +2134,12 @@ app.post(
         return res.status(404).json({ error: "Event not found." });
       }
 
-      // Allowed states: Registration Closed or Sticker Generated (to regenerate)
-      if (!["Registration Closed", "Sticker Generated"].includes(event.state)) {
-        return res.status(400).json({
-          error: `Event must be in Registration Closed or Sticker Generated state (current: ${event.state}).`,
-        });
-      }
-
       // Use the helper function to generate stickers
+      // The helper will check state and existing stickers, and return appropriate message.
       const result = await generateStickersForEvent(eventId);
       if (result.generated === 0 && result.message) {
+        // If no stickers were generated but it's not an error (e.g., no registrations)
+        // we still return success with the message.
         return res.json({ success: true, message: result.message });
       }
 
