@@ -1,4 +1,4 @@
-// app.js
+// app.js – full file with the above modifications
 // ===== API Configuration =====
 const API_URL = "https://estancia-wingsync-backend.onrender.com/api";
 
@@ -658,12 +658,11 @@ const app = {
       ctx.fillStyle = "#ffffff";
       ctx.fillRect(0, 0, widthPx, heightPx);
 
-      const topHeightPx = Math.round((6 / 10) * heightPx); // 6mm top
+      const topHeightPx = Math.round((6 / 10) * heightPx);
       const bottomHeightPx = heightPx - topHeightPx;
       const marginPx = Math.round((1 / 25.4) * dpi);
       const scratchWidthPx = Math.round((22 / 25.4) * dpi);
 
-      // ---------- QR CODE ----------
       const qrSizeMm = 5.5;
       const qrSizePx = Math.round((qrSizeMm / 25.4) * dpi);
       const qrX = marginPx;
@@ -686,7 +685,6 @@ const app = {
         ctx.drawImage(qrCanvas, qrX, qrY, qrSizePx, qrSizePx);
       }
 
-      // ---------- 8‑DIGIT CODE (enlarged, no barcode) ----------
       const codeText = code;
       const gapPx = Math.round((2 / 25.4) * dpi);
       const textStartX = qrX + qrSizePx + gapPx;
@@ -716,7 +714,6 @@ const app = {
         ctx.fillText(codeText, startX, topHeightPx / 2);
       }
 
-      // ---------- BOTTOM SECTION (Event + Player names) ----------
       const bottomY = topHeightPx;
       const fontSizeBottom = Math.min(
         Math.round((2.2 / 25.4) * dpi),
@@ -753,12 +750,10 @@ const app = {
       ctx.fillStyle = "#000000";
       ctx.fillText(playerLabel, rightX, centerY);
 
-      // Outer border
       ctx.strokeStyle = "#000000";
       ctx.lineWidth = 1.0;
       ctx.strokeRect(0, 0, widthPx, heightPx);
 
-      // Optional dotted scratch‑off area border
       ctx.strokeStyle = "#e0e0e0";
       ctx.lineWidth = 0.5;
       ctx.setLineDash([2, 3]);
@@ -911,7 +906,6 @@ const app = {
       return doc;
     };
 
-    // --- Expose sticker functions on app ---
     this._stickerState = state;
 
     this.loadStickersForEvent = async function () {
@@ -939,7 +933,6 @@ const app = {
           `;
         }
 
-        // Fetch the actual race codes for this event
         const res = await fetchWithAuth(
           `${API_URL}/admin/events/${eventCode}/codes`,
         );
@@ -951,7 +944,6 @@ const app = {
 
         const data = await res.json();
         if (!data.codes || data.codes.length === 0) {
-          // Show a friendly message in the container instead of a modal
           if (loadingDiv) {
             loadingDiv.innerHTML = `
               <div class="sticker-empty-state">
@@ -967,11 +959,10 @@ const app = {
           return;
         }
 
-        // Use the actual codes
         const stickers = data.codes.map((c) => ({
           eventName: data.eventName || "Event",
           playerName: c.playerName || "Unknown Player",
-          code: c.code, // actual stored code
+          code: c.code,
           pigeonId: c.pigeonId,
           ringNumber: c.ringNumber,
         }));
@@ -996,7 +987,6 @@ const app = {
       }
     };
 
-    // ===== FIXED: Generate Stickers (POST) =====
     this.generateStickers = async function () {
       const select = document.getElementById("sticker-event-select");
       const eventCode = select ? select.value : "";
@@ -1029,7 +1019,6 @@ const app = {
           icon: "✅",
           iconColor: "#27ae60",
         });
-        // Reload stickers to display the new codes
         this.loadStickersForEvent();
       } catch (e) {
         console.error("Generate stickers error:", e);
@@ -1575,7 +1564,6 @@ const app = {
           this.eventLookup[e.code] = e;
         });
         this._lastEventsFetch = Date.now();
-        // Also populate selectors
         this.populateReviewSelector();
         this.populateStickerSelector(events);
       })
@@ -1664,7 +1652,6 @@ const app = {
     }
     if (view === "entries") {
       this.loadOpenEvents();
-      // Also load my registrations (optional)
     }
     if (view === "certificates") {
       this.loadCertificates();
@@ -1793,7 +1780,6 @@ const app = {
         table.appendChild(thead);
 
         const tbody = document.createElement("tbody");
-        // Combine active and open events (unique by code)
         const allDisplayEvents = [...activeEvents, ...openEvents];
         const unique = new Map();
         allDisplayEvents.forEach((e) => unique.set(e.code, e));
@@ -1825,14 +1811,12 @@ const app = {
           const tdAction = document.createElement("td");
           tdAction.setAttribute("data-label", "Action");
           if (!isAdmin) {
-            // Player view: show "View" button
             const viewBtn = document.createElement("button");
             viewBtn.className = "btn btn-sm btn-primary";
             viewBtn.textContent = "View";
             viewBtn.onclick = () => this.openEventDetailsModal(e.code);
             tdAction.appendChild(viewBtn);
           } else {
-            // Admin: show "Review" button
             const reviewBtn = document.createElement("button");
             reviewBtn.className = "btn btn-sm btn-primary";
             reviewBtn.textContent = "Review";
@@ -2175,7 +2159,7 @@ const app = {
       if (results.length === 0) {
         const tr = document.createElement("tr");
         const td = document.createElement("td");
-        td.colSpan = 6;
+        td.colSpan = 8; // Updated from 6 to 8
         td.style.textAlign = "center";
         td.style.color = "#999";
         td.style.padding = "20px";
@@ -2289,8 +2273,11 @@ const app = {
         ? `${highestSpeed.speedMPM.toFixed(2)} <span class="unit">m/min</span>`
         : '— <span class="unit">m/min</span>';
 
+      // ===== ROW BUILDING =====
       safeResults.forEach((r, i) => {
         const tr = document.createElement("tr");
+
+        // Rank
         const tdRank = document.createElement("td");
         tdRank.setAttribute("data-label", "Rank");
         let rankClass = "";
@@ -2310,26 +2297,43 @@ const app = {
         tdRank.className = rankClass;
         tr.appendChild(tdRank);
 
+        // Player
         const tdPlayer = document.createElement("td");
         tdPlayer.setAttribute("data-label", "Player");
         tdPlayer.textContent = r.userName;
         tr.appendChild(tdPlayer);
 
+        // ===== NEW: Pigeon Name =====
+        const tdPigeonName = document.createElement("td");
+        tdPigeonName.setAttribute("data-label", "Pigeon Name");
+        tdPigeonName.textContent = r.pigeonId?.nickname || "N/A";
+        tr.appendChild(tdPigeonName);
+
+        // ===== NEW: Ring Number =====
+        const tdRingNumber = document.createElement("td");
+        tdRingNumber.setAttribute("data-label", "Ring Number");
+        tdRingNumber.textContent = r.pigeonId?.ringNumber || "N/A";
+        tr.appendChild(tdRingNumber);
+
+        // Air Distance
         const tdDist = document.createElement("td");
         tdDist.setAttribute("data-label", "Air Dist");
         tdDist.textContent = r.distanceKm.toFixed(2) + " km";
         tr.appendChild(tdDist);
 
+        // Arrival
         const tdArr = document.createElement("td");
         tdArr.setAttribute("data-label", "Arr");
         tdArr.textContent = r.arrivalTime.toLocaleTimeString();
         tr.appendChild(tdArr);
 
+        // Flight Hrs
         const tdFlight = document.createElement("td");
         tdFlight.setAttribute("data-label", "Flight Hrs");
         tdFlight.textContent = formatFlightHours(r.flightTimeHours);
         tr.appendChild(tdFlight);
 
+        // Speed
         const tdSpeed = document.createElement("td");
         tdSpeed.setAttribute("data-label", "Speed m/min");
         tdSpeed.className = "speed-cell";
@@ -2350,7 +2354,7 @@ const app = {
       const tbody = document.querySelector("#results-table tbody");
       if (tbody) {
         tbody.innerHTML =
-          '<tr><td colspan="6" style="text-align:center; color:#999; padding:20px;">Error loading results.</td></tr>';
+          '<tr><td colspan="8" style="text-align:center; color:#999; padding:20px;">Error loading results.</td></tr>';
       }
       this.clearAnalyticsSections();
     } finally {
@@ -2880,8 +2884,6 @@ const app = {
       const tdActions = document.createElement("td");
       tdActions.setAttribute("data-label", "Actions");
 
-      // ===== REMOVED "Register Players" button =====
-      // Only keep Manage Registration, Toggle, Delete
       const manageBtn = document.createElement("button");
       manageBtn.className = "btn btn-sm btn-primary";
       manageBtn.textContent = "⚙️ Manage Registration";
