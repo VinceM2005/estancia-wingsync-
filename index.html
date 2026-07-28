@@ -1902,7 +1902,6 @@
           <label>Release Date &amp; Time</label>
           <input type="datetime-local" id="modal-e-time" class="form-control" />
         </div>
-        <!-- ===== ADDED REGISTRATION DEADLINE FIELD ===== -->
         <div class="form-group">
           <label>Registration Deadline <span style="color: red">*</span></label>
           <input
@@ -2048,95 +2047,11 @@
       </div>
     </div>
 
-    <!-- Registration Modal (Restored) -->
-    <div id="modal-register-players" class="modal-overlay">
-      <div class="modal-content" style="max-width: 700px">
-        <div class="modal-header">
-          <h3><i class="fas fa-user-plus"></i> Register Players for Event</h3>
-          <button class="close-modal" onclick="app.closeRegisterModal()">
-            <i class="fas fa-times"></i>
-          </button>
-        </div>
-        <div class="form-group">
-          <label>Event Code</label>
-          <input
-            type="text"
-            id="register-event-code"
-            class="form-control"
-            disabled
-          />
-        </div>
-        <div class="form-group">
-          <label>Select Player</label>
-          <select id="register-player-select" class="form-control">
-            <option value="">-- Select Player --</option>
-          </select>
-        </div>
-        <div class="form-group">
-          <label>Number of Pigeons (max 10)</label>
-          <input
-            type="number"
-            id="register-pigeon-count"
-            class="form-control"
-            min="1"
-            max="10"
-            value="1"
-          />
-        </div>
-        <button
-          class="btn btn-success"
-          style="width: 100%"
-          onclick="app.registerPlayers()"
-        >
-          <i class="fas fa-check"></i> Register Player
-        </button>
-
-        <hr style="margin: 20px 0" />
-        <div
-          style="
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            flex-wrap: wrap;
-            gap: 8px;
-          "
-        >
-          <h4 style="margin: 0">Registered Players &amp; Codes</h4>
-          <button
-            class="btn-generate-stickers"
-            onclick="app.navigateToStickerGenerator()"
-          >
-            <i class="fas fa-tags"></i> Generate Stickers
-          </button>
-        </div>
-        <table
-          id="registrations-table"
-          style="width: 100%; font-size: 14px; margin-top: 10px"
-        >
-          <thead>
-            <tr>
-              <th>Player</th>
-              <th>Codes</th>
-              <th>Status</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr>
-              <td
-                colspan="3"
-                style="text-align: center; color: #999; padding: 20px"
-              >
-                No players registered yet.
-              </td>
-            </tr>
-          </tbody>
-        </table>
-      </div>
-    </div>
+    <!-- ===== MODAL-REGISTER-PLAYERS REMOVED ===== -->
 
     <!-- ===== NEW MODALS ===== -->
 
-    <!-- Event Details Modal (updated) -->
+    <!-- Event Details Modal -->
     <div id="modal-event-details" class="modal-overlay">
       <div class="modal-content" style="max-width: 500px">
         <div class="modal-header">
@@ -2198,8 +2113,6 @@
             <option value="Ready for Release">Ready for Release</option>
             <option value="Live Race">Live Race</option>
             <option value="Result Verification">Result Verification</option>
-            <option value="Completed">Completed</option>
-            <option value="Archived">Archived</option>
           </select>
           <small style="display: block; margin-top: 4px; color: #666"
             >Changing to "Registration Open" allows players to join.</small
