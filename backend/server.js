@@ -1714,6 +1714,8 @@ app.get(
       if (!event) {
         return res.status(404).json({ error: "Event not found." });
       }
+
+      // Accept multiple status values from query
       const requestedStatuses = (
         req.query.statuses ||
         req.query.status ||
@@ -1723,6 +1725,7 @@ app.get(
         .map((s) => s.trim())
         .filter(Boolean);
 
+      // Pass statuses to validation
       const validation = await validateRegistrations(
         eventId,
         requestedStatuses.length ? requestedStatuses : null,
@@ -2185,7 +2188,7 @@ app.get("/api/certificates/:certificateId", async (req, res) => {
     const cert = await Certificate.findOne({ _id: req.params.certificateId })
       .populate("eventId", "name releaseTime lat lng")
       .populate("playerId", "id name")
-      .populate("pigeonId", "ringNumber nickname color gender birthYear");
+      .populate("pigeonId", "ringNumber nickname");
     if (!cert) {
       return res.status(404).json({ error: "Certificate not found." });
     }
