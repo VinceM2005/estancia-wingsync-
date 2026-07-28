@@ -1844,17 +1844,9 @@ app.post(
         console.warn("❌ [STICKERS] Event not found for code:", eventId);
         return res.status(404).json({ error: "Event not found." });
       }
-      console.log(
-        "✅ [STICKERS] Event found:",
-        event.name,
-        "state:",
-        event.state,
-      );
 
-      if (
-        event.state !== "Registration Closed" &&
-        event.state !== "Sticker Generated"
-      ) {
+      const allowedStates = ["Registration Closed", "Sticker Generated"];
+      if (!allowedStates.includes(event.state)) {
         await session.abortTransaction();
         session.endSession();
         console.warn("❌ [STICKERS] Invalid state:", event.state);
@@ -1863,36 +1855,32 @@ app.post(
         });
       }
 
-      const registrations = await EventRegistration.find({
-        eventId,
-        status: { $nin: ["locked"] },
-      }).session(session);
-
-      console.log(
-        `📊 [STICKERS] Found ${registrations.length} registrations with status != "locked"`,
+      const existingRaceCodes = await RaceCode.find({ eventId }).session(
+        session,
       );
+      if (existingRaceCodes.length > 0 && event.state === "Sticker Generated") {
+        await session.commitTransaction();
+        session.endSession();
+        return res.json({
+          success: true,
+          message: "Stickers were already generated for this event.",
+          codes: existingRaceCodes.map((c) => ({
+            code: c.code,
+            playerId: c.userId,
+            pigeonId: c.pigeonId,
+          })),
+        });
+      }
 
+      const registrations = await EventRegistration.find({ eventId }).session(
+        session,
+      );
       if (registrations.length === 0) {
-        const allRegs = await EventRegistration.find({ eventId }).session(
-          session,
-        );
-        console.log(
-          `🔍 [STICKERS] Total registrations for this event: ${allRegs.length}`,
-        );
-        if (allRegs.length > 0) {
-          const statuses = allRegs.map((r) => r.status);
-          console.log(`   Statuses: ${statuses.join(", ")}`);
-          await session.abortTransaction();
-          session.endSession();
-          return res.status(400).json({
-            error: `No registrations with status 'draft' or 'confirmed' found. Found ${allRegs.length} registration(s) with status(es): ${statuses.join(", ")}. Please ensure registrations are not locked.`,
-          });
-        }
         await session.abortTransaction();
         session.endSession();
         return res
           .status(400)
-          .json({ error: "No registrations found for this event at all." });
+          .json({ error: "No registrations found for this event." });
       }
 
       const validation = await validateRegistrations(eventId);
@@ -1907,10 +1895,20 @@ app.post(
         });
       }
 
-      await lockAllRegistrations(eventId);
       const generatedCodes = [];
       for (const reg of registrations) {
-        for (const pigeonId of reg.pigeonIds) {
+        const regPigeonIds = reg.pigeonIds || [];
+        for (const pigeonId of regPigeonIds) {
+          const existingCode = await RaceCode.findOne({
+            eventId,
+            registrationId: reg._id.toString(),
+            pigeonId: pigeonId.toString(),
+          }).session(session);
+
+          if (existingCode) {
+            continue;
+          }
+
           const code = await getUniqueRaceCode();
           const raceCode = new RaceCode({
             eventId,
@@ -1924,6 +1922,11 @@ app.post(
           generatedCodes.push({ playerId: reg.playerId, pigeonId, code });
         }
       }
+
+      await EventRegistration.updateMany(
+        { eventId },
+        { status: "locked", updatedAt: new Date() },
+      ).session(session);
 
       event.state = "Sticker Generated";
       await event.save({ session });
@@ -1943,7 +1946,10 @@ app.post(
       );
       res.json({
         success: true,
-        message: `Generated ${generatedCodes.length} stickers.`,
+        message:
+          generatedCodes.length > 0
+            ? `Generated ${generatedCodes.length} stickers.`
+            : "No new stickers were needed; existing codes were reused.",
         codes: generatedCodes,
       });
     } catch (error) {
