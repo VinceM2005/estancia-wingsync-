@@ -1786,3 +1786,231 @@ tr:hover td {
     justify-content: center;
   }
 }
+
+/* ===== PIGEON AVATAR SELECTOR ===== */
+.avatar-selector-section {
+  margin: 16px 0;
+  padding: 16px;
+  background: var(--bg);
+  border-radius: 12px;
+  border: 1px solid var(--border);
+}
+
+.avatar-selector-section .section-label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 600;
+  font-size: 14px;
+  color: var(--text);
+  margin-bottom: 12px;
+}
+
+.avatar-selector-section .section-label i {
+  color: var(--primary);
+}
+
+.avatar-preview-large {
+  display: flex;
+  justify-content: center;
+  margin-bottom: 16px;
+  padding: 8px;
+  background: var(--card-bg);
+  border-radius: 12px;
+  border: 1px solid var(--border);
+}
+
+.avatar-preview-large svg {
+  width: 80px;
+  height: 80px;
+  border-radius: 50%;
+  border: 2px solid var(--primary);
+}
+
+.avatar-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(68px, 1fr));
+  gap: 8px;
+  max-height: 260px;
+  overflow-y: auto;
+  padding: 4px;
+}
+
+.avatar-option {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  padding: 6px 4px;
+  border-radius: 10px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  border: 2px solid transparent;
+  background: var(--card-bg);
+  position: relative;
+}
+
+.avatar-option:hover {
+  border-color: var(--primary-light);
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+}
+
+.avatar-option.selected {
+  border-color: var(--primary);
+  background: rgba(25, 135, 84, 0.06);
+  box-shadow: 0 0 0 3px rgba(25, 135, 84, 0.15);
+}
+
+.avatar-option .avatar-preview {
+  width: 52px;
+  height: 52px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  overflow: hidden;
+  background: var(--bg);
+  border: 1px solid var(--border);
+}
+
+.avatar-option .avatar-preview svg {
+  width: 48px;
+  height: 48px;
+}
+
+.avatar-option .avatar-name {
+  font-size: 8px;
+  color: var(--text-muted);
+  text-align: center;
+  line-height: 1.2;
+  max-width: 60px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.avatar-option .avatar-check {
+  position: absolute;
+  top: -4px;
+  right: -4px;
+  width: 18px;
+  height: 18px;
+  background: var(--primary);
+  color: #fff;
+  border-radius: 50%;
+  font-size: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 700;
+  box-shadow: 0 2px 8px rgba(25, 135, 84, 0.3);
+}
+
+.avatar-grid::-webkit-scrollbar {
+  width: 4px;
+}
+
+.avatar-grid::-webkit-scrollbar-track {
+  background: var(--bg);
+  border-radius: 4px;
+}
+
+.avatar-grid::-webkit-scrollbar-thumb {
+  background: var(--border);
+  border-radius: 4px;
+}
+
+.avatar-grid::-webkit-scrollbar-thumb:hover {
+  background: var(--primary-light);
+}
+
+/* Dark theme overrides */
+[data-theme="dark"] .avatar-option.selected {
+  background: rgba(25, 135, 84, 0.15);
+}
+
+[data-theme="dark"] .avatar-option:hover {
+  border-color: var(--primary-light);
+}
+
+/* ===== PIGEON CARD AVATAR ===== */
+.pigeon-avatar-wrapper {
+  display: flex;
+  justify-content: center;
+  margin-bottom: 8px;
+}
+
+.pigeon-avatar {
+  width: 64px;
+  height: 64px;
+  display: inline-block;
+  border-radius: 50%;
+  overflow: hidden;
+  border: 2px solid var(--border);
+  background: var(--bg);
+  flex-shrink: 0;
+}
+
+.pigeon-avatar svg {
+  width: 64px;
+  height: 64px;
+  display: block;
+}
+
+/* ===== CERTIFICATE CARD AVATAR ===== */
+.certificate-avatar {
+  width: 40px;
+  height: 40px;
+  display: inline-block;
+  border-radius: 50%;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  flex-shrink: 0;
+}
+
+.certificate-avatar svg {
+  width: 40px;
+  height: 40px;
+  display: block;
+}
+
+/* ===== RESPONSIVE AVATAR GRID ===== */
+@media (max-width: 992px) {
+  .avatar-grid {
+    grid-template-columns: repeat(auto-fill, minmax(60px, 1fr));
+  }
+}
+
+@media (max-width: 768px) {
+  .avatar-grid {
+    grid-template-columns: repeat(auto-fill, minmax(56px, 1fr));
+    gap: 6px;
+  }
+  .avatar-option .avatar-preview {
+    width: 44px;
+    height: 44px;
+  }
+  .avatar-option .avatar-preview svg {
+    width: 40px;
+    height: 40px;
+  }
+}
+
+@media (max-width: 480px) {
+  .avatar-grid {
+    grid-template-columns: repeat(auto-fill, minmax(48px, 1fr));
+    gap: 4px;
+  }
+  .avatar-option .avatar-preview {
+    width: 38px;
+    height: 38px;
+  }
+  .avatar-option .avatar-preview svg {
+    width: 34px;
+    height: 34px;
+  }
+  .avatar-option .avatar-name {
+    font-size: 7px;
+  }
+}

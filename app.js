@@ -1,6 +1,248 @@
-// app.js – full file with button protection
+// app.js – full file with button protection + PIGEON AVATAR SYSTEM
 // ===== API Configuration =====
 const API_URL = "https://estancia-wingsync-backend.onrender.com/api";
+
+// ===== PIGEON AVATAR LIBRARY =====
+const PIGEON_AVATARS = [
+  {
+    id: "pigeon001",
+    name: "Blue Bar",
+    color1: "#4a6b8a",
+    color2: "#2c3e50",
+    pattern: "bar",
+  },
+  {
+    id: "pigeon002",
+    name: "Red Check",
+    color1: "#8b4a3a",
+    color2: "#5c2d1a",
+    pattern: "check",
+  },
+  {
+    id: "pigeon003",
+    name: "Black",
+    color1: "#2a2a2a",
+    color2: "#1a1a1a",
+    pattern: "solid",
+  },
+  {
+    id: "pigeon004",
+    name: "White",
+    color1: "#f0ece4",
+    color2: "#d5d0c8",
+    pattern: "solid",
+  },
+  {
+    id: "pigeon005",
+    name: "Grizzle",
+    color1: "#d4c8b8",
+    color2: "#8a7a6a",
+    pattern: "grizzle",
+  },
+  {
+    id: "pigeon006",
+    name: "Splash",
+    color1: "#e8ddd0",
+    color2: "#5a4a3a",
+    pattern: "splash",
+  },
+  {
+    id: "pigeon007",
+    name: "Dark Checker",
+    color1: "#3a4a5a",
+    color2: "#1a2a3a",
+    pattern: "check",
+  },
+  {
+    id: "pigeon008",
+    name: "Mealy",
+    color1: "#c4a07a",
+    color2: "#8a6a4a",
+    pattern: "bar",
+  },
+  {
+    id: "pigeon009",
+    name: "Ash Red",
+    color1: "#b8a8a0",
+    color2: "#7a6a62",
+    pattern: "solid",
+  },
+  {
+    id: "pigeon010",
+    name: "Silver",
+    color1: "#a8b8c8",
+    color2: "#788898",
+    pattern: "bar",
+  },
+  {
+    id: "pigeon011",
+    name: "Blue Check",
+    color1: "#4a7a9a",
+    color2: "#2a4a6a",
+    pattern: "check",
+  },
+  {
+    id: "pigeon012",
+    name: "Red Bar",
+    color1: "#9a5a3a",
+    color2: "#6a3a1a",
+    pattern: "bar",
+  },
+  {
+    id: "pigeon013",
+    name: "Black Check",
+    color1: "#3a3a3a",
+    color2: "#1a1a2a",
+    pattern: "check",
+  },
+  {
+    id: "pigeon014",
+    name: "Dun",
+    color1: "#9a8a7a",
+    color2: "#6a5a4a",
+    pattern: "solid",
+  },
+  {
+    id: "pigeon015",
+    name: "Cream",
+    color1: "#e8ddd0",
+    color2: "#c8b8a8",
+    pattern: "solid",
+  },
+  {
+    id: "pigeon016",
+    name: "Opal",
+    color1: "#c8b8d0",
+    color2: "#9888a0",
+    pattern: "solid",
+  },
+  {
+    id: "pigeon017",
+    name: "Spread",
+    color1: "#4a3a3a",
+    color2: "#2a1a1a",
+    pattern: "solid",
+  },
+  {
+    id: "pigeon018",
+    name: "T-Pattern",
+    color1: "#5a6a7a",
+    color2: "#3a4a5a",
+    pattern: "check",
+  },
+  {
+    id: "pigeon019",
+    name: "Almond",
+    color1: "#d4b8a0",
+    color2: "#a88870",
+    pattern: "bar",
+  },
+  {
+    id: "pigeon020",
+    name: "Pearl",
+    color1: "#e8e0d8",
+    color2: "#c8c0b8",
+    pattern: "solid",
+  },
+];
+
+// ===== Helper: Get avatar SVG =====
+function getPigeonAvatarSVG(avatarId, size = 80) {
+  const avatar = PIGEON_AVATARS.find((a) => a.id === avatarId);
+  if (!avatar) {
+    return getDefaultPigeonSVG(size);
+  }
+  return generatePigeonSVG(avatar, size);
+}
+
+function getDefaultPigeonSVG(size = 80) {
+  return `<svg width="${size}" height="${size}" viewBox="0 0 80 80" xmlns="http://www.w3.org/2000/svg">
+    <rect width="80" height="80" rx="12" fill="#e8e0d8"/>
+    <circle cx="40" cy="35" r="20" fill="#8a9aa8"/>
+    <circle cx="40" cy="35" r="16" fill="#a8b8c8"/>
+    <circle cx="40" cy="12" r="10" fill="#8a9aa8"/>
+    <path d="M32 28 Q40 32 48 28" stroke="#6a7a8a" stroke-width="1.5" fill="none"/>
+    <circle cx="36" cy="32" r="3" fill="#2a2a2a"/>
+    <circle cx="36" cy="31" r="1.2" fill="#f0f0f0"/>
+    <path d="M24 20 L28 24 L26 28" stroke="#e8a030" stroke-width="1.5" fill="none"/>
+    <circle cx="40" cy="55" r="14" fill="#8a9aa8"/>
+    <circle cx="40" cy="55" r="11" fill="#a8b8c8"/>
+    <path d="M30 52 Q40 58 50 52" stroke="#6a7a8a" stroke-width="1" fill="none"/>
+  </svg>`;
+}
+
+function generatePigeonSVG(avatar, size = 80) {
+  const c1 = avatar.color1;
+  const c2 = avatar.color2;
+  const pattern = avatar.pattern;
+
+  let featherMarkings = "";
+  if (pattern === "bar") {
+    featherMarkings = `
+      <path d="M28 32 Q40 36 52 32" stroke="${c2}" stroke-width="2.5" fill="none" opacity="0.6"/>
+      <path d="M26 38 Q40 42 54 38" stroke="${c2}" stroke-width="2.5" fill="none" opacity="0.6"/>
+      <path d="M28 44 Q40 48 52 44" stroke="${c2}" stroke-width="2.5" fill="none" opacity="0.6"/>
+    `;
+  } else if (pattern === "check") {
+    featherMarkings = `
+      <rect x="28" y="28" width="6" height="4" rx="1" fill="${c2}" opacity="0.5"/>
+      <rect x="40" y="28" width="6" height="4" rx="1" fill="${c2}" opacity="0.5"/>
+      <rect x="34" y="34" width="6" height="4" rx="1" fill="${c2}" opacity="0.5"/>
+      <rect x="46" y="34" width="6" height="4" rx="1" fill="${c2}" opacity="0.5"/>
+      <rect x="28" y="40" width="6" height="4" rx="1" fill="${c2}" opacity="0.5"/>
+      <rect x="40" y="40" width="6" height="4" rx="1" fill="${c2}" opacity="0.5"/>
+    `;
+  } else if (pattern === "grizzle") {
+    featherMarkings = `
+      <circle cx="30" cy="30" r="3" fill="${c2}" opacity="0.4"/>
+      <circle cx="44" cy="26" r="4" fill="${c2}" opacity="0.3"/>
+      <circle cx="36" cy="38" r="3" fill="${c2}" opacity="0.4"/>
+      <circle cx="50" cy="36" r="3" fill="${c2}" opacity="0.3"/>
+      <circle cx="32" cy="46" r="4" fill="${c2}" opacity="0.4"/>
+      <circle cx="48" cy="46" r="3" fill="${c2}" opacity="0.3"/>
+    `;
+  } else if (pattern === "splash") {
+    featherMarkings = `
+      <circle cx="30" cy="28" r="8" fill="${c2}" opacity="0.5"/>
+      <circle cx="48" cy="34" r="7" fill="${c2}" opacity="0.5"/>
+      <circle cx="36" cy="46" r="6" fill="${c2}" opacity="0.5"/>
+    `;
+  } else {
+    // solid
+    featherMarkings = "";
+  }
+
+  return `<svg width="${size}" height="${size}" viewBox="0 0 80 80" xmlns="http://www.w3.org/2000/svg">
+    <defs>
+      <radialGradient id="bg${avatar.id}" cx="50%" cy="40%" r="60%">
+        <stop offset="0%" stop-color="#f0ece8"/>
+        <stop offset="100%" stop-color="#d5d0c8"/>
+      </radialGradient>
+      <radialGradient id="eye${avatar.id}" cx="40%" cy="40%" r="50%">
+        <stop offset="0%" stop-color="#f0e8d0"/>
+        <stop offset="100%" stop-color="#c8b898"/>
+      </radialGradient>
+    </defs>
+    <rect width="80" height="80" rx="14" fill="url(#bg${avatar.id})" stroke="#c8c0b8" stroke-width="1"/>
+    <ellipse cx="40" cy="50" rx="26" ry="22" fill="${c1}"/>
+    <ellipse cx="40" cy="50" rx="22" ry="18" fill="${c2}" opacity="0.3"/>
+    <path d="M22 48 Q30 40 40 38 Q50 40 58 48 Q54 56 40 60 Q26 56 22 48Z" fill="${c1}" opacity="0.8"/>
+    <path d="M24 50 Q30 44 40 42 Q50 44 56 50 Q52 56 40 58 Q28 56 24 50Z" fill="${c2}" opacity="0.15"/>
+    ${featherMarkings}
+    <path d="M30 32 Q40 26 50 32 Q48 38 40 40 Q32 38 30 32Z" fill="${c1}" opacity="0.7"/>
+    <ellipse cx="40" cy="24" rx="14" ry="12" fill="${c1}"/>
+    <ellipse cx="40" cy="24" rx="11" ry="9" fill="${c2}" opacity="0.15"/>
+    <circle cx="36" cy="22" r="6" fill="url(#eye${avatar.id})" stroke="#b8a888" stroke-width="0.5"/>
+    <circle cx="36" cy="22" r="3.5" fill="#2a2a2a"/>
+    <circle cx="36" cy="21" r="1.5" fill="#f8f4f0"/>
+    <circle cx="35" cy="22" r="0.8" fill="#ffffff" opacity="0.6"/>
+    <path d="M22 24 L14 22 L18 20 L22 22Z" fill="#e8b878" stroke="#c89858" stroke-width="0.5"/>
+    <path d="M22 24 L16 23 L18 21.5 L22 22.5Z" fill="#d4a868"/>
+    <ellipse cx="23" cy="23" rx="3" ry="2" fill="#d4c0a8" opacity="0.6"/>
+    <path d="M34 16 Q40 10 46 16 Q42 14 40 14 Q38 14 34 16Z" fill="${c1}" opacity="0.6"/>
+    <rect width="78" height="78" x="1" y="1" rx="13" fill="none" stroke="#d0c8c0" stroke-width="1.5"/>
+  </svg>`;
+}
 
 // ===== Helper: Fetch with Authorization Header =====
 function fetchWithAuth(url, options = {}) {
@@ -169,7 +411,6 @@ function createGoogleMap(
       setMarker(mapType, lat, lng, map, coordsTextId, place);
     });
 
-    // Coordinate search on Enter
     searchBox.addEventListener("keydown", function (e) {
       if (e.key === "Enter") {
         e.preventDefault();
@@ -965,6 +1206,7 @@ const app = {
           code: c.code,
           pigeonId: c.pigeonId,
           ringNumber: c.ringNumber,
+          avatarId: c.avatarId || "",
         }));
 
         state.stickers = stickers;
@@ -1141,7 +1383,7 @@ const app = {
           <thead>
             <tr>
               <th>Player</th>
-              <th>Ring Numbers</th>
+              <th>Pigeons</th>
               <th>Status</th>
               <th>Valid</th>
               <th>Actions</th>
@@ -1155,10 +1397,29 @@ const app = {
       } else {
         for (const reg of registrations) {
           const validClass = reg.valid ? "badge-valid" : "badge-invalid";
+          let pigeonList = "";
+          if (reg.pigeonIds && reg.pigeonIds.length) {
+            pigeonList = reg.pigeonIds
+              .map((pid, idx) => {
+                const ringNum = reg.ringNumbers[idx] || "Unknown";
+                const avatarId =
+                  reg.avatarIds && reg.avatarIds[idx] ? reg.avatarIds[idx] : "";
+                const avatarSVG = avatarId
+                  ? getPigeonAvatarSVG(avatarId, 32)
+                  : getDefaultPigeonSVG(32);
+                return `<span style="display:inline-flex;align-items:center;gap:4px;margin:2px 6px 2px 0;background:var(--bg);padding:2px 8px 2px 4px;border-radius:12px;border:1px solid var(--border);">
+                <span style="width:24px;height:24px;display:inline-block;border-radius:50%;overflow:hidden;">${avatarSVG}</span>
+                ${ringNum}
+              </span>`;
+              })
+              .join("");
+          } else {
+            pigeonList = reg.ringNumbers ? reg.ringNumbers.join(", ") : "N/A";
+          }
           html += `
           <tr>
             <td>${reg.playerName}</td>
-            <td>${reg.ringNumbers.join(", ")}</td>
+            <td>${pigeonList}</td>
             <td>${reg.status}</td>
             <td><span class="${validClass}">${reg.valid ? "✅" : "❌"}</span></td>
             <td>
@@ -2273,6 +2534,7 @@ const app = {
         ? `${highestSpeed.speedMPM.toFixed(2)} <span class="unit">m/min</span>`
         : '— <span class="unit">m/min</span>';
 
+      // === MODIFIED: Render results with pigeon avatars ===
       safeResults.forEach((r, i) => {
         const tr = document.createElement("tr");
 
@@ -2300,10 +2562,20 @@ const app = {
         tdPlayer.textContent = r.userName;
         tr.appendChild(tdPlayer);
 
-        const tdPigeonName = document.createElement("td");
-        tdPigeonName.setAttribute("data-label", "Pigeon Name");
-        tdPigeonName.textContent = r.pigeonId?.nickname || "N/A";
-        tr.appendChild(tdPigeonName);
+        // Pigeon name with avatar
+        const tdPigeon = document.createElement("td");
+        tdPigeon.setAttribute("data-label", "Pigeon");
+        const avatarId = r.pigeonId?.avatarId || "";
+        const avatarSVG = avatarId
+          ? getPigeonAvatarSVG(avatarId, 28)
+          : getDefaultPigeonSVG(28);
+        tdPigeon.innerHTML = `
+          <div style="display:flex;align-items:center;gap:8px;">
+            <span style="width:32px;height:32px;display:inline-block;border-radius:50%;overflow:hidden;flex-shrink:0;border:1px solid var(--border);">${avatarSVG}</span>
+            <span>${r.pigeonId?.nickname || "N/A"}</span>
+          </div>
+        `;
+        tr.appendChild(tdPigeon);
 
         const tdRingNumber = document.createElement("td");
         tdRingNumber.setAttribute("data-label", "Ring Number");
@@ -3356,7 +3628,7 @@ const app = {
   },
 
   // ============================================================
-  //  NEW FEATURES: PIGEON MANAGEMENT
+  //  PIGEON MANAGEMENT (UPDATED with Avatar System)
   // ============================================================
   openPigeonModal(pigeonId = null) {
     const modal = document.getElementById("modal-pigeon");
@@ -3378,6 +3650,9 @@ const app = {
           document.getElementById("pigeon-birthyear").value =
             pigeon.birthYear || "";
           document.getElementById("pigeon-photo").value = pigeon.photo || "";
+          // === NEW: Set selected avatar ===
+          const selectedAvatarId = pigeon.avatarId || "";
+          this.renderAvatarGrid(selectedAvatarId);
         })
         .catch((err) => {
           this.showModal({
@@ -3397,9 +3672,88 @@ const app = {
       document.getElementById("pigeon-color").value = "";
       document.getElementById("pigeon-birthyear").value = "";
       document.getElementById("pigeon-photo").value = "";
+      // === NEW: Default avatar selection ===
+      this.renderAvatarGrid("");
     }
   },
 
+  // ============================================================
+  //  PIGEON AVATAR SELECTOR METHODS
+  // ============================================================
+  renderAvatarGrid(selectedId) {
+    const container = document.getElementById("avatar-grid-container");
+    if (!container) return;
+
+    let html = `<div class="avatar-grid">`;
+    PIGEON_AVATARS.forEach((avatar) => {
+      const isSelected = avatar.id === selectedId;
+      const svg = generatePigeonSVG(avatar, 60);
+      html += `
+        <div class="avatar-option ${isSelected ? "selected" : ""}" 
+             data-avatar-id="${avatar.id}"
+             onclick="app.selectAvatar('${avatar.id}')"
+             title="${avatar.name}">
+          <div class="avatar-preview">${svg}</div>
+          <span class="avatar-name">${avatar.name}</span>
+          ${isSelected ? '<span class="avatar-check">✓</span>' : ""}
+        </div>
+      `;
+    });
+    html += `</div>`;
+    container.innerHTML = html;
+
+    // Store selected avatar ID
+    if (selectedId) {
+      document.getElementById("selected-avatar-id").value = selectedId;
+    } else {
+      document.getElementById("selected-avatar-id").value = "";
+    }
+
+    // Update preview
+    this.updateAvatarPreview(selectedId);
+  },
+
+  selectAvatar(avatarId) {
+    // Update UI
+    document.querySelectorAll(".avatar-option").forEach((el) => {
+      el.classList.remove("selected");
+      const check = el.querySelector(".avatar-check");
+      if (check) check.remove();
+    });
+    const selectedEl = document.querySelector(
+      `.avatar-option[data-avatar-id="${avatarId}"]`,
+    );
+    if (selectedEl) {
+      selectedEl.classList.add("selected");
+      const check = document.createElement("span");
+      check.className = "avatar-check";
+      check.textContent = "✓";
+      selectedEl.appendChild(check);
+    }
+    document.getElementById("selected-avatar-id").value = avatarId;
+
+    // Update preview
+    this.updateAvatarPreview(avatarId);
+  },
+
+  updateAvatarPreview(avatarId) {
+    const previewContainer = document.getElementById(
+      "avatar-preview-container",
+    );
+    if (!previewContainer) return;
+    if (avatarId) {
+      const avatar = PIGEON_AVATARS.find((a) => a.id === avatarId);
+      if (avatar) {
+        previewContainer.innerHTML = generatePigeonSVG(avatar, 80);
+        return;
+      }
+    }
+    previewContainer.innerHTML = getDefaultPigeonSVG(80);
+  },
+
+  // ============================================================
+  //  SAVE PIGEON (UPDATED with avatarId)
+  // ============================================================
   savePigeon() {
     const id = document.getElementById("pigeon-id").value;
     const ringNumber = document
@@ -3413,6 +3767,8 @@ const app = {
       document.getElementById("pigeon-birthyear").value,
     );
     const photo = document.getElementById("pigeon-photo").value.trim();
+    // === NEW: Get selected avatarId ===
+    const avatarId = document.getElementById("selected-avatar-id").value || "";
 
     if (!ringNumber) {
       this.showModal({
@@ -3424,7 +3780,15 @@ const app = {
       return;
     }
 
-    const payload = { ringNumber, nickname, gender, color, birthYear, photo };
+    const payload = {
+      ringNumber,
+      nickname,
+      gender,
+      color,
+      birthYear,
+      photo,
+      avatarId,
+    };
     const url = id ? `${API_URL}/pigeons/${id}` : `${API_URL}/pigeons`;
     const method = id ? "PUT" : "POST";
 
@@ -3463,6 +3827,9 @@ const app = {
       });
   },
 
+  // ============================================================
+  //  LOAD PIGEONS (UPDATED with avatars)
+  // ============================================================
   loadPigeons() {
     fetchWithAuth(`${API_URL}/pigeons`)
       .then((res) => res.json())
@@ -3475,8 +3842,15 @@ const app = {
         let html = '<div class="pigeons-grid">';
         pigeons.forEach((p) => {
           const statusClass = p.status === "Active" ? "" : "inactive";
+          const avatarId = p.avatarId || "";
+          const avatarSVG = avatarId
+            ? getPigeonAvatarSVG(avatarId, 60)
+            : getDefaultPigeonSVG(60);
           html += `
             <div class="pigeon-card">
+              <div class="pigeon-avatar-wrapper">
+                <span class="pigeon-avatar">${avatarSVG}</span>
+              </div>
               <div class="ring">${p.ringNumber}</div>
               <div><strong>${p.nickname || "No nickname"}</strong></div>
               <div>${p.gender || "Unknown"} • ${p.color || "N/A"}</div>
@@ -3528,10 +3902,17 @@ const app = {
       });
   },
 
+  // ============================================================
+  //  VIEW PIGEON STATS (UPDATED with avatar)
+  // ============================================================
   viewPigeonStats(id) {
     fetchWithAuth(`${API_URL}/pigeons/${id}/stats`)
       .then((res) => res.json())
       .then((stats) => {
+        const avatarId = stats.avatarId || "";
+        const avatarSVG = avatarId
+          ? getPigeonAvatarSVG(avatarId, 48)
+          : getDefaultPigeonSVG(48);
         let msg = `📊 ${stats.ringNumber} (${stats.nickname || "No nickname"})\n`;
         msg += `Races: ${stats.totalRaces} | Wins: ${stats.wins} | Podiums: ${stats.podiums}\n`;
         msg += `Best Speed: ${stats.bestSpeed.toFixed(2)} m/min | Avg: ${stats.averageSpeed.toFixed(2)} m/min\n`;
@@ -3539,9 +3920,13 @@ const app = {
         stats.raceHistory.slice(0, 5).forEach((r) => {
           msg += `  ${r.eventName}: Rank ${r.rank}, Speed ${r.speed.toFixed(2)} m/min\n`;
         });
+        const fullMsg = `<div style="display:flex;align-items:center;gap:12px;margin-bottom:12px;">
+          <span style="width:56px;height:56px;display:inline-block;border-radius:50%;overflow:hidden;border:2px solid var(--primary);flex-shrink:0;">${avatarSVG}</span>
+          <div><strong>${stats.ringNumber}</strong><br><span style="color:var(--text-light);">${stats.nickname || "No nickname"}</span></div>
+        </div><pre style="white-space:pre-wrap;font-family:inherit;margin:0;font-size:14px;line-height:1.6;">${msg}</pre>`;
         this.showModal({
           title: "Pigeon Career Stats",
-          message: msg,
+          message: fullMsg,
           icon: "📊",
           iconColor: "#2a7a62",
         });
@@ -3557,7 +3942,7 @@ const app = {
   },
 
   // ============================================================
-  //  NEW FEATURES: SELF-REGISTRATION & ENTRIES
+  //  SELF-REGISTRATION & ENTRIES
   // ============================================================
 
   loadOpenEvents() {
@@ -3603,9 +3988,21 @@ const app = {
           });
           return;
         }
+        let pigeonList = reg.pigeonIds
+          .map((p) => {
+            const avatarId = p.avatarId || "";
+            const avatarSVG = avatarId
+              ? getPigeonAvatarSVG(avatarId, 24)
+              : getDefaultPigeonSVG(24);
+            return `<span style="display:inline-flex;align-items:center;gap:4px;margin:2px 4px;background:var(--bg);padding:2px 8px 2px 4px;border-radius:12px;border:1px solid var(--border);">
+            <span style="width:20px;height:20px;display:inline-block;border-radius:50%;overflow:hidden;">${avatarSVG}</span>
+            ${p.ringNumber || p.nickname || "Unknown"}
+          </span>`;
+          })
+          .join(" ");
         let msg = `Your registration for ${reg.eventId}:\n`;
         msg += `Status: ${reg.status}\n`;
-        msg += `Pigeons: ${reg.pigeonIds.map((p) => p.ringNumber || p.nickname || "Unknown").join(", ")}\n`;
+        msg += `Pigeons: ${pigeonList}\n`;
         msg += `Registered: ${new Date(reg.registrationDate).toLocaleString()}`;
         this.showModal({
           title: "My Entry",
@@ -3617,7 +4014,6 @@ const app = {
   },
 
   openRegisterModalNew(eventCode) {
-    // Disable the button to prevent double-clicks
     const joinBtn = document.querySelector(
       `#entries-container .btn-success[onclick*="${eventCode}"]`,
     );
@@ -3651,9 +4047,14 @@ const app = {
         let html = "";
         activePigeons.forEach((p) => {
           const checked = selectedIds.includes(p._id) ? "checked" : "";
+          const avatarId = p.avatarId || "";
+          const avatarSVG = avatarId
+            ? getPigeonAvatarSVG(avatarId, 24)
+            : getDefaultPigeonSVG(24);
           html += `
-            <div style="margin:6px 0;">
-              <label>
+            <div style="margin:6px 0; display:flex; align-items:center; gap:8px;">
+              <span style="width:28px;height:28px;display:inline-block;border-radius:50%;overflow:hidden;flex-shrink:0;">${avatarSVG}</span>
+              <label style="flex:1;">
                 <input type="checkbox" value="${p._id}" ${checked} class="pigeon-checkbox" />
                 ${p.ringNumber} - ${p.nickname || "No nickname"} (${p.color || "N/A"})
               </label>
@@ -3695,7 +4096,6 @@ const app = {
       return;
     }
 
-    // Disable the confirm button to prevent double-clicks
     const confirmBtn = document.querySelector(
       "#modal-register-event .btn-success",
     );
@@ -3822,9 +4222,14 @@ const app = {
         let html = "";
         activePigeons.forEach((p) => {
           const checked = selectedIds.includes(p._id) ? "checked" : "";
+          const avatarId = p.avatarId || "";
+          const avatarSVG = avatarId
+            ? getPigeonAvatarSVG(avatarId, 24)
+            : getDefaultPigeonSVG(24);
           html += `
-            <div style="margin:6px 0;">
-              <label>
+            <div style="margin:6px 0; display:flex; align-items:center; gap:8px;">
+              <span style="width:28px;height:28px;display:inline-block;border-radius:50%;overflow:hidden;flex-shrink:0;">${avatarSVG}</span>
+              <label style="flex:1;">
                 <input type="checkbox" value="${p._id}" ${checked} class="edit-pigeon-checkbox" />
                 ${p.ringNumber} - ${p.nickname || "No nickname"} (${p.color || "N/A"})
               </label>
@@ -3912,7 +4317,7 @@ const app = {
   },
 
   // ============================================================
-  //  NEW FEATURES: CERTIFICATES
+  //  CERTIFICATES (UPDATED with avatars)
   // ============================================================
 
   loadCertificates() {
@@ -3934,13 +4339,19 @@ const app = {
                 : c.rank === 3
                   ? "🥉 Third"
                   : "🏅 Participation";
+          const avatarId = c.pigeonId?.avatarId || "";
+          const avatarSVG = avatarId
+            ? getPigeonAvatarSVG(avatarId, 32)
+            : getDefaultPigeonSVG(32);
           html += `
-            <div class="certificate-card">
-              <div><strong>${c.certificateNumber}</strong> – ${rankLabel}</div>
-              <div>Event: ${c.eventId ? c.eventId.name : "Unknown"}</div>
-              <div>Pigeon: ${c.pigeonId ? c.pigeonId.ringNumber : "N/A"}</div>
-              <div>Speed: ${c.speed.toFixed(2)} m/min | Distance: ${c.distance.toFixed(2)} km</div>
-              <div style="margin-top:6px;">
+            <div class="certificate-card" style="display:flex;align-items:center;gap:12px;">
+              <span style="width:40px;height:40px;display:inline-block;border-radius:50%;overflow:hidden;flex-shrink:0;border:1px solid var(--border);">${avatarSVG}</span>
+              <div style="flex:1;">
+                <div><strong>${c.certificateNumber}</strong> – ${rankLabel}</div>
+                <div>Event: ${c.eventId ? c.eventId.name : "Unknown"} • Pigeon: ${c.pigeonId ? c.pigeonId.ringNumber : "N/A"}</div>
+                <div>Speed: ${c.speed.toFixed(2)} m/min | Distance: ${c.distance.toFixed(2)} km</div>
+              </div>
+              <div>
                 <button class="btn btn-sm btn-primary" onclick="app.viewCertificate('${c._id}')">View</button>
               </div>
             </div>
@@ -3967,10 +4378,19 @@ const app = {
               : cert.rank === 3
                 ? "🥉 Third"
                 : "🏅 Participation";
+        const avatarId = cert.pigeonId?.avatarId || "";
+        const avatarSVG = avatarId
+          ? getPigeonAvatarSVG(avatarId, 64)
+          : getDefaultPigeonSVG(64);
         container.innerHTML = `
           <div style="text-align:center; padding:12px; border:2px solid #2a7a62; border-radius:8px; background:#f9f9f9;">
-            <h2>🏆 Certificate of Achievement</h2>
-            <h3>${cert.certificateNumber}</h3>
+            <div style="display:flex;align-items:center;justify-content:center;gap:12px;margin-bottom:8px;">
+              <span style="width:72px;height:72px;display:inline-block;border-radius:50%;overflow:hidden;border:2px solid #2a7a62;">${avatarSVG}</span>
+              <div>
+                <h2 style="margin:0;">🏆 Certificate of Achievement</h2>
+                <h3 style="margin:4px 0;">${cert.certificateNumber}</h3>
+              </div>
+            </div>
             <p><strong>Player:</strong> ${cert.playerId ? cert.playerId.name : "N/A"}</p>
             <p><strong>Pigeon:</strong> ${cert.pigeonId ? cert.pigeonId.ringNumber : "N/A"} (${cert.pigeonId ? cert.pigeonId.nickname : ""})</p>
             <p><strong>Event:</strong> ${cert.eventId ? cert.eventId.name : "Unknown"}</p>
@@ -4047,7 +4467,7 @@ const app = {
   },
 
   // ============================================================
-  //  NEW: EVENT DETAILS MODAL
+  //  EVENT DETAILS MODAL
   // ============================================================
   openEventDetailsModal(eventCode) {
     let event = this.eventLookup[eventCode];

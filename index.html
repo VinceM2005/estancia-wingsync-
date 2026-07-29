@@ -2133,9 +2133,9 @@
       </div>
     </div>
 
-    <!-- Pigeon Modal -->
+    <!-- ===== PIGEON MODAL (UPDATED with Avatar Selector) ===== -->
     <div id="modal-pigeon" class="modal-overlay">
-      <div class="modal-content">
+      <div class="modal-content" style="max-width: 560px">
         <div class="modal-header">
           <h3 id="pigeon-modal-title">
             <i class="fas fa-dove"></i> Add Pigeon
@@ -2192,15 +2192,41 @@
             placeholder="e.g., 2024"
           />
         </div>
-        <div class="form-group">
-          <label>Photo URL</label>
-          <input
-            type="text"
-            id="pigeon-photo"
-            class="form-control"
-            placeholder="https://example.com/pigeon.jpg"
-          />
+
+        <!-- ===== AVATAR SELECTOR ===== -->
+        <div class="avatar-selector-section">
+          <div class="section-label">
+            <i class="fas fa-image"></i> Choose Pigeon Profile
+          </div>
+
+          <!-- Preview -->
+          <div class="avatar-preview-large" id="avatar-preview-container">
+            <!-- Default SVG will be rendered by JS -->
+          </div>
+
+          <!-- Hidden input to store selected avatar ID -->
+          <input type="hidden" id="selected-avatar-id" value="" />
+
+          <!-- Avatar Grid -->
+          <div id="avatar-grid-container">
+            <!-- Rendered by JS -->
+          </div>
+          <small
+            style="
+              display: block;
+              margin-top: 6px;
+              color: var(--text-muted);
+              font-size: 11px;
+            "
+          >
+            Click on a pigeon avatar to select it as your pigeon's profile
+            picture.
+          </small>
         </div>
+
+        <!-- Hidden photo field (kept for backward compatibility) -->
+        <input type="hidden" id="pigeon-photo" value="" />
+
         <button
           class="btn btn-success"
           style="width: 100%"
@@ -2210,7 +2236,6 @@
         </button>
       </div>
     </div>
-
     <!-- Register for Event Modal (Player self-registration) -->
     <div id="modal-register-event" class="modal-overlay">
       <div class="modal-content" style="max-width: 600px">

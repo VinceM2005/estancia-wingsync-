@@ -1,4 +1,4 @@
-// ===== server.js – MODIFIED VERSION =====
+// ===== server.js – MODIFIED VERSION (Pigeon Avatar System Added) =====
 require("dotenv").config();
 const express = require("express");
 const mongoose = require("mongoose");
@@ -219,6 +219,7 @@ const LogSchema = new mongoose.Schema({
 LogSchema.index({ createdAt: 1 }, { expireAfterSeconds: 2592000 });
 
 // ===== PIGEON & REGISTRATION SCHEMAS =====
+// === MODIFIED: PigeonSchema with avatarId field added ===
 const PigeonSchema = new mongoose.Schema({
   ringNumber: { type: String, required: true, unique: true },
   ownerId: { type: String, required: true, index: true },
@@ -231,6 +232,8 @@ const PigeonSchema = new mongoose.Schema({
   color: { type: String, default: "" },
   birthYear: { type: Number, min: 1900, max: new Date().getFullYear() },
   photo: { type: String, default: "" },
+  // === NEW: avatarId field for preset profile images ===
+  avatarId: { type: String, default: "" },
   status: {
     type: String,
     enum: ["Active", "Lost", "Sold", "Retired", "Dead"],
@@ -1221,13 +1224,14 @@ app.post(
 // ============================================================
 //  RESULTS
 // ============================================================
+// === MODIFIED: Added avatarId to populate ===
 app.get("/api/results/:eventCode", async (req, res) => {
   try {
     const event = await Event.findOne({ code: req.params.eventCode });
     if (!event) return res.json([]);
     const results = await Result.find({ eventId: event.code })
       .sort({ speedMPM: -1 })
-      .populate("pigeonId", "ringNumber nickname color gender")
+      .populate("pigeonId", "ringNumber nickname color gender avatarId")
       .lean();
     res.json(results);
   } catch (error) {
@@ -1236,6 +1240,7 @@ app.get("/api/results/:eventCode", async (req, res) => {
   }
 });
 
+// === MODIFIED: Added avatarId to projection ===
 app.get("/api/results/:eventCode/pigeons", async (req, res) => {
   try {
     const { eventCode } = req.params;
@@ -1268,6 +1273,7 @@ app.get("/api/results/:eventCode/pigeons", async (req, res) => {
           pigeonId: 1,
           ringNumber: "$pigeon.ringNumber",
           nickname: "$pigeon.nickname",
+          avatarId: "$pigeon.avatarId",
           ownerName: "$player.name",
           userId: 1,
           speedMPM: 1,
@@ -1580,6 +1586,7 @@ async function isPigeonInActiveEvent(pigeonId) {
   return false;
 }
 
+// === MODIFIED: GET /api/pigeons includes avatarId in projection ===
 app.get("/api/pigeons", async (req, res) => {
   try {
     const { status } = req.query;
@@ -1590,7 +1597,11 @@ app.get("/api/pigeons", async (req, res) => {
     ) {
       filter.status = status;
     }
-    const pigeons = await Pigeon.find(filter).sort({ createdAt: -1 });
+    const pigeons = await Pigeon.find(filter)
+      .select(
+        "ringNumber nickname gender color birthYear photo avatarId status createdAt",
+      )
+      .sort({ createdAt: -1 });
     res.json(pigeons);
   } catch (error) {
     console.error("Error fetching pigeons:", error);
@@ -1598,6 +1609,7 @@ app.get("/api/pigeons", async (req, res) => {
   }
 });
 
+// === MODIFIED: POST /api/pigeons accepts avatarId ===
 app.post(
   "/api/pigeons",
   [
@@ -1620,6 +1632,8 @@ app.post(
         `Birth year must be between 1900 and ${new Date().getFullYear()}`,
       ),
     body("photo").optional().isString(),
+    // === NEW: avatarId validation ===
+    body("avatarId").optional().isString(),
   ],
   async (req, res) => {
     try {
@@ -1627,8 +1641,15 @@ app.post(
       if (!errors.isEmpty()) {
         return res.status(400).json({ error: errors.array()[0].msg });
       }
-      const { ringNumber, nickname, gender, color, birthYear, photo } =
-        matchedData(req);
+      const {
+        ringNumber,
+        nickname,
+        gender,
+        color,
+        birthYear,
+        photo,
+        avatarId,
+      } = matchedData(req);
       const existing = await Pigeon.findOne({ ringNumber });
       if (existing) {
         return res.status(400).json({ error: "Ring number already exists." });
@@ -1641,6 +1662,8 @@ app.post(
         color: color || "",
         birthYear: birthYear || null,
         photo: photo || "",
+        // === NEW: store avatarId ===
+        avatarId: avatarId || "",
         status: "Active",
       });
       await pigeon.save();
@@ -1671,12 +1694,30 @@ app.get("/api/pigeons/:id", async (req, res) => {
   }
 });
 
+// === MODIFIED: PUT /api/pigeons/:id accepts avatarId and other fields ===
 app.put(
   "/api/pigeons/:id",
   [
     body("nickname").optional().trim().isString(),
     body("color").optional().trim().isString(),
     body("photo").optional().isString(),
+    // === NEW: avatarId and other editable fields ===
+    body("avatarId").optional().isString(),
+    body("gender")
+      .optional()
+      .isIn(["Male", "Female", "Unknown"])
+      .withMessage("Gender must be Male, Female, or Unknown"),
+    body("birthYear")
+      .optional()
+      .isInt({ min: 1900, max: new Date().getFullYear() })
+      .withMessage(
+        `Birth year must be between 1900 and ${new Date().getFullYear()}`,
+      ),
+    body("ringNumber").optional().isString(),
+    body("status")
+      .optional()
+      .isIn(["Active", "Lost", "Sold", "Retired", "Dead"])
+      .withMessage("Invalid status"),
   ],
   async (req, res) => {
     try {
@@ -1691,10 +1732,16 @@ app.put(
       if (!pigeon) {
         return res.status(404).json({ error: "Pigeon not found." });
       }
-      const { nickname, color, photo } = matchedData(req);
+      const { nickname, color, photo, avatarId, gender, birthYear, status } =
+        matchedData(req);
       if (nickname !== undefined) pigeon.nickname = nickname;
       if (color !== undefined) pigeon.color = color;
       if (photo !== undefined) pigeon.photo = photo;
+      // === NEW: update avatarId ===
+      if (avatarId !== undefined) pigeon.avatarId = avatarId;
+      if (gender !== undefined) pigeon.gender = gender;
+      if (birthYear !== undefined) pigeon.birthYear = birthYear;
+      if (status !== undefined) pigeon.status = status;
       await pigeon.save();
       await Log.create({
         message: `Player ${req.user.id} updated pigeon ${pigeon.ringNumber}`,
@@ -2000,6 +2047,8 @@ async function validateRegistrations(eventId, statusFilter = null) {
         playerName: playerName,
         pigeonIds: pigeons.map((p) => p._id || p),
         ringNumbers: pigeons.map((p) => p.ringNumber || "LEGACY"),
+        // === NEW: avatarIds for legacy fallback ===
+        avatarIds: pigeons.map((p) => p.avatarId || ""),
         valid: true,
         duplicateRing: false,
         invalidStatus: false,
@@ -2036,6 +2085,8 @@ async function validateRegistrations(eventId, statusFilter = null) {
       playerName: playerName,
       pigeonIds: pigeons.map((p) => p._id),
       ringNumbers: pigeons.map((p) => p.ringNumber),
+      // === NEW: avatarIds ===
+      avatarIds: pigeons.map((p) => p.avatarId || ""),
       valid,
       duplicateRing,
       invalidStatus,
@@ -2223,6 +2274,7 @@ app.post(
 );
 
 // ===== GET ALL RACE CODES FOR AN EVENT =====
+// === MODIFIED: Added avatarId to projection ===
 app.get("/api/admin/events/:eventId/codes", requireAdmin, async (req, res) => {
   try {
     const { eventId } = req.params;
@@ -2261,6 +2313,8 @@ app.get("/api/admin/events/:eventId/codes", requireAdmin, async (req, res) => {
           playerId: { $ifNull: ["$user.id", null] },
           pigeonId: { $ifNull: ["$pigeon._id", null] },
           ringNumber: { $ifNull: ["$pigeon.ringNumber", null] },
+          // === NEW: avatarId ===
+          avatarId: { $ifNull: ["$pigeon.avatarId", ""] },
         },
       },
     ]);
@@ -2406,6 +2460,7 @@ async function generateCertificateNumber() {
   return `WSC-${year}-${seq}`;
 }
 
+// === MODIFIED: Include avatarId in rankings ===
 async function computePigeonRankings(eventId) {
   const results = await Result.find({ eventId, pigeonId: { $ne: null } })
     .sort({ speedMPM: -1 })
@@ -2417,6 +2472,7 @@ async function computePigeonRankings(eventId) {
     userName: r.userName,
     ringNumber: r.pigeonId.ringNumber,
     nickname: r.pigeonId.nickname,
+    avatarId: r.pigeonId.avatarId || "",
     speedMPM: r.speedMPM,
     distanceKm: r.distanceKm,
     rank: index + 1,
@@ -2487,12 +2543,13 @@ app.post(
   },
 );
 
+// === MODIFIED: Include avatarId in certificate queries ===
 app.get("/api/certificates/player", async (req, res) => {
   try {
     const playerId = req.user.id;
     const certs = await Certificate.find({ playerId })
       .populate("eventId", "name releaseTime")
-      .populate("pigeonId", "ringNumber nickname color")
+      .populate("pigeonId", "ringNumber nickname color avatarId")
       .sort({ issueDate: -1 });
     res.json(certs);
   } catch (error) {
@@ -2506,7 +2563,7 @@ app.get("/api/certificates/:certificateId", async (req, res) => {
     const cert = await Certificate.findOne({ _id: req.params.certificateId })
       .populate("eventId", "name releaseTime lat lng")
       .populate("playerId", "id name")
-      .populate("pigeonId", "ringNumber nickname");
+      .populate("pigeonId", "ringNumber nickname avatarId");
     if (!cert) {
       return res.status(404).json({ error: "Certificate not found." });
     }
@@ -2526,7 +2583,7 @@ app.get("/api/certificates/verify/:hash", async (req, res) => {
     const cert = await Certificate.findOne({ qrHash: hash })
       .populate("eventId", "name releaseTime")
       .populate("playerId", "id name")
-      .populate("pigeonId", "ringNumber nickname");
+      .populate("pigeonId", "ringNumber nickname avatarId");
     if (!cert) {
       return res.status(404).json({ error: "Invalid certificate." });
     }
@@ -2700,12 +2757,15 @@ app.get("/api/users/player/:id/stats", authenticateToken, async (req, res) => {
         speed: fastestResult.speedMPM,
         pigeonName: pigeon ? pigeon.nickname || pigeon.ringNumber : "Unknown",
         ringNumber: pigeon ? pigeon.ringNumber : "Unknown",
+        // === NEW: include avatarId ===
+        avatarId: pigeon ? pigeon.avatarId : "",
       };
     } else {
       fastestArrival = {
         speed: fastestResult.speedMPM,
         pigeonName: "Unknown",
         ringNumber: "Unknown",
+        avatarId: "",
       };
     }
 
@@ -2755,6 +2815,7 @@ app.get("/api/users/player/:id/stats", authenticateToken, async (req, res) => {
   }
 });
 
+// === MODIFIED: Include avatarId in pigeon stats ===
 app.get("/api/pigeons/:id/stats", async (req, res) => {
   try {
     const pigeonId = req.params.id;
@@ -2777,6 +2838,7 @@ app.get("/api/pigeons/:id/stats", async (req, res) => {
         pigeonId: pigeon._id,
         ringNumber: pigeon.ringNumber,
         nickname: pigeon.nickname,
+        avatarId: pigeon.avatarId || "",
         totalRaces: 0,
         wins: 0,
         podiums: 0,
@@ -2851,6 +2913,7 @@ app.get("/api/pigeons/:id/stats", async (req, res) => {
       pigeonId: pigeon._id,
       ringNumber: pigeon.ringNumber,
       nickname: pigeon.nickname,
+      avatarId: pigeon.avatarId || "",
       color: pigeon.color,
       gender: pigeon.gender,
       birthYear: pigeon.birthYear,
