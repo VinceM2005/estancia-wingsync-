@@ -462,6 +462,9 @@ const app = {
   _qrScannerInstance: null,
   _isScanning: false,
 
+  // === NEW: Admin stats refresh interval ===
+  _adminStatsInterval: null,
+
   init() {
     this.loadTheme();
     this.setupVisibilityListener();
@@ -483,7 +486,6 @@ const app = {
     console.log("[QR Scanner] Cleaning up scanner instance...");
     if (this._qrScannerInstance) {
       try {
-        // Stop the scanner if it's running
         if (this._qrScannerInstance.isScanning) {
           this._qrScannerInstance
             .stop()
@@ -494,7 +496,6 @@ const app = {
               console.warn("[QR Scanner] Error stopping scanner:", err);
             });
         }
-        // Clear the scanner
         this._qrScannerInstance.clear();
         console.log("[QR Scanner] Scanner cleared.");
       } catch (e) {
@@ -507,7 +508,6 @@ const app = {
 
   // ---------- QR SCANNER with Zoom & Focus (FIXED IMPLEMENTATION) ----------
   openQRScanner() {
-    // Check if library is loaded
     if (typeof Html5Qrcode === "undefined") {
       console.error("[QR Scanner] Html5Qrcode library not loaded.");
       this.showModal({
@@ -519,15 +519,11 @@ const app = {
       return;
     }
 
-    // Clean up any existing scanner instance
     this.cleanupScanner();
-
-    // Reset scanning flag
     this._isScanning = false;
 
     console.log("[QR Scanner] Opening scanner...");
 
-    // Create scanner modal
     const scannerModal = document.createElement("div");
     scannerModal.id = "qr-scanner-modal";
     scannerModal.style.cssText = `
@@ -577,7 +573,6 @@ const app = {
     `;
     document.body.appendChild(scannerModal);
 
-    // --- Setup close handlers ---
     const closeModal = () => {
       console.log("[QR Scanner] Closing modal...");
       this.cleanupScanner();
@@ -591,12 +586,10 @@ const app = {
     const cancelBtn = scannerModal.querySelector("#qr-cancel-btn");
     if (cancelBtn) cancelBtn.addEventListener("click", closeModal);
 
-    // Also close on backdrop click
     scannerModal.addEventListener("click", (e) => {
       if (e.target === scannerModal) closeModal();
     });
 
-    // --- Initialize QR Scanner ---
     console.log("[QR Scanner] Initializing Html5Qrcode on #qr-reader...");
     let html5QrCode;
     try {
@@ -610,13 +603,10 @@ const app = {
       return;
     }
 
-    // --- Configuration ---
     const config = {
       fps: 20,
       qrbox: { width: 280, height: 280 },
-      // Allow camera to use its native aspect ratio for better coverage
       aspectRatio: undefined,
-      // Additional experimental features for better detection
       experimentalFeatures: {
         useBarCodeDetectorIfSupported: true,
       },
@@ -624,13 +614,11 @@ const app = {
 
     console.log("[QR Scanner] Starting scanner with config:", config);
 
-    // --- Start scanner ---
     let videoTrack = null;
     let trackRetryInterval = null;
     let trackRetryCount = 0;
     const MAX_TRACK_RETRIES = 30;
 
-    // --- Zoom Control Setup (lazy) ---
     const setupZoomControls = () => {
       const zoomSlider = document.getElementById("zoom-slider");
       const zoomValue = document.getElementById("zoom-value");
@@ -653,7 +641,6 @@ const app = {
           console.warn("[QR Scanner] Zoom not supported:", e);
           if (!window._zoomWarningShown) {
             window._zoomWarningShown = true;
-            // Don't show modal, just update UI
             zoomValue.textContent = "⚠️";
             document.getElementById("zoom-slider").disabled = true;
           }
@@ -671,7 +658,6 @@ const app = {
       });
     };
 
-    // --- Flashlight Control ---
     const flashBtn = document.getElementById("flashlight-btn");
     const flashStatus = document.getElementById("flash-status");
     let flashOn = false;
@@ -683,7 +669,6 @@ const app = {
       }
 
       try {
-        // Try the library's built-in toggle first
         if (typeof html5QrCode.toggleFlash === "function") {
           const isOn = await html5QrCode.toggleFlash();
           flashOn = isOn;
@@ -694,7 +679,6 @@ const app = {
           return;
         }
 
-        // Fallback: manual torch control via constraints
         const capabilities = videoTrack.getCapabilities();
         if (capabilities.torch) {
           flashOn = !flashOn;
@@ -726,9 +710,7 @@ const app = {
 
     flashBtn?.addEventListener("click", toggleFlash);
 
-    // --- Setup video track monitoring ---
     const setupTrackMonitoring = () => {
-      // Clear any existing interval
       if (trackRetryInterval) {
         clearInterval(trackRetryInterval);
         trackRetryInterval = null;
@@ -745,10 +727,8 @@ const app = {
             videoTrack = tracks[0];
             console.log("[QR Scanner] Video track acquired!");
 
-            // Setup zoom controls now that we have the track
             setupZoomControls();
 
-            // Try to set continuous autofocus and initial zoom
             try {
               videoTrack.applyConstraints({
                 advanced: [{ focusMode: "continuous" }, { zoom: 1.0 }],
@@ -763,7 +743,6 @@ const app = {
               );
             }
 
-            // Clear interval
             if (trackRetryInterval) {
               clearInterval(trackRetryInterval);
               trackRetryInterval = null;
@@ -786,16 +765,13 @@ const app = {
       }, 300);
     };
 
-    // --- Start scanning ---
     html5QrCode
       .start(
         { facingMode: "environment" },
         config,
-        // onScanSuccess
         (decodedText, decodedResult) => {
           console.log("[QR Scanner] QR Code detected! Text:", decodedText);
 
-          // Prevent duplicate scans
           if (this._isScanning) {
             console.log(
               "[QR Scanner] Already processing a scan, ignoring duplicate.",
@@ -804,13 +780,11 @@ const app = {
           }
           this._isScanning = true;
 
-          // Update UI
           document.getElementById("clock-in-code").value =
             decodedText.toUpperCase();
           document.getElementById("qr-reader-results").innerHTML =
             `✅ Decoded: <strong>${decodedText}</strong>`;
 
-          // Visual feedback
           const frame = document.getElementById("qr-frame");
           if (frame) {
             frame.style.borderColor = "#00ff00";
@@ -821,13 +795,11 @@ const app = {
             }, 800);
           }
 
-          // Stop scanning immediately
           console.log(
             "[QR Scanner] Stopping scanner after successful decode...",
           );
           this.cleanupScanner();
 
-          // Close modal
           const modal = document.getElementById("qr-scanner-modal");
           if (modal) {
             setTimeout(() => {
@@ -836,7 +808,6 @@ const app = {
             }, 300);
           }
 
-          // Trigger clock-in after a short delay
           setTimeout(() => {
             console.log(
               "[QR Scanner] Triggering clock-in for code:",
@@ -846,9 +817,7 @@ const app = {
             app.clockIn();
           }, 500);
         },
-        // onScanFailure - now with logging
         (error) => {
-          // Only log occasional errors to avoid console spam
           if (error && error !== "NotFoundException") {
             console.debug(
               "[QR Scanner] Scan attempt failed:",
@@ -862,10 +831,8 @@ const app = {
         document.getElementById("qr-reader-results").innerHTML =
           "📷 Camera active. Point at QR code.";
 
-        // Start monitoring for video track
         setupTrackMonitoring();
 
-        // Also check immediately
         setTimeout(() => {
           const videoElement = document.querySelector("#qr-reader video");
           if (videoElement && videoElement.srcObject) {
@@ -896,7 +863,6 @@ const app = {
         document.getElementById("qr-reader-results").innerHTML =
           `❌ Camera error: ${err.message || err}`;
 
-        // Show user-friendly error
         let message = "Unable to access camera. ";
         if (err.message && err.message.includes("Permission")) {
           message += "Please allow camera access in your browser settings.";
@@ -1607,8 +1573,10 @@ const app = {
           else if (id === "view-results") this.renderResults();
           else if (id === "view-admin-events") this.renderEvents();
           else if (id === "view-admin-players") this.renderPlayers();
-          else if (id === "view-profile") this.loadPlayerStats();
-          else if (id === "view-pigeons") this.loadPigeons();
+          else if (id === "view-profile") {
+            this.loadPlayerStats();
+            if (this.currentUser.role === "admin") this.loadAdminStats();
+          } else if (id === "view-pigeons") this.loadPigeons();
           else if (id === "view-entries") this.loadOpenEvents();
           else if (id === "view-certificates") this.loadCertificates();
         }
@@ -1900,7 +1868,10 @@ const app = {
       clearInterval(this._pigeonRefreshInterval);
       this._pigeonRefreshInterval = null;
     }
-    // Clean up QR scanner if active
+    if (this._adminStatsInterval) {
+      clearInterval(this._adminStatsInterval);
+      this._adminStatsInterval = null;
+    }
     this.cleanupScanner();
     this.currentUser = null;
     sessionStorage.removeItem("wingsync_user");
@@ -1922,12 +1893,17 @@ const app = {
       playerEls.forEach((el) => el.classList.add("hidden"));
       document.getElementById("player-clock-in-area").classList.add("hidden");
       document.getElementById("player-stats-container").classList.add("hidden");
+      // Show admin stats
+      document
+        .getElementById("admin-stats-container")
+        .classList.remove("hidden");
     } else {
       adminEls.forEach((el) => el.classList.add("hidden"));
       playerEls.forEach((el) => el.classList.remove("hidden"));
       document
         .getElementById("player-clock-in-area")
         .classList.remove("hidden");
+      document.getElementById("admin-stats-container").classList.add("hidden");
       this.loadPlayerStats();
     }
 
@@ -1939,6 +1915,11 @@ const app = {
     this.navigate("dashboard");
     this.loadProfile();
     this.fetchAllEvents();
+
+    // Load admin stats if admin
+    if (this.currentUser.role === "admin") {
+      this.loadAdminStats();
+    }
   },
 
   // === Fetch all events and update lookup ===
@@ -1997,6 +1978,10 @@ const app = {
       clearInterval(this._pigeonRefreshInterval);
       this._pigeonRefreshInterval = null;
     }
+    if (this._adminStatsInterval) {
+      clearInterval(this._adminStatsInterval);
+      this._adminStatsInterval = null;
+    }
 
     document
       .querySelectorAll(".view-section")
@@ -2015,18 +2000,34 @@ const app = {
     if (view === "logs") this.renderLogs();
     if (view === "profile") {
       this.loadProfile();
-      this.loadPlayerStats();
-      this._profileStatsInterval = setInterval(() => {
-        const currentView = document.querySelector(
-          ".view-section:not(.hidden)",
-        );
-        if (currentView && currentView.id === "view-profile") {
-          this.loadPlayerStats();
-        } else {
-          clearInterval(this._profileStatsInterval);
-          this._profileStatsInterval = null;
-        }
-      }, 30000);
+      if (this.currentUser.role === "player") {
+        this.loadPlayerStats();
+        this._profileStatsInterval = setInterval(() => {
+          const currentView = document.querySelector(
+            ".view-section:not(.hidden)",
+          );
+          if (currentView && currentView.id === "view-profile") {
+            this.loadPlayerStats();
+          } else {
+            clearInterval(this._profileStatsInterval);
+            this._profileStatsInterval = null;
+          }
+        }, 30000);
+      } else {
+        // Admin
+        this.loadAdminStats();
+        this._adminStatsInterval = setInterval(() => {
+          const currentView = document.querySelector(
+            ".view-section:not(.hidden)",
+          );
+          if (currentView && currentView.id === "view-profile") {
+            this.loadAdminStats();
+          } else {
+            clearInterval(this._adminStatsInterval);
+            this._adminStatsInterval = null;
+          }
+        }, 30000);
+      }
     }
     if (view === "pigeons") {
       this.loadPigeons();
@@ -2245,7 +2246,6 @@ const app = {
       return;
     }
 
-    // Reset scanning flag just in case
     this._isScanning = false;
 
     fetchWithAuth(`${API_URL}/clockin`, {
@@ -2375,6 +2375,64 @@ const app = {
         document
           .getElementById("player-stats-container")
           .classList.add("hidden");
+      });
+  },
+
+  // ===== NEW: Admin Stats Loader =====
+  loadAdminStats() {
+    // Fetch players and events in parallel
+    Promise.all([
+      fetchWithAuth(`${API_URL}/users/players`).then((res) => {
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        return res.json();
+      }),
+      fetchWithAuth(`${API_URL}/events/all`).then((res) => {
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        return res.json();
+      }),
+    ])
+      .then(([players, events]) => {
+        if (!Array.isArray(players)) players = [];
+        if (!Array.isArray(events)) events = [];
+
+        const totalPlayers = players.length;
+        const totalEvents = events.length;
+
+        // Count open and closed events based on state
+        const openStates = [
+          "Registration Open",
+          "Registration Closed",
+          "Sticker Generated",
+          "Ready for Release",
+          "Live Race",
+        ];
+        const closedStates = ["Result Verification"];
+
+        let openEvents = 0,
+          closedEvents = 0;
+        events.forEach((e) => {
+          const state = e.state || "";
+          if (openStates.includes(state)) {
+            openEvents++;
+          } else if (closedStates.includes(state)) {
+            closedEvents++;
+          }
+          // Draft events are not counted as open or closed
+        });
+
+        document.getElementById("admin-total-players").textContent =
+          totalPlayers;
+        document.getElementById("admin-total-events").textContent = totalEvents;
+        document.getElementById("admin-open-events").textContent = openEvents;
+        document.getElementById("admin-closed-events").textContent =
+          closedEvents;
+      })
+      .catch((err) => {
+        console.error("Failed to load admin stats:", err);
+        document.getElementById("admin-total-players").textContent = "Error";
+        document.getElementById("admin-total-events").textContent = "Error";
+        document.getElementById("admin-open-events").textContent = "Error";
+        document.getElementById("admin-closed-events").textContent = "Error";
       });
   },
 
@@ -2696,7 +2754,6 @@ const app = {
         tdPlayer.textContent = r.userName;
         tr.appendChild(tdPlayer);
 
-        // Pigeon name with avatar
         const tdPigeon = document.createElement("td");
         tdPigeon.setAttribute("data-label", "Pigeon");
         const avatarId = r.pigeonId?.avatarId || "";
@@ -3784,7 +3841,6 @@ const app = {
           document.getElementById("pigeon-birthyear").value =
             pigeon.birthYear || "";
           document.getElementById("pigeon-photo").value = pigeon.photo || "";
-          // === NEW: Set selected avatar ===
           const selectedAvatarId = pigeon.avatarId || "";
           this.renderAvatarGrid(selectedAvatarId);
         })
@@ -3806,7 +3862,6 @@ const app = {
       document.getElementById("pigeon-color").value = "";
       document.getElementById("pigeon-birthyear").value = "";
       document.getElementById("pigeon-photo").value = "";
-      // === NEW: Default avatar selection ===
       this.renderAvatarGrid("");
     }
   },
@@ -3836,19 +3891,16 @@ const app = {
     html += `</div>`;
     container.innerHTML = html;
 
-    // Store selected avatar ID
     if (selectedId) {
       document.getElementById("selected-avatar-id").value = selectedId;
     } else {
       document.getElementById("selected-avatar-id").value = "";
     }
 
-    // Update preview
     this.updateAvatarPreview(selectedId);
   },
 
   selectAvatar(avatarId) {
-    // Update UI
     document.querySelectorAll(".avatar-option").forEach((el) => {
       el.classList.remove("selected");
       const check = el.querySelector(".avatar-check");
@@ -3866,7 +3918,6 @@ const app = {
     }
     document.getElementById("selected-avatar-id").value = avatarId;
 
-    // Update preview
     this.updateAvatarPreview(avatarId);
   },
 
@@ -3901,7 +3952,6 @@ const app = {
       document.getElementById("pigeon-birthyear").value,
     );
     const photo = document.getElementById("pigeon-photo").value.trim();
-    // === NEW: Get selected avatarId ===
     const avatarId = document.getElementById("selected-avatar-id").value || "";
 
     if (!ringNumber) {

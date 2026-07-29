@@ -778,7 +778,7 @@
               </div>
               <h2 style="color: var(--primary)">Quick Clock In</h2>
               <p style="margin-bottom: 20px; color: #666">
-                Enter the event code to clock your pigeon's arrival
+                Enter the sticker code to clock your pigeon's arrival
               </p>
               <div class="clock-in-input-group">
                 <input
@@ -862,40 +862,47 @@
               <p style="text-align: center; color: #666; margin-bottom: 20px">
                 User ID: <span id="prof-id" style="font-weight: bold"></span>
               </p>
-              <div class="form-group">
-                <label><i class="fas fa-phone"></i> Contact</label>
-                <input
-                  type="text"
-                  id="prof-contact"
-                  class="form-control"
-                  disabled
-                />
-              </div>
-              <div class="form-group player-only hidden">
-                <label
-                  ><i class="fas fa-map-marker-alt"></i> Loft Latitude</label
-                >
-                <input
-                  type="text"
-                  id="prof-lat"
-                  class="form-control"
-                  disabled
-                />
-              </div>
-              <div class="form-group player-only hidden">
-                <label
-                  ><i class="fas fa-map-marker-alt"></i> Loft Longitude</label
-                >
-                <input
-                  type="text"
-                  id="prof-lng"
-                  class="form-control"
-                  disabled
-                />
+
+              <!-- Contact Information – Player only -->
+              <div class="player-only hidden">
+                <div class="form-group">
+                  <label><i class="fas fa-phone"></i> Contact</label>
+                  <input
+                    type="text"
+                    id="prof-contact"
+                    class="form-control"
+                    disabled
+                  />
+                </div>
+                <div class="form-group">
+                  <label
+                    ><i class="fas fa-map-marker-alt"></i> Loft Latitude</label
+                  >
+                  <input
+                    type="text"
+                    id="prof-lat"
+                    class="form-control"
+                    disabled
+                  />
+                </div>
+                <div class="form-group">
+                  <label
+                    ><i class="fas fa-map-marker-alt"></i> Loft Longitude</label
+                  >
+                  <input
+                    type="text"
+                    id="prof-lng"
+                    class="form-control"
+                    disabled
+                  />
+                </div>
               </div>
 
-              <!-- Performance Summary (extended) -->
-              <div id="player-stats-container" class="card stats-card hidden">
+              <!-- Performance Summary (Player only) -->
+              <div
+                id="player-stats-container"
+                class="card stats-card hidden player-only"
+              >
                 <div class="stats-card-header">
                   <div class="stats-card-title-wrapper">
                     <span class="stats-card-icon">⏱️</span>
@@ -1120,6 +1127,70 @@
                       <span
                         class="stat-metric-value"
                         id="stats-total-certificates"
+                        >0</span
+                      >
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <!-- ===== NEW: Admin Overview (Admin only) ===== -->
+              <div
+                id="admin-stats-container"
+                class="card stats-card admin-only hidden"
+              >
+                <div class="stats-card-header">
+                  <div class="stats-card-title-wrapper">
+                    <span class="stats-card-icon">📊</span>
+                    <h3 class="stats-card-title">Admin Overview</h3>
+                  </div>
+                  <span class="stats-card-badge">System</span>
+                </div>
+                <div class="stats-grid">
+                  <div class="stat-metric">
+                    <div class="stat-metric-icon">
+                      <i class="fas fa-users"></i>
+                    </div>
+                    <div class="stat-metric-content">
+                      <span class="stat-metric-label">Total Players</span>
+                      <span class="stat-metric-value" id="admin-total-players"
+                        >0</span
+                      >
+                    </div>
+                  </div>
+                  <div class="stat-metric">
+                    <div class="stat-metric-icon">
+                      <i class="fas fa-calendar-alt"></i>
+                    </div>
+                    <div class="stat-metric-content">
+                      <span class="stat-metric-label">Total Events</span>
+                      <span class="stat-metric-value" id="admin-total-events"
+                        >0</span
+                      >
+                    </div>
+                  </div>
+                  <div class="stat-metric stat-metric-highlight">
+                    <div class="stat-metric-icon stat-metric-icon-gold">
+                      <i class="fas fa-check-circle"></i>
+                    </div>
+                    <div class="stat-metric-content">
+                      <span class="stat-metric-label">Open Events</span>
+                      <span
+                        class="stat-metric-value stat-metric-value-gold"
+                        id="admin-open-events"
+                        >0</span
+                      >
+                    </div>
+                  </div>
+                  <div class="stat-metric stat-metric-highlight">
+                    <div class="stat-metric-icon stat-metric-icon-accent">
+                      <i class="fas fa-flag-checkered"></i>
+                    </div>
+                    <div class="stat-metric-content">
+                      <span class="stat-metric-label">Closed Events</span>
+                      <span
+                        class="stat-metric-value stat-metric-value-accent"
+                        id="admin-closed-events"
                         >0</span
                       >
                     </div>
