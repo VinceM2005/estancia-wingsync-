@@ -2014,3 +2014,46 @@ tr:hover td {
     font-size: 7px;
   }
 }
+
+/* ===== QR SCANNER FRAME DETECTION ANIMATION ===== */
+#qr-frame.detected {
+  border-color: #00ff00 !important;
+  box-shadow: 0 0 35px rgba(0, 255, 0, 0.6) !important;
+  animation: qrPulse 0.6s ease 3;
+}
+
+@keyframes qrPulse {
+  0%,
+  100% {
+    transform: translate(-50%, -50%) scale(1);
+  }
+  50% {
+    transform: translate(-50%, -50%) scale(1.05);
+  }
+}
+
+/* Corner brackets for QR frame */
+.corner-bracket {
+  position: absolute;
+  width: 20px;
+  height: 20px;
+  border-color: #00ff00;
+  border-style: solid;
+  border-width: 0;
+}
+
+.corner-bracket.bl {
+  bottom: 4px;
+  left: 4px;
+  border-bottom-width: 3px;
+  border-left-width: 3px;
+  border-radius: 0 0 0 4px;
+}
+
+.corner-bracket.tr {
+  top: 4px;
+  right: 4px;
+  border-top-width: 3px;
+  border-right-width: 3px;
+  border-radius: 0 4px 0 0;
+}

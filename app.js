@@ -458,6 +458,10 @@ const app = {
   _pigeonRefreshInterval: null,
   _currentCert: null,
 
+  // === NEW: QR Scanner Tracking ===
+  _qrScannerInstance: null,
+  _isScanning: false,
+
   init() {
     this.loadTheme();
     this.setupVisibilityListener();
@@ -474,9 +478,38 @@ const app = {
     this.initStickerGenerator();
   },
 
-  // ---------- QR SCANNER with Zoom & Focus ----------
+  // ===== CLEANUP QR SCANNER =====
+  cleanupScanner() {
+    console.log("[QR Scanner] Cleaning up scanner instance...");
+    if (this._qrScannerInstance) {
+      try {
+        // Stop the scanner if it's running
+        if (this._qrScannerInstance.isScanning) {
+          this._qrScannerInstance
+            .stop()
+            .then(() => {
+              console.log("[QR Scanner] Scanner stopped successfully.");
+            })
+            .catch((err) => {
+              console.warn("[QR Scanner] Error stopping scanner:", err);
+            });
+        }
+        // Clear the scanner
+        this._qrScannerInstance.clear();
+        console.log("[QR Scanner] Scanner cleared.");
+      } catch (e) {
+        console.warn("[QR Scanner] Cleanup error:", e);
+      }
+      this._qrScannerInstance = null;
+    }
+    this._isScanning = false;
+  },
+
+  // ---------- QR SCANNER with Zoom & Focus (FIXED IMPLEMENTATION) ----------
   openQRScanner() {
+    // Check if library is loaded
     if (typeof Html5Qrcode === "undefined") {
+      console.error("[QR Scanner] Html5Qrcode library not loaded.");
       this.showModal({
         title: "Scanner Not Available",
         message: "QR scanner library not loaded. Please refresh the page.",
@@ -486,97 +519,159 @@ const app = {
       return;
     }
 
+    // Clean up any existing scanner instance
+    this.cleanupScanner();
+
+    // Reset scanning flag
+    this._isScanning = false;
+
+    console.log("[QR Scanner] Opening scanner...");
+
+    // Create scanner modal
     const scannerModal = document.createElement("div");
     scannerModal.id = "qr-scanner-modal";
     scannerModal.style.cssText = `
-    position: fixed;
-    top: 0;
-    left: 0;
-    width: 100%;
-    height: 100%;
-    background: rgba(0,0,0,0.8);
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    z-index: 10000;
-    padding: 20px;
-  `;
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: rgba(0,0,0,0.85);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      z-index: 10000;
+      padding: 20px;
+    `;
     scannerModal.innerHTML = `
-    <div style="background: #fff; border-radius: 16px; padding: 20px; max-width: 500px; width: 100%;">
-      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
-        <h3 style="margin:0;"><i class="fas fa-qrcode"></i> Scan QR Code</h3>
-        <button onclick="document.getElementById('qr-scanner-modal').remove()" style="background:none; border:none; font-size:28px; cursor:pointer;">&times;</button>
-      </div>
-      <div style="position: relative; width: 100%;">
-        <div id="qr-reader" style="width:100%;"></div>
-        <!-- Custom scanning frame with 4 corner brackets -->
-        <div id="qr-frame" style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); width: 300px; height: 300px; border: 3px solid #00ff00; border-radius: 16px; pointer-events: none; box-shadow: 0 0 25px rgba(0,255,0,0.35); z-index: 10;">
-          <span class="corner-bracket bl"></span>
-          <span class="corner-bracket tr"></span>
+      <div style="background: #fff; border-radius: 16px; padding: 20px; max-width: 500px; width: 100%; max-height: 90vh; overflow-y: auto;">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
+          <h3 style="margin:0;"><i class="fas fa-qrcode"></i> Scan QR Code</h3>
+          <button id="qr-close-btn" style="background:none; border:none; font-size:28px; cursor:pointer; color:#666;">&times;</button>
         </div>
+        <div style="position: relative; width: 100%;">
+          <div id="qr-reader" style="width:100%;"></div>
+          <div id="qr-frame" style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); width: 280px; height: 280px; border: 3px solid #00ff00; border-radius: 16px; pointer-events: none; box-shadow: 0 0 25px rgba(0,255,0,0.35); z-index: 10; transition: border-color 0.3s ease, box-shadow 0.3s ease;">
+            <span class="corner-bracket bl"></span>
+            <span class="corner-bracket tr"></span>
+          </div>
+        </div>
+        <div id="qr-reader-results" style="margin-top: 12px; font-size: 14px; color: #333; text-align:center; min-height: 24px;"></div>
+
+        <!-- Zoom Controls -->
+        <div style="display: flex; align-items: center; gap: 8px; margin-top: 8px; flex-wrap: wrap;">
+          <label style="font-size:13px; font-weight:600; color:#333;">Zoom:</label>
+          <input type="range" id="zoom-slider" min="0.5" max="5.0" step="0.1" value="1.0" style="flex:1; min-width:100px;">
+          <span id="zoom-value" style="font-size:13px; font-weight:600; min-width:40px; text-align:center;">1.0×</span>
+          <button id="reset-zoom-btn" class="btn btn-sm btn-secondary" style="padding:4px 12px; font-size:12px;">⟲ Reset</button>
+        </div>
+
+        <!-- Flashlight button -->
+        <button id="flashlight-btn" class="btn btn-secondary" style="margin-top:8px; width:100%; justify-content:center;">
+          <i class="fas fa-lightbulb"></i> <span id="flash-status">Toggle Flash</span>
+        </button>
+
+        <button class="btn btn-secondary" style="margin-top:8px; width:100%;" id="qr-cancel-btn">Cancel</button>
       </div>
-      <div id="qr-reader-results" style="margin-top: 12px; font-size: 14px; color: #333; text-align:center;"></div>
-
-      <!-- Zoom Controls -->
-      <div style="display: flex; align-items: center; gap: 8px; margin-top: 8px; flex-wrap: wrap;">
-        <label style="font-size:13px; font-weight:600; color:#333;">Zoom:</label>
-        <input type="range" id="zoom-slider" min="0.5" max="5.0" step="0.1" value="1.0" style="flex:1; min-width:120px;">
-        <span id="zoom-value" style="font-size:13px; font-weight:600; min-width:40px; text-align:center;">1.0×</span>
-        <button id="reset-zoom-btn" class="btn btn-sm btn-secondary" style="padding:4px 12px; font-size:12px;">⟲ Reset</button>
-      </div>
-
-      <!-- Flashlight button with status -->
-      <button id="flashlight-btn" class="btn btn-secondary" style="margin-top:8px; width:100%; justify-content:center;">
-        <i class="fas fa-lightbulb"></i> <span id="flash-status">Toggle Flash</span>
-      </button>
-
-      <button class="btn btn-secondary" style="margin-top:8px;" onclick="document.getElementById('qr-scanner-modal').remove()">Cancel</button>
-    </div>
-  `;
+    `;
     document.body.appendChild(scannerModal);
 
-    const html5QrCode = new Html5Qrcode("qr-reader");
-
-    // ----- Zoom Control -----
-    let videoTrack = null;
-    const zoomSlider = document.getElementById("zoom-slider");
-    const zoomValue = document.getElementById("zoom-value");
-    const resetZoomBtn = document.getElementById("reset-zoom-btn");
-
-    const applyZoom = async (zoomFactor) => {
-      if (!videoTrack) return;
-      try {
-        await videoTrack.applyConstraints({
-          advanced: [{ zoom: zoomFactor }],
-        });
-        zoomValue.textContent = zoomFactor.toFixed(1) + "×";
-      } catch (e) {
-        console.warn("Zoom not supported", e);
-        if (!window._zoomWarningShown) {
-          window._zoomWarningShown = true;
-          app.showModal({
-            title: "Zoom Not Supported",
-            message:
-              "Your device camera does not support digital zoom. Try moving the camera closer.",
-            icon: "⚠️",
-            iconColor: "#e67e22",
-          });
-        }
-      }
+    // --- Setup close handlers ---
+    const closeModal = () => {
+      console.log("[QR Scanner] Closing modal...");
+      this.cleanupScanner();
+      const modal = document.getElementById("qr-scanner-modal");
+      if (modal) modal.remove();
     };
 
-    zoomSlider.addEventListener("input", () => {
-      const val = parseFloat(zoomSlider.value);
-      applyZoom(val);
+    const closeBtn = scannerModal.querySelector("#qr-close-btn");
+    if (closeBtn) closeBtn.addEventListener("click", closeModal);
+
+    const cancelBtn = scannerModal.querySelector("#qr-cancel-btn");
+    if (cancelBtn) cancelBtn.addEventListener("click", closeModal);
+
+    // Also close on backdrop click
+    scannerModal.addEventListener("click", (e) => {
+      if (e.target === scannerModal) closeModal();
     });
 
-    resetZoomBtn.addEventListener("click", () => {
-      zoomSlider.value = "1.0";
-      applyZoom(1.0);
-    });
+    // --- Initialize QR Scanner ---
+    console.log("[QR Scanner] Initializing Html5Qrcode on #qr-reader...");
+    let html5QrCode;
+    try {
+      html5QrCode = new Html5Qrcode("qr-reader");
+      this._qrScannerInstance = html5QrCode;
+      console.log("[QR Scanner] Html5Qrcode instance created.");
+    } catch (err) {
+      console.error("[QR Scanner] Failed to initialize scanner:", err);
+      document.getElementById("qr-reader-results").innerHTML =
+        "❌ Failed to initialize scanner: " + err.message;
+      return;
+    }
 
-    // ----- Flashlight Control (improved) -----
+    // --- Configuration ---
+    const config = {
+      fps: 20,
+      qrbox: { width: 280, height: 280 },
+      // Allow camera to use its native aspect ratio for better coverage
+      aspectRatio: undefined,
+      // Additional experimental features for better detection
+      experimentalFeatures: {
+        useBarCodeDetectorIfSupported: true,
+      },
+    };
+
+    console.log("[QR Scanner] Starting scanner with config:", config);
+
+    // --- Start scanner ---
+    let videoTrack = null;
+    let trackRetryInterval = null;
+    let trackRetryCount = 0;
+    const MAX_TRACK_RETRIES = 30;
+
+    // --- Zoom Control Setup (lazy) ---
+    const setupZoomControls = () => {
+      const zoomSlider = document.getElementById("zoom-slider");
+      const zoomValue = document.getElementById("zoom-value");
+      const resetZoomBtn = document.getElementById("reset-zoom-btn");
+
+      if (!zoomSlider || !zoomValue) return;
+
+      const applyZoom = async (zoomFactor) => {
+        if (!videoTrack) {
+          console.warn("[QR Scanner] No video track available for zoom.");
+          return;
+        }
+        try {
+          await videoTrack.applyConstraints({
+            advanced: [{ zoom: zoomFactor }],
+          });
+          zoomValue.textContent = zoomFactor.toFixed(1) + "×";
+          console.log(`[QR Scanner] Zoom set to ${zoomFactor.toFixed(1)}×`);
+        } catch (e) {
+          console.warn("[QR Scanner] Zoom not supported:", e);
+          if (!window._zoomWarningShown) {
+            window._zoomWarningShown = true;
+            // Don't show modal, just update UI
+            zoomValue.textContent = "⚠️";
+            document.getElementById("zoom-slider").disabled = true;
+          }
+        }
+      };
+
+      zoomSlider.addEventListener("input", () => {
+        const val = parseFloat(zoomSlider.value);
+        applyZoom(val);
+      });
+
+      resetZoomBtn?.addEventListener("click", () => {
+        zoomSlider.value = "1.0";
+        applyZoom(1.0);
+      });
+    };
+
+    // --- Flashlight Control ---
     const flashBtn = document.getElementById("flashlight-btn");
     const flashStatus = document.getElementById("flash-status");
     let flashOn = false;
@@ -592,26 +687,30 @@ const app = {
         if (typeof html5QrCode.toggleFlash === "function") {
           const isOn = await html5QrCode.toggleFlash();
           flashOn = isOn;
-        } else {
-          // Fallback: manual torch control via constraints
-          const capabilities = videoTrack.getCapabilities();
-          if (capabilities.torch) {
-            flashOn = !flashOn;
-            await videoTrack.applyConstraints({
-              advanced: [{ torch: flashOn }],
-            });
-          } else {
-            throw new Error("Torch not supported");
-          }
+          flashStatus.textContent = flashOn ? "✅ Flash ON" : "Flash OFF";
+          flashBtn.style.background = flashOn ? "#ffd700" : "";
+          flashBtn.style.color = flashOn ? "#333" : "";
+          console.log(`[QR Scanner] Flash toggled via library: ${flashOn}`);
+          return;
         }
-        // Update UI
-        flashStatus.textContent = flashOn ? "✅ Flash ON" : "Flash OFF";
-        flashBtn.style.background = flashOn ? "#ffd700" : "";
-        flashBtn.style.color = flashOn ? "#333" : "";
+
+        // Fallback: manual torch control via constraints
+        const capabilities = videoTrack.getCapabilities();
+        if (capabilities.torch) {
+          flashOn = !flashOn;
+          await videoTrack.applyConstraints({
+            advanced: [{ torch: flashOn }],
+          });
+          flashStatus.textContent = flashOn ? "✅ Flash ON" : "Flash OFF";
+          flashBtn.style.background = flashOn ? "#ffd700" : "";
+          flashBtn.style.color = flashOn ? "#333" : "";
+          console.log(`[QR Scanner] Flash toggled via torch: ${flashOn}`);
+        } else {
+          throw new Error("Torch not supported");
+        }
       } catch (e) {
-        console.warn("Flash toggle error:", e);
+        console.warn("[QR Scanner] Flash toggle error:", e);
         flashStatus.textContent = "⚠️ Not available";
-        // Show a one-time warning
         if (!window._flashWarningShown) {
           window._flashWarningShown = true;
           app.showModal({
@@ -625,62 +724,193 @@ const app = {
       }
     };
 
-    flashBtn.addEventListener("click", toggleFlash);
+    flashBtn?.addEventListener("click", toggleFlash);
 
-    // ----- Start Scanner -----
-    const config = {
-      fps: 15,
-      qrbox: { width: 300, height: 300 },
-      aspectRatio: 1.0,
-    };
+    // --- Setup video track monitoring ---
+    const setupTrackMonitoring = () => {
+      // Clear any existing interval
+      if (trackRetryInterval) {
+        clearInterval(trackRetryInterval);
+        trackRetryInterval = null;
+      }
 
-    html5QrCode
-      .start(
-        { facingMode: "environment" },
-        config,
-        (decodedText) => {
-          document.getElementById("clock-in-code").value =
-            decodedText.toUpperCase();
-          document.getElementById("qr-reader-results").innerHTML =
-            `✅ Decoded: <strong>${decodedText}</strong>`;
+      trackRetryCount = 0;
 
-          const frame = document.getElementById("qr-frame");
-          if (frame) {
-            frame.classList.add("detected");
-            setTimeout(() => frame.classList.remove("detected"), 850);
-          }
-
-          setTimeout(() => {
-            html5QrCode.stop().then(() => {
-              html5QrCode.clear();
-              document.getElementById("qr-scanner-modal").remove();
-              app.clockIn();
-            });
-          }, 1000);
-        },
-        () => {},
-      )
-      .then(() => {
+      trackRetryInterval = setInterval(() => {
+        trackRetryCount++;
         const videoElement = document.querySelector("#qr-reader video");
         if (videoElement && videoElement.srcObject) {
           const tracks = videoElement.srcObject.getVideoTracks();
-          if (tracks.length > 0) {
+          if (tracks && tracks.length > 0) {
             videoTrack = tracks[0];
+            console.log("[QR Scanner] Video track acquired!");
+
+            // Setup zoom controls now that we have the track
+            setupZoomControls();
+
             // Try to set continuous autofocus and initial zoom
             try {
               videoTrack.applyConstraints({
                 advanced: [{ focusMode: "continuous" }, { zoom: 1.0 }],
               });
+              console.log(
+                "[QR Scanner] Autofocus and zoom constraints applied.",
+              );
             } catch (e) {
-              console.warn("Autofocus/zoom constraints not supported", e);
+              console.warn(
+                "[QR Scanner] Autofocus/zoom constraints not supported:",
+                e,
+              );
             }
+
+            // Clear interval
+            if (trackRetryInterval) {
+              clearInterval(trackRetryInterval);
+              trackRetryInterval = null;
+            }
+            return;
           }
         }
+
+        if (trackRetryCount >= MAX_TRACK_RETRIES) {
+          console.warn(
+            "[QR Scanner] Failed to acquire video track after 30 attempts.",
+          );
+          if (trackRetryInterval) {
+            clearInterval(trackRetryInterval);
+            trackRetryInterval = null;
+          }
+          document.getElementById("qr-reader-results").innerHTML =
+            "⚠️ Camera started but video track not available. Try refreshing.";
+        }
+      }, 300);
+    };
+
+    // --- Start scanning ---
+    html5QrCode
+      .start(
+        { facingMode: "environment" },
+        config,
+        // onScanSuccess
+        (decodedText, decodedResult) => {
+          console.log("[QR Scanner] QR Code detected! Text:", decodedText);
+
+          // Prevent duplicate scans
+          if (this._isScanning) {
+            console.log(
+              "[QR Scanner] Already processing a scan, ignoring duplicate.",
+            );
+            return;
+          }
+          this._isScanning = true;
+
+          // Update UI
+          document.getElementById("clock-in-code").value =
+            decodedText.toUpperCase();
+          document.getElementById("qr-reader-results").innerHTML =
+            `✅ Decoded: <strong>${decodedText}</strong>`;
+
+          // Visual feedback
+          const frame = document.getElementById("qr-frame");
+          if (frame) {
+            frame.style.borderColor = "#00ff00";
+            frame.style.boxShadow = "0 0 35px rgba(0,255,0,0.6)";
+            setTimeout(() => {
+              frame.style.borderColor = "#00ff00";
+              frame.style.boxShadow = "0 0 25px rgba(0,255,0,0.35)";
+            }, 800);
+          }
+
+          // Stop scanning immediately
+          console.log(
+            "[QR Scanner] Stopping scanner after successful decode...",
+          );
+          this.cleanupScanner();
+
+          // Close modal
+          const modal = document.getElementById("qr-scanner-modal");
+          if (modal) {
+            setTimeout(() => {
+              modal.remove();
+              console.log("[QR Scanner] Modal removed.");
+            }, 300);
+          }
+
+          // Trigger clock-in after a short delay
+          setTimeout(() => {
+            console.log(
+              "[QR Scanner] Triggering clock-in for code:",
+              decodedText,
+            );
+            this._isScanning = false;
+            app.clockIn();
+          }, 500);
+        },
+        // onScanFailure - now with logging
+        (error) => {
+          // Only log occasional errors to avoid console spam
+          if (error && error !== "NotFoundException") {
+            console.debug(
+              "[QR Scanner] Scan attempt failed:",
+              error.message || error,
+            );
+          }
+        },
+      )
+      .then(() => {
+        console.log("[QR Scanner] Scanner started successfully.");
+        document.getElementById("qr-reader-results").innerHTML =
+          "📷 Camera active. Point at QR code.";
+
+        // Start monitoring for video track
+        setupTrackMonitoring();
+
+        // Also check immediately
+        setTimeout(() => {
+          const videoElement = document.querySelector("#qr-reader video");
+          if (videoElement && videoElement.srcObject) {
+            const tracks = videoElement.srcObject.getVideoTracks();
+            if (tracks && tracks.length > 0) {
+              videoTrack = tracks[0];
+              console.log(
+                "[QR Scanner] Video track acquired (immediate check).",
+              );
+              setupZoomControls();
+              try {
+                videoTrack.applyConstraints({
+                  advanced: [{ focusMode: "continuous" }, { zoom: 1.0 }],
+                });
+              } catch (e) {
+                // ignore
+              }
+              if (trackRetryInterval) {
+                clearInterval(trackRetryInterval);
+                trackRetryInterval = null;
+              }
+            }
+          }
+        }, 500);
       })
       .catch((err) => {
-        console.error("QR scanner start error:", err);
+        console.error("[QR Scanner] Failed to start scanner:", err);
         document.getElementById("qr-reader-results").innerHTML =
-          "❌ Could not access camera. Please allow camera permissions.";
+          `❌ Camera error: ${err.message || err}`;
+
+        // Show user-friendly error
+        let message = "Unable to access camera. ";
+        if (err.message && err.message.includes("Permission")) {
+          message += "Please allow camera access in your browser settings.";
+        } else if (err.message && err.message.includes("NotFound")) {
+          message += "No camera found on this device.";
+        } else {
+          message += "Please check your camera and try again.";
+        }
+        this.showModal({
+          title: "Camera Error",
+          message: message,
+          icon: "❌",
+          iconColor: "#c0392b",
+        });
       });
   },
 
@@ -1670,6 +1900,8 @@ const app = {
       clearInterval(this._pigeonRefreshInterval);
       this._pigeonRefreshInterval = null;
     }
+    // Clean up QR scanner if active
+    this.cleanupScanner();
     this.currentUser = null;
     sessionStorage.removeItem("wingsync_user");
     sessionStorage.removeItem("wingsync_token");
@@ -2012,6 +2244,9 @@ const app = {
       });
       return;
     }
+
+    // Reset scanning flag just in case
+    this._isScanning = false;
 
     fetchWithAuth(`${API_URL}/clockin`, {
       method: "POST",
