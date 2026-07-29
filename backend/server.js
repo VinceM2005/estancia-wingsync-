@@ -1,4 +1,4 @@
-// ===== server.js – MODIFIED VERSION (Pigeon Avatar System Added) =====
+// ===== server.js – MODIFIED VERSION (Pigeon Avatar System Added + Certificate Admin Endpoints) =====
 require("dotenv").config();
 const express = require("express");
 const mongoose = require("mongoose");
@@ -180,8 +180,6 @@ const RaceCodeSchema = new mongoose.Schema({
   pigeonId: { type: String, ref: "Pigeon" },
 });
 RaceCodeSchema.index({ eventId: 1, userId: 1, status: 1 });
-// NEW: Unique index for (eventId, pigeonId) is created in ensureIndexes()
-// but we also keep the schema-level index for query performance
 RaceCodeSchema.index(
   { eventId: 1, pigeonId: 1 },
   { unique: true, sparse: true },
@@ -219,7 +217,6 @@ const LogSchema = new mongoose.Schema({
 LogSchema.index({ createdAt: 1 }, { expireAfterSeconds: 2592000 });
 
 // ===== PIGEON & REGISTRATION SCHEMAS =====
-// === MODIFIED: PigeonSchema with avatarId field added ===
 const PigeonSchema = new mongoose.Schema({
   ringNumber: { type: String, required: true, unique: true },
   ownerId: { type: String, required: true, index: true },
@@ -232,7 +229,6 @@ const PigeonSchema = new mongoose.Schema({
   color: { type: String, default: "" },
   birthYear: { type: Number, min: 1900, max: new Date().getFullYear() },
   photo: { type: String, default: "" },
-  // === NEW: avatarId field for preset profile images ===
   avatarId: { type: String, default: "" },
   status: {
     type: String,
@@ -361,11 +357,6 @@ function getStateIndex(state) {
   return STATE_ORDER.indexOf(state);
 }
 
-/**
- * Generate stickers for all registrations of an event.
- * Called automatically when deadline passes, or manually by admin.
- * Implements retry logic for transient transaction errors (WriteConflict).
- */
 async function generateStickersForEvent(eventId) {
   const MAX_RETRIES = 3;
   let attempt = 0;
@@ -378,7 +369,6 @@ async function generateStickersForEvent(eventId) {
       const event = await Event.findOne({ code: eventId }).session(session);
       if (!event) throw new Error("Event not found");
 
-      // Check if stickers already exist – now using distinct pigeonIds to be safe
       const existingCount = await RaceCode.countDocuments({ eventId }).session(
         session,
       );
@@ -392,7 +382,6 @@ async function generateStickersForEvent(eventId) {
         };
       }
 
-      // Determine if we can generate based on state
       const allowedStates = ["Registration Closed", "Sticker Generated"];
       if (!allowedStates.includes(event.state)) {
         if (event.state === "Draft") {
@@ -411,7 +400,6 @@ async function generateStickersForEvent(eventId) {
             message: "Cannot generate stickers after result verification.",
           };
         }
-        // For Ready for Release, Live Race – allow if no stickers exist
       }
 
       const registrations = await EventRegistration.find({ eventId }).session(
@@ -424,7 +412,6 @@ async function generateStickersForEvent(eventId) {
       }
 
       const generatedCodes = [];
-      // Use a Set to track processed pigeon IDs per player to avoid duplicates
       const processedSet = new Set();
       for (const reg of registrations) {
         const pigeonIds = reg.pigeonIds || [];
@@ -433,7 +420,6 @@ async function generateStickersForEvent(eventId) {
           if (processedSet.has(key)) continue;
           processedSet.add(key);
 
-          // Check if a code already exists for this pigeon and event (shouldn't happen, but safe)
           const existing = await RaceCode.findOne({
             eventId,
             pigeonId: pigeonId.toString(),
@@ -454,19 +440,16 @@ async function generateStickersForEvent(eventId) {
         }
       }
 
-      // Lock registrations
       await EventRegistration.updateMany(
         { eventId },
         { status: "locked", updatedAt: new Date() },
       ).session(session);
 
-      // Update event state to Sticker Generated if not already
       if (event.state !== "Sticker Generated") {
         event.state = "Sticker Generated";
         await event.save({ session });
       }
 
-      // Create log entry – use explicit save to guarantee message field
       const log = new Log({
         message: `Generated ${generatedCodes.length} stickers for event ${event.name || eventId} (${eventId}).`,
       });
@@ -478,7 +461,6 @@ async function generateStickersForEvent(eventId) {
     } catch (error) {
       await session.abortTransaction();
       session.endSession();
-      // If it's a transient transaction error (WriteConflict), retry
       if (
         error.code === 112 ||
         (error.errorLabels &&
@@ -490,11 +472,10 @@ async function generateStickersForEvent(eventId) {
             `WriteConflict in sticker generation for event ${eventId}, retrying in ${delay}ms (attempt ${attempt}/${MAX_RETRIES})`,
           );
           await new Promise((resolve) => setTimeout(resolve, delay));
-          delay *= 2; // exponential backoff
+          delay *= 2;
           continue;
         }
       }
-      // For other errors or if retries exhausted, throw
       console.error("Sticker generation error:", error);
       throw error;
     }
@@ -504,10 +485,6 @@ async function generateStickersForEvent(eventId) {
   );
 }
 
-/**
- * Compute the intended state based on current time and event fields.
- * This function is called periodically (every minute) to update states automatically.
- */
 async function computeTargetState(event, now) {
   const releaseTime = new Date(event.releaseTime);
   const deadline = event.registrationDeadline
@@ -516,30 +493,24 @@ async function computeTargetState(event, now) {
 
   let targetIndex = getStateIndex("Draft");
 
-  // ---- Time-based thresholds ----
-  // Registration Closed: if deadline passed
   if (deadline && now > deadline) {
     targetIndex = Math.max(targetIndex, getStateIndex("Registration Closed"));
   }
 
-  // Ready for Release: 1 minute before release
   const oneMinBefore = new Date(releaseTime.getTime() - 60 * 1000);
   if (now >= oneMinBefore) {
     targetIndex = Math.max(targetIndex, getStateIndex("Ready for Release"));
   }
 
-  // Live Race: at release time
   if (now >= releaseTime) {
     targetIndex = Math.max(targetIndex, getStateIndex("Live Race"));
   }
 
-  // Result Verification: 6 hours after release
   const sixHoursAfter = new Date(releaseTime.getTime() + 6 * 60 * 60 * 1000);
   if (now >= sixHoursAfter) {
     targetIndex = Math.max(targetIndex, getStateIndex("Result Verification"));
   }
 
-  // We must never go backwards – take max of current state index and target
   const currentIndex = getStateIndex(event.state);
   const finalIndex = Math.max(currentIndex, targetIndex);
 
@@ -572,7 +543,6 @@ async function getCurrentTime() {
   } catch (e) {
     // ignore timeout or network errors
   }
-  // fallback to server time
   return new Date();
 }
 
@@ -591,28 +561,22 @@ async function updateAllEventStates() {
         const currentIdx = getStateIndex(event.state);
         const targetIdx = getStateIndex(targetState);
         if (targetIdx > currentIdx) {
-          // If we are transitioning from Registration Open to Registration Closed,
-          // we need to generate stickers and move to Sticker Generated.
           if (
             event.state === "Registration Open" &&
             targetState === "Registration Closed"
           ) {
-            // First set to Registration Closed (briefly)
             event.state = "Registration Closed";
             await event.save();
             await Log.create({
               message: `Event ${event.name} (${event.code}) automatically closed registration.`,
             });
-            // Now generate stickers
             try {
               await generateStickersForEvent(event.code);
-              // State will be set to Sticker Generated inside generateStickersForEvent
             } catch (genErr) {
               console.error("Failed to auto-generate stickers:", genErr);
             }
             updatedCount++;
           } else {
-            // Normal transition
             event.state = targetState;
             await event.save();
             updatedCount++;
@@ -632,8 +596,8 @@ async function updateAllEventStates() {
 }
 
 function startStateUpdater() {
-  updateAllEventStates(); // run immediately
-  setInterval(updateAllEventStates, 60 * 1000); // then every minute
+  updateAllEventStates();
+  setInterval(updateAllEventStates, 60 * 1000);
   console.log("⏰ Automatic state updater started (every minute).");
 }
 
@@ -699,7 +663,6 @@ async function seedDatabase() {
 
 async function migrateEvents() {
   try {
-    // Ensure all events have a state field
     const events = await Event.find({ state: { $exists: false } });
     if (events.length === 0) return;
     console.log(`🔄 Migrating ${events.length} events to new state field...`);
@@ -840,7 +803,7 @@ app.get("/api/time", async (req, res) => {
 // ============================================================
 app.use("/api", authenticateToken);
 
-// ----- Existing routes (with minor extensions) -----
+// ----- Existing routes -----
 app.get("/api/events/active", async (req, res) => {
   try {
     const events = await Event.find({
@@ -863,16 +826,13 @@ app.get("/api/events/all", async (req, res) => {
   }
 });
 
-// ===== FIXED: REGISTRATIONS SUMMARY ENDPOINT =====
 app.get("/api/events/registrations-summary", async (req, res) => {
   try {
-    // Count distinct pigeons that have a RaceCode (i.e., stickers generated)
     const raceCodeSummary = await RaceCode.aggregate([
       {
         $group: {
           _id: "$eventId",
           playerCount: { $addToSet: "$userId" },
-          // Count distinct pigeon IDs per event to avoid duplicates
           pigeonIds: { $addToSet: "$pigeonId" },
         },
       },
@@ -885,7 +845,6 @@ app.get("/api/events/registrations-summary", async (req, res) => {
       },
     ]);
 
-    // Also get player count from EventRegistration for events without stickers yet
     const eventRegSummary = await EventRegistration.aggregate([
       {
         $group: {
@@ -911,13 +870,9 @@ app.get("/api/events/registrations-summary", async (req, res) => {
       const race = raceCodeSummary.find((r) => r.eventId === eventId);
       const reg = eventRegSummary.find((r) => r.eventId === eventId);
 
-      // Player count: prefer RaceCode (stickers generated) else EventRegistration
       const playerCount = race ? race.playerCount : reg ? reg.playerCount : 0;
-      // Pigeon count: use RaceCode distinct pigeons, fallback to EventRegistration if no stickers yet
       let pigeonCount = race ? race.pigeonCount : 0;
       if (!race && reg) {
-        // If no stickers, count pigeons from registrations
-        // We need to get pigeonIds from EventRegistration for this event
         const regDocs = await EventRegistration.find({ eventId });
         const allPigeonIds = regDocs.reduce((acc, doc) => {
           doc.pigeonIds.forEach((pid) => acc.add(pid.toString()));
@@ -936,7 +891,6 @@ app.get("/api/events/registrations-summary", async (req, res) => {
   }
 });
 
-// ===== ENHANCED CLOCK-IN =====
 app.post(
   "/api/clockin",
   clockinLimiter,
@@ -1010,7 +964,6 @@ app.post(
         return res.status(400).json({ error: "Event not found" });
       }
 
-      // Only allow clock-in when state is "Live Race"
       if (event.state !== "Live Race") {
         await RaceCode.updateOne(
           { _id: raceCode._id },
@@ -1224,7 +1177,6 @@ app.post(
 // ============================================================
 //  RESULTS
 // ============================================================
-// === MODIFIED: Added avatarId to populate ===
 app.get("/api/results/:eventCode", async (req, res) => {
   try {
     const event = await Event.findOne({ code: req.params.eventCode });
@@ -1240,7 +1192,6 @@ app.get("/api/results/:eventCode", async (req, res) => {
   }
 });
 
-// === MODIFIED: Added avatarId to projection ===
 app.get("/api/results/:eventCode/pigeons", async (req, res) => {
   try {
     const { eventCode } = req.params;
@@ -1294,7 +1245,6 @@ app.get("/api/results/:eventCode/pigeons", async (req, res) => {
   }
 });
 
-// ===== LOGS =====
 app.get("/api/logs", async (req, res) => {
   try {
     const logs = await Log.find().sort({ _id: -1 }).limit(100);
@@ -1535,7 +1485,6 @@ app.put("/api/events/:code/toggle", requireAdmin, async (req, res) => {
   }
 });
 
-// ===== UPDATE PASSWORD =====
 app.put(
   "/api/users/update-password",
   [
@@ -1586,7 +1535,6 @@ async function isPigeonInActiveEvent(pigeonId) {
   return false;
 }
 
-// === MODIFIED: GET /api/pigeons includes avatarId in projection ===
 app.get("/api/pigeons", async (req, res) => {
   try {
     const { status } = req.query;
@@ -1609,7 +1557,6 @@ app.get("/api/pigeons", async (req, res) => {
   }
 });
 
-// === MODIFIED: POST /api/pigeons accepts avatarId ===
 app.post(
   "/api/pigeons",
   [
@@ -1632,7 +1579,6 @@ app.post(
         `Birth year must be between 1900 and ${new Date().getFullYear()}`,
       ),
     body("photo").optional().isString(),
-    // === NEW: avatarId validation ===
     body("avatarId").optional().isString(),
   ],
   async (req, res) => {
@@ -1662,7 +1608,6 @@ app.post(
         color: color || "",
         birthYear: birthYear || null,
         photo: photo || "",
-        // === NEW: store avatarId ===
         avatarId: avatarId || "",
         status: "Active",
       });
@@ -1694,14 +1639,12 @@ app.get("/api/pigeons/:id", async (req, res) => {
   }
 });
 
-// === MODIFIED: PUT /api/pigeons/:id accepts avatarId and other fields ===
 app.put(
   "/api/pigeons/:id",
   [
     body("nickname").optional().trim().isString(),
     body("color").optional().trim().isString(),
     body("photo").optional().isString(),
-    // === NEW: avatarId and other editable fields ===
     body("avatarId").optional().isString(),
     body("gender")
       .optional()
@@ -1737,7 +1680,6 @@ app.put(
       if (nickname !== undefined) pigeon.nickname = nickname;
       if (color !== undefined) pigeon.color = color;
       if (photo !== undefined) pigeon.photo = photo;
-      // === NEW: update avatarId ===
       if (avatarId !== undefined) pigeon.avatarId = avatarId;
       if (gender !== undefined) pigeon.gender = gender;
       if (birthYear !== undefined) pigeon.birthYear = birthYear;
@@ -1782,7 +1724,7 @@ app.delete("/api/pigeons/:id", async (req, res) => {
 });
 
 // ============================================================
-//  PLAYER SELF-REGISTRATION – FIXED
+//  PLAYER SELF-REGISTRATION
 // ============================================================
 async function validateRegistrationEligibility(
   eventId,
@@ -1811,7 +1753,6 @@ async function validateRegistrationEligibility(
       "One or more pigeons are invalid, inactive, or do not belong to you.",
     );
   }
-  // Additional check: ensure no duplicate pigeon IDs in the request
   if (new Set(pigeonIds).size !== pigeonIds.length) {
     throw new Error("Duplicate pigeon IDs are not allowed.");
   }
@@ -1869,10 +1810,8 @@ app.post(
       const { pigeonIds } = matchedData(req);
       const playerId = req.user.id;
 
-      // Validate eligibility
       await validateRegistrationEligibility(eventId, playerId, pigeonIds);
 
-      // Use atomic findOneAndUpdate with upsert to prevent duplicates
       const registration = await EventRegistration.findOneAndUpdate(
         { eventId, playerId },
         {
@@ -1894,12 +1833,10 @@ app.post(
         },
       );
 
-      // If the document already existed with a different status, check status
       if (
         registration.status !== "draft" &&
         registration.status !== "confirmed"
       ) {
-        // If it's locked or something else, we may want to prevent updates
         if (registration.status === "locked") {
           return res.status(400).json({
             error: "Registration is locked and cannot be modified.",
@@ -2047,7 +1984,6 @@ async function validateRegistrations(eventId, statusFilter = null) {
         playerName: playerName,
         pigeonIds: pigeons.map((p) => p._id || p),
         ringNumbers: pigeons.map((p) => p.ringNumber || "LEGACY"),
-        // === NEW: avatarIds for legacy fallback ===
         avatarIds: pigeons.map((p) => p.avatarId || ""),
         valid: true,
         duplicateRing: false,
@@ -2085,7 +2021,6 @@ async function validateRegistrations(eventId, statusFilter = null) {
       playerName: playerName,
       pigeonIds: pigeons.map((p) => p._id),
       ringNumbers: pigeons.map((p) => p.ringNumber),
-      // === NEW: avatarIds ===
       avatarIds: pigeons.map((p) => p.avatarId || ""),
       valid,
       duplicateRing,
@@ -2096,13 +2031,6 @@ async function validateRegistrations(eventId, statusFilter = null) {
     });
   }
   return results;
-}
-
-async function lockAllRegistrations(eventId) {
-  await EventRegistration.updateMany(
-    { eventId },
-    { status: "locked", updatedAt: new Date() },
-  );
 }
 
 app.get(
@@ -2241,9 +2169,6 @@ app.delete(
   },
 );
 
-// ===== ADMIN MANUAL REGISTRATION REMOVED =====
-// The endpoint POST /api/events/:eventId/register-players has been removed.
-
 // ===== STICKER GENERATION (manual) =====
 app.post(
   "/api/admin/events/:eventId/generate-stickers",
@@ -2273,8 +2198,6 @@ app.post(
   },
 );
 
-// ===== GET ALL RACE CODES FOR AN EVENT =====
-// === MODIFIED: Added avatarId to projection ===
 app.get("/api/admin/events/:eventId/codes", requireAdmin, async (req, res) => {
   try {
     const { eventId } = req.params;
@@ -2313,7 +2236,6 @@ app.get("/api/admin/events/:eventId/codes", requireAdmin, async (req, res) => {
           playerId: { $ifNull: ["$user.id", null] },
           pigeonId: { $ifNull: ["$pigeon._id", null] },
           ringNumber: { $ifNull: ["$pigeon.ringNumber", null] },
-          // === NEW: avatarId ===
           avatarId: { $ifNull: ["$pigeon.avatarId", ""] },
         },
       },
@@ -2326,62 +2248,6 @@ app.get("/api/admin/events/:eventId/codes", requireAdmin, async (req, res) => {
   }
 });
 
-// ===== DEPRECATED: Manual state update – now handled automatically =====
-app.put(
-  "/api/admin/events/:eventId/state",
-  requireAdmin,
-  [
-    body("state")
-      .isIn([
-        "Draft",
-        "Registration Open",
-        "Registration Closed",
-        "Sticker Generated",
-        "Ready for Release",
-        "Live Race",
-        "Result Verification",
-      ])
-      .withMessage("Invalid state."),
-  ],
-  async (req, res) => {
-    try {
-      const errors = validationResult(req);
-      if (!errors.isEmpty()) {
-        return res.status(400).json({ error: errors.array()[0].msg });
-      }
-      const { eventId } = req.params;
-      const { state } = matchedData(req);
-      const event = await Event.findOne({ code: eventId });
-      if (!event) {
-        return res.status(404).json({ error: "Event not found." });
-      }
-
-      if (state === "Registration Open") {
-        if (event.state !== "Draft") {
-          return res.status(400).json({
-            error: `Cannot set state to Registration Open; current state is ${event.state}. Only Draft can be opened.`,
-          });
-        }
-        event.state = "Registration Open";
-        await event.save();
-        await Log.create({
-          message: `Admin manually opened registration for event ${event.name} (${eventId}).`,
-        });
-        return res.json({ success: true, event });
-      }
-
-      return res.status(400).json({
-        error:
-          "Manual state change is not allowed. The system will manage states automatically.",
-      });
-    } catch (error) {
-      console.error("Error updating event state:", error);
-      res.status(500).json({ error: "Failed to update event state." });
-    }
-  },
-);
-
-// ===== NEW: Admin update registration settings (state only) =====
 app.put(
   "/api/admin/events/:eventId/registration-settings",
   requireAdmin,
@@ -2460,7 +2326,6 @@ async function generateCertificateNumber() {
   return `WSC-${year}-${seq}`;
 }
 
-// === MODIFIED: Include avatarId in rankings ===
 async function computePigeonRankings(eventId) {
   const results = await Result.find({ eventId, pigeonId: { $ne: null } })
     .sort({ speedMPM: -1 })
@@ -2543,7 +2408,6 @@ app.post(
   },
 );
 
-// === MODIFIED: Include avatarId in certificate queries ===
 app.get("/api/certificates/player", async (req, res) => {
   try {
     const playerId = req.user.id;
@@ -2602,6 +2466,115 @@ app.get("/api/certificates/verify/:hash", async (req, res) => {
     res.status(500).json({ error: "Verification failed." });
   }
 });
+
+// ============================================================
+//  ADMIN CERTIFICATE MANAGEMENT ENDPOINTS
+// ============================================================
+
+app.get("/api/admin/certificates", requireAdmin, async (req, res) => {
+  try {
+    const {
+      eventId,
+      playerId,
+      pigeonId,
+      search,
+      limit = 100,
+      skip = 0,
+    } = req.query;
+
+    const filter = {};
+    if (eventId) filter.eventId = eventId;
+    if (playerId) filter.playerId = playerId;
+    if (pigeonId) filter.pigeonId = pigeonId;
+
+    let searchFilter = {};
+    if (search) {
+      const searchRegex = new RegExp(search, "i");
+      searchFilter = { certificateNumber: searchRegex };
+    }
+
+    const query = { ...filter, ...searchFilter };
+
+    const certs = await Certificate.find(query)
+      .populate("eventId", "name releaseTime code")
+      .populate("playerId", "id name")
+      .populate("pigeonId", "ringNumber nickname avatarId")
+      .sort({ issueDate: -1 })
+      .skip(parseInt(skip))
+      .limit(parseInt(limit))
+      .lean();
+
+    let results = certs;
+    if (search && !searchFilter.certificateNumber) {
+      const allCerts = await Certificate.find(filter)
+        .populate("eventId", "name releaseTime code")
+        .populate("playerId", "id name")
+        .populate("pigeonId", "ringNumber nickname avatarId")
+        .lean();
+
+      const searchRegex = new RegExp(search, "i");
+      results = allCerts.filter((cert) => {
+        const playerName = cert.playerId ? cert.playerId.name : "";
+        const certNumber = cert.certificateNumber || "";
+        const pigeonRing = cert.pigeonId ? cert.pigeonId.ringNumber : "";
+        const eventName = cert.eventId ? cert.eventId.name : "";
+        return (
+          searchRegex.test(playerName) ||
+          searchRegex.test(certNumber) ||
+          searchRegex.test(pigeonRing) ||
+          searchRegex.test(eventName)
+        );
+      });
+      results = results.slice(parseInt(skip), parseInt(skip) + parseInt(limit));
+    }
+
+    const total = await Certificate.countDocuments(query);
+
+    res.json({
+      success: true,
+      certificates: results,
+      total,
+      skip: parseInt(skip),
+      limit: parseInt(limit),
+    });
+  } catch (error) {
+    console.error("Admin certificates error:", error);
+    res.status(500).json({ error: "Failed to fetch certificates." });
+  }
+});
+
+app.get("/api/admin/certificates/events", requireAdmin, async (req, res) => {
+  try {
+    const eventIds = await Certificate.distinct("eventId");
+    const events = await Event.find({ code: { $in: eventIds } })
+      .select("code name releaseTime state")
+      .sort({ releaseTime: -1 });
+    res.json({ success: true, events });
+  } catch (error) {
+    console.error("Admin certificates events error:", error);
+    res.status(500).json({ error: "Failed to fetch events." });
+  }
+});
+
+app.get(
+  "/api/admin/certificates/:certificateId/reprint",
+  requireAdmin,
+  async (req, res) => {
+    try {
+      const cert = await Certificate.findOne({ _id: req.params.certificateId })
+        .populate("eventId", "name releaseTime code lat lng")
+        .populate("playerId", "id name")
+        .populate("pigeonId", "ringNumber nickname avatarId");
+      if (!cert) {
+        return res.status(404).json({ error: "Certificate not found." });
+      }
+      res.json({ success: true, certificate: cert });
+    } catch (error) {
+      console.error("Certificate reprint error:", error);
+      res.status(500).json({ error: "Failed to fetch certificate." });
+    }
+  },
+);
 
 // ============================================================
 //  EXTENDED PLAYER & PIGEON STATS
@@ -2757,7 +2730,6 @@ app.get("/api/users/player/:id/stats", authenticateToken, async (req, res) => {
         speed: fastestResult.speedMPM,
         pigeonName: pigeon ? pigeon.nickname || pigeon.ringNumber : "Unknown",
         ringNumber: pigeon ? pigeon.ringNumber : "Unknown",
-        // === NEW: include avatarId ===
         avatarId: pigeon ? pigeon.avatarId : "",
       };
     } else {
@@ -2815,7 +2787,6 @@ app.get("/api/users/player/:id/stats", authenticateToken, async (req, res) => {
   }
 });
 
-// === MODIFIED: Include avatarId in pigeon stats ===
 app.get("/api/pigeons/:id/stats", async (req, res) => {
   try {
     const pigeonId = req.params.id;

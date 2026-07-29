@@ -741,6 +741,13 @@
           >
             <i class="fas fa-tags"></i> Sticker Generator
           </li>
+          <li
+            onclick="app.navigate('admin-certificates')"
+            id="nav-admin-certificates"
+            class="admin-only hidden"
+          >
+            <i class="fas fa-award"></i> Manage Certificates
+          </li>
         </ul>
         <div class="sidebar-footer" onclick="app.logout()">
           <i class="fas fa-sign-out-alt"></i> Log Out
@@ -1872,6 +1879,61 @@
         </div>
         <!-- /content-area -->
       </main>
+    </div>
+
+    <!-- ===== ADMIN CERTIFICATES ===== -->
+    <div id="view-admin-certificates" class="view-section hidden admin-only">
+      <div class="card">
+        <div class="dashboard-header">
+          <h2><i class="fas fa-award"></i> Manage Certificates</h2>
+          <span style="font-size: 14px; color: var(--text-muted)">
+            Total: <strong id="admin-cert-total-count">0</strong>
+          </span>
+        </div>
+
+        <div
+          style="
+            display: flex;
+            flex-wrap: wrap;
+            gap: 12px;
+            margin-bottom: 16px;
+            align-items: center;
+          "
+        >
+          <div style="flex: 1; min-width: 200px">
+            <input
+              type="text"
+              id="admin-cert-search"
+              class="form-control"
+              placeholder="🔍 Search by player, pigeon, event, or certificate #"
+              oninput="app.loadAdminCertificates()"
+            />
+          </div>
+          <div style="min-width: 180px">
+            <select
+              id="admin-cert-event-filter"
+              class="form-control"
+              onchange="app.loadAdminCertificates()"
+            >
+              <option value="">All Events</option>
+            </select>
+          </div>
+          <button
+            class="btn btn-secondary"
+            onclick="app.loadAdminCertificates()"
+          >
+            <i class="fas fa-sync-alt"></i> Refresh
+          </button>
+        </div>
+
+        <div id="admin-certificates-list" style="min-height: 200px">
+          <p
+            style="text-align: center; color: var(--text-muted); padding: 40px"
+          >
+            Loading certificates...
+          </p>
+        </div>
+      </div>
     </div>
 
     <!-- ===== MODALS ===== -->

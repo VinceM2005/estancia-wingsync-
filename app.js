@@ -1,10 +1,8 @@
-// app.js – full file with button protection + PIGEON AVATAR SYSTEM (Image Asset Version)
+// app.js – full file with button protection + PIGEON AVATAR SYSTEM (Image Asset Version) + Certificate System
 // ===== API Configuration =====
 const API_URL = "https://estancia-wingsync-backend.onrender.com/api";
 
-// ===== PIGEON AVATAR LIBRARY (=== UPDATED: Now uses image paths ===) =====
-// Each avatar now points to a PNG image in /assets/pigeon-profiles/
-// The id matches the filename: pigeon001 → pigeon-001.png
+// ===== PIGEON AVATAR LIBRARY =====
 const PIGEON_AVATARS = [
   {
     id: "pigeon001",
@@ -108,18 +106,14 @@ const PIGEON_AVATARS = [
   },
 ];
 
-// ===== Helper: Get avatar HTML (image or fallback SVG) =====
-// (=== UPDATED: Now returns an <img> tag instead of SVG ===)
 function getPigeonAvatarSVG(avatarId, size = 80) {
   const avatar = PIGEON_AVATARS.find((a) => a.id === avatarId);
   if (!avatar) {
     return getDefaultPigeonSVG(size);
   }
-  // Return image tag with the static asset
   return `<img src="${avatar.image}" alt="${avatar.name}" style="width:${size}px;height:${size}px;object-fit:cover;border-radius:50%;display:block;background:#f0ece8;">`;
 }
 
-// ===== Fallback: Default pigeon avatar (SVG) - UNCHANGED =====
 function getDefaultPigeonSVG(size = 80) {
   return `<svg width="${size}" height="${size}" viewBox="0 0 80 80" xmlns="http://www.w3.org/2000/svg">
     <rect width="80" height="80" rx="12" fill="#e8e0d8"/>
@@ -136,14 +130,11 @@ function getDefaultPigeonSVG(size = 80) {
   </svg>`;
 }
 
-// ===== Helper: Get avatar preview HTML for selector grid =====
-// (=== NEW: Helper function for avatar grid preview ===)
 function getAvatarPreviewHTML(avatar, size = 52) {
   if (!avatar) return getDefaultPigeonSVG(size);
   return `<img src="${avatar.image}" alt="${avatar.name}" style="width:${size}px;height:${size}px;object-fit:cover;border-radius:50%;display:block;background:#f0ece8;">`;
 }
 
-// ===== Helper: Fetch with Authorization Header =====
 function fetchWithAuth(url, options = {}) {
   const token = sessionStorage.getItem("wingsync_token");
   const headers = {
@@ -167,7 +158,6 @@ function fetchWithAuth(url, options = {}) {
   });
 }
 
-// ===== Helper: Convert decimal hours to HH:MM:SS =====
 function formatFlightHours(hours) {
   const totalSeconds = Math.floor(parseFloat(hours) * 3600);
   const h = Math.floor(totalSeconds / 3600);
@@ -176,13 +166,11 @@ function formatFlightHours(hours) {
   return `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`;
 }
 
-// ===== Helper: Safely parse numeric values =====
 function toNumber(value) {
   const num = parseFloat(value);
   return isNaN(num) ? 0 : num;
 }
 
-// ===== Maps Variables =====
 let playerMap, playerMarker, eventMap, eventMarker;
 let selectedPlayerLat = null,
   selectedPlayerLng = null;
@@ -195,7 +183,6 @@ let selectedEditPlayerLat = null,
 const defaultLat = 13.415;
 const defaultLng = 123.635;
 
-// ===== Helper: Parse coordinate string =====
 function parseCoordinates(input) {
   const trimmed = input.trim();
   const match = trimmed.match(/^([-+]?\d+\.\d+)\s*,\s*([-+]?\d+\.\d+)$/);
@@ -209,7 +196,6 @@ function parseCoordinates(input) {
   return null;
 }
 
-// ===== Create Google Map =====
 function createGoogleMap(
   containerId,
   searchBoxId,
@@ -346,7 +332,6 @@ function createGoogleMap(
   return map;
 }
 
-// ===== Set Marker =====
 function setMarker(mapType, lat, lng, map, coordsTextId, place = null) {
   if (lat < -90 || lat > 90 || lng < -180 || lng > 180) {
     app.showModal({
@@ -458,12 +443,11 @@ const app = {
   _pigeonRefreshInterval: null,
   _currentCert: null,
 
-  // === NEW: QR Scanner Tracking ===
   _qrScannerInstance: null,
   _isScanning: false,
 
-  // === NEW: Admin stats refresh interval ===
   _adminStatsInterval: null,
+  _adminCertRefreshInterval: null,
 
   init() {
     this.loadTheme();
@@ -481,7 +465,6 @@ const app = {
     this.initStickerGenerator();
   },
 
-  // ===== CLEANUP QR SCANNER =====
   cleanupScanner() {
     console.log("[QR Scanner] Cleaning up scanner instance...");
     if (this._qrScannerInstance) {
@@ -506,7 +489,6 @@ const app = {
     this._isScanning = false;
   },
 
-  // ---------- QR SCANNER with Zoom & Focus (FIXED IMPLEMENTATION) ----------
   openQRScanner() {
     if (typeof Html5Qrcode === "undefined") {
       console.error("[QR Scanner] Html5Qrcode library not loaded.");
@@ -555,7 +537,6 @@ const app = {
         </div>
         <div id="qr-reader-results" style="margin-top: 12px; font-size: 14px; color: #333; text-align:center; min-height: 24px;"></div>
 
-        <!-- Zoom Controls -->
         <div style="display: flex; align-items: center; gap: 8px; margin-top: 8px; flex-wrap: wrap;">
           <label style="font-size:13px; font-weight:600; color:#333;">Zoom:</label>
           <input type="range" id="zoom-slider" min="0.5" max="5.0" step="0.1" value="1.0" style="flex:1; min-width:100px;">
@@ -563,7 +544,6 @@ const app = {
           <button id="reset-zoom-btn" class="btn btn-sm btn-secondary" style="padding:4px 12px; font-size:12px;">⟲ Reset</button>
         </div>
 
-        <!-- Flashlight button -->
         <button id="flashlight-btn" class="btn btn-secondary" style="margin-top:8px; width:100%; justify-content:center;">
           <i class="fas fa-lightbulb"></i> <span id="flash-status">Toggle Flash</span>
         </button>
@@ -880,7 +860,7 @@ const app = {
       });
   },
 
-  // ===== STICKER GENERATOR (full original implementation) =====
+  // ===== STICKER GENERATOR =====
   initStickerGenerator() {
     const state = {
       stickers: [],
@@ -1559,7 +1539,6 @@ const app = {
     }
   },
 
-  // ===== VISIBILITY LISTENER =====
   setupVisibilityListener() {
     document.addEventListener("visibilitychange", () => {
       if (!document.hidden) {
@@ -1579,13 +1558,14 @@ const app = {
           } else if (id === "view-pigeons") this.loadPigeons();
           else if (id === "view-entries") this.loadOpenEvents();
           else if (id === "view-certificates") this.loadCertificates();
+          else if (id === "view-admin-certificates")
+            this.loadAdminCertificates();
         }
         this.updateClockDisplay();
       }
     });
   },
 
-  // ===== SERVER TIME SYNC =====
   syncServerTime() {
     const clientTime = Date.now();
     fetchWithAuth(`${API_URL}/time`)
@@ -1643,7 +1623,6 @@ const app = {
     clockElement.textContent = timeStr;
   },
 
-  // ===== CUSTOM MODAL =====
   showModal(options) {
     const existingModal = document.getElementById("custom-modal");
     if (existingModal) existingModal.remove();
@@ -1805,7 +1784,6 @@ const app = {
     return modal;
   },
 
-  // ===== AUTH =====
   login() {
     const id = document.getElementById("login-id").value;
     const pass = document.getElementById("login-pass").value;
@@ -1872,6 +1850,10 @@ const app = {
       clearInterval(this._adminStatsInterval);
       this._adminStatsInterval = null;
     }
+    if (this._adminCertRefreshInterval) {
+      clearInterval(this._adminCertRefreshInterval);
+      this._adminCertRefreshInterval = null;
+    }
     this.cleanupScanner();
     this.currentUser = null;
     sessionStorage.removeItem("wingsync_user");
@@ -1893,10 +1875,21 @@ const app = {
       playerEls.forEach((el) => el.classList.add("hidden"));
       document.getElementById("player-clock-in-area").classList.add("hidden");
       document.getElementById("player-stats-container").classList.add("hidden");
-      // Show admin stats
       document
         .getElementById("admin-stats-container")
         .classList.remove("hidden");
+
+      // Start admin certificate refresh
+      if (this._adminCertRefreshInterval)
+        clearInterval(this._adminCertRefreshInterval);
+      this._adminCertRefreshInterval = setInterval(() => {
+        const currentView = document.querySelector(
+          ".view-section:not(.hidden)",
+        );
+        if (currentView && currentView.id === "view-admin-certificates") {
+          this.loadAdminCertificates();
+        }
+      }, 60000);
     } else {
       adminEls.forEach((el) => el.classList.add("hidden"));
       playerEls.forEach((el) => el.classList.remove("hidden"));
@@ -1916,13 +1909,12 @@ const app = {
     this.loadProfile();
     this.fetchAllEvents();
 
-    // Load admin stats if admin
     if (this.currentUser.role === "admin") {
       this.loadAdminStats();
+      this.loadAdminCertificates();
     }
   },
 
-  // === Fetch all events and update lookup ===
   fetchAllEvents() {
     return fetchWithAuth(`${API_URL}/events/all`)
       .then((res) => {
@@ -1939,6 +1931,7 @@ const app = {
         this._lastEventsFetch = Date.now();
         this.populateReviewSelector();
         this.populateStickerSelector(events);
+        this._populateAdminCertEventFilter();
       })
       .catch((err) => {
         console.error("Failed to fetch events for lookup:", err);
@@ -1947,7 +1940,6 @@ const app = {
       });
   },
 
-  // === Fetch registration counts ===
   fetchRegistrationCounts() {
     return fetchWithAuth(`${API_URL}/events/registrations-summary`)
       .then((res) => {
@@ -1967,7 +1959,6 @@ const app = {
       });
   },
 
-  // ===== NAVIGATE =====
   navigate(view) {
     this.stopAutoRefresh();
     if (this._profileStatsInterval) {
@@ -1996,6 +1987,10 @@ const app = {
     if (view === "dashboard") this.renderDashboard();
     if (view === "admin-players") this.renderPlayers();
     if (view === "admin-events") this.renderEvents();
+    if (view === "admin-certificates") {
+      this.loadAdminCertificates();
+      this._populateAdminCertEventFilter();
+    }
     if (view === "results") this.initResultsView();
     if (view === "logs") this.renderLogs();
     if (view === "profile") {
@@ -2014,7 +2009,6 @@ const app = {
           }
         }, 30000);
       } else {
-        // Admin
         this.loadAdminStats();
         this._adminStatsInterval = setInterval(() => {
           const currentView = document.querySelector(
@@ -2115,7 +2109,6 @@ const app = {
     }
   },
 
-  // ===== DASHBOARD =====
   renderDashboard() {
     Promise.all([
       fetchWithAuth(`${API_URL}/events/active`).then((res) => {
@@ -2233,7 +2226,6 @@ const app = {
       });
   },
 
-  // ===== CLOCK IN =====
   clockIn() {
     const code = document.getElementById("clock-in-code").value.trim();
     if (!code) {
@@ -2308,7 +2300,6 @@ const app = {
       });
   },
 
-  // ===== PROFILE =====
   loadProfile() {
     document.getElementById("prof-name").innerText = this.currentUser.name;
     document.getElementById("prof-id").innerText = this.currentUser.id;
@@ -2378,9 +2369,7 @@ const app = {
       });
   },
 
-  // ===== NEW: Admin Stats Loader =====
   loadAdminStats() {
-    // Fetch players and events in parallel
     Promise.all([
       fetchWithAuth(`${API_URL}/users/players`).then((res) => {
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
@@ -2398,7 +2387,6 @@ const app = {
         const totalPlayers = players.length;
         const totalEvents = events.length;
 
-        // Count open and closed events based on state
         const openStates = [
           "Registration Open",
           "Registration Closed",
@@ -2417,7 +2405,6 @@ const app = {
           } else if (closedStates.includes(state)) {
             closedEvents++;
           }
-          // Draft events are not counted as open or closed
         });
 
         document.getElementById("admin-total-players").textContent =
@@ -2491,7 +2478,6 @@ const app = {
       });
   },
 
-  // ===== RESULTS =====
   initResultsView() {
     this.fetchAllEvents()
       .then(() => this.fetchRegistrationCounts())
@@ -2726,7 +2712,6 @@ const app = {
         ? `${highestSpeed.speedMPM.toFixed(2)} <span class="unit">m/min</span>`
         : '— <span class="unit">m/min</span>';
 
-      // === MODIFIED: Render results with pigeon avatars ===
       safeResults.forEach((r, i) => {
         const tr = document.createElement("tr");
 
@@ -2850,7 +2835,6 @@ const app = {
       '— <span class="unit">m/min</span>';
   },
 
-  // ===== LOGS =====
   renderLogs() {
     fetchWithAuth(`${API_URL}/logs`)
       .then((res) => {
@@ -2897,7 +2881,6 @@ const app = {
       });
   },
 
-  // ===== PLAYERS CRUD =====
   renderPlayers() {
     fetchWithAuth(`${API_URL}/users/players`)
       .then((res) => {
@@ -3255,7 +3238,6 @@ const app = {
       });
   },
 
-  // ===== EVENTS CRUD (Admin) =====
   renderEvents() {
     fetchWithAuth(`${API_URL}/events/all`)
       .then((res) => {
@@ -3361,7 +3343,6 @@ const app = {
     });
   },
 
-  // ===== Manage Registration Modal =====
   openManageRegistrationModal(eventCode) {
     const event = this.eventLookup[eventCode];
     if (!event) {
@@ -3819,7 +3800,7 @@ const app = {
   },
 
   // ============================================================
-  //  PIGEON MANAGEMENT (UPDATED with Avatar Image System)
+  //  PIGEON MANAGEMENT
   // ============================================================
   openPigeonModal(pigeonId = null) {
     const modal = document.getElementById("modal-pigeon");
@@ -3866,9 +3847,6 @@ const app = {
     }
   },
 
-  // ============================================================
-  //  PIGEON AVATAR SELECTOR METHODS (=== UPDATED: Now uses images ===)
-  // ============================================================
   renderAvatarGrid(selectedId) {
     const container = document.getElementById("avatar-grid-container");
     if (!container) return;
@@ -3936,9 +3914,6 @@ const app = {
     previewContainer.innerHTML = getDefaultPigeonSVG(80);
   },
 
-  // ============================================================
-  //  SAVE PIGEON (UPDATED with avatarId)
-  // ============================================================
   savePigeon() {
     const id = document.getElementById("pigeon-id").value;
     const ringNumber = document
@@ -4011,9 +3986,6 @@ const app = {
       });
   },
 
-  // ============================================================
-  //  LOAD PIGEONS (UPDATED with avatars)
-  // ============================================================
   loadPigeons() {
     fetchWithAuth(`${API_URL}/pigeons`)
       .then((res) => res.json())
@@ -4086,9 +4058,6 @@ const app = {
       });
   },
 
-  // ============================================================
-  //  VIEW PIGEON STATS (UPDATED with avatar)
-  // ============================================================
   viewPigeonStats(id) {
     fetchWithAuth(`${API_URL}/pigeons/${id}/stats`)
       .then((res) => res.json())
@@ -4124,10 +4093,6 @@ const app = {
         });
       });
   },
-
-  // ============================================================
-  //  SELF-REGISTRATION & ENTRIES
-  // ============================================================
 
   loadOpenEvents() {
     fetchWithAuth(`${API_URL}/events/open`)
@@ -4501,7 +4466,7 @@ const app = {
   },
 
   // ============================================================
-  //  CERTIFICATES (UPDATED with avatars)
+  //  CERTIFICATES (ENHANCED)
   // ============================================================
 
   loadCertificates() {
@@ -4549,46 +4514,16 @@ const app = {
       });
   },
 
-  viewCertificate(certId) {
+  viewCertificate: function (certId) {
     fetchWithAuth(`${API_URL}/certificates/${certId}`)
       .then((res) => res.json())
       .then((cert) => {
-        const container = document.getElementById("certificate-detail");
-        const rankLabel =
-          cert.rank === 1
-            ? "🥇 Champion"
-            : cert.rank === 2
-              ? "🥈 Second"
-              : cert.rank === 3
-                ? "🥉 Third"
-                : "🏅 Participation";
-        const avatarId = cert.pigeonId?.avatarId || "";
-        const avatarHTML = avatarId
-          ? getPigeonAvatarSVG(avatarId, 64)
-          : getDefaultPigeonSVG(64);
-        container.innerHTML = `
-          <div style="text-align:center; padding:12px; border:2px solid #2a7a62; border-radius:8px; background:#f9f9f9;">
-            <div style="display:flex;align-items:center;justify-content:center;gap:12px;margin-bottom:8px;">
-              <span style="width:72px;height:72px;display:inline-block;border-radius:50%;overflow:hidden;border:2px solid #2a7a62;">${avatarHTML}</span>
-              <div>
-                <h2 style="margin:0;">🏆 Certificate of Achievement</h2>
-                <h3 style="margin:4px 0;">${cert.certificateNumber}</h3>
-              </div>
-            </div>
-            <p><strong>Player:</strong> ${cert.playerId ? cert.playerId.name : "N/A"}</p>
-            <p><strong>Pigeon:</strong> ${cert.pigeonId ? cert.pigeonId.ringNumber : "N/A"} (${cert.pigeonId ? cert.pigeonId.nickname : ""})</p>
-            <p><strong>Event:</strong> ${cert.eventId ? cert.eventId.name : "Unknown"}</p>
-            <p><strong>Rank:</strong> ${rankLabel}</p>
-            <p><strong>Speed:</strong> ${cert.speed.toFixed(2)} m/min</p>
-            <p><strong>Distance:</strong> ${cert.distance.toFixed(2)} km</p>
-            <p><strong>Issue Date:</strong> ${new Date(cert.issueDate).toLocaleDateString()}</p>
-            <p><small>QR Verification: ${cert.qrHash ? "✅" : "N/A"}</small></p>
-          </div>
-        `;
-        document.getElementById("modal-certificate").classList.add("show");
         this._currentCert = cert;
+        this._renderCertificateDetail(cert);
+        document.getElementById("modal-certificate").classList.add("show");
       })
       .catch((err) => {
+        console.error("Certificate load error:", err);
         this.showModal({
           title: "Error",
           message: "Failed to load certificate.",
@@ -4598,19 +4533,255 @@ const app = {
       });
   },
 
-  printCertificate() {
+  _renderCertificateDetail: function (cert) {
+    const container = document.getElementById("certificate-detail");
+
+    let rankLabel, rankClass, rankEmoji;
+    if (cert.rank === 1) {
+      rankLabel = "CHAMPION";
+      rankClass = "gold";
+      rankEmoji = "🥇";
+    } else if (cert.rank === 2) {
+      rankLabel = "2ND PLACE";
+      rankClass = "silver";
+      rankEmoji = "🥈";
+    } else if (cert.rank === 3) {
+      rankLabel = "3RD PLACE";
+      rankClass = "bronze";
+      rankEmoji = "🥉";
+    } else {
+      rankLabel = "PARTICIPANT";
+      rankClass = "participant";
+      rankEmoji = "🏅";
+    }
+
+    const avatarId = cert.pigeonId?.avatarId || "";
+    const avatarHTML = avatarId
+      ? getPigeonAvatarSVG(avatarId, 80)
+      : getDefaultPigeonSVG(80);
+
+    const issueDate = new Date(cert.issueDate);
+    const formattedDate = issueDate.toLocaleDateString("en-PH", {
+      year: "numeric",
+      month: "long",
+      day: "numeric",
+    });
+
+    const releaseDate = cert.eventId?.releaseTime
+      ? new Date(cert.eventId.releaseTime)
+      : null;
+    const releaseDateStr = releaseDate
+      ? releaseDate.toLocaleDateString("en-PH", {
+          year: "numeric",
+          month: "long",
+          day: "numeric",
+        })
+      : "N/A";
+
+    const pigeonName = cert.pigeonId?.nickname || "No nickname";
+    const ringNumber = cert.pigeonId?.ringNumber || "N/A";
+    const playerName = cert.playerId?.name || "Unknown Player";
+    const eventName = cert.eventId?.name || "Unknown Event";
+
+    const baseUrl = window.location.origin;
+    const verifyUrl = `${baseUrl}/verify/${cert.qrHash || ""}`;
+
+    container.innerHTML = `
+      <div class="certificate-preview-wrapper">
+        <div class="certificate-preview-header">
+          <div class="certificate-club-badge">
+            <span>🕊️ MRPC</span>
+            <small>Malinao Racing Pigeon Club</small>
+          </div>
+          <div class="certificate-preview-title">
+            <span class="rank-badge ${rankClass}">${rankEmoji} ${rankLabel}</span>
+            <h2>Certificate of Achievement</h2>
+            <p>${cert.certificateNumber}</p>
+          </div>
+        </div>
+        
+        <div class="certificate-preview-body">
+          <div class="certificate-recipient">
+            <span class="label">Presented to</span>
+            <span class="name">${playerName}</span>
+          </div>
+          
+          <div class="certificate-pigeon-display">
+            <div class="certificate-pigeon-avatar-large">
+              ${avatarHTML}
+            </div>
+            <div class="certificate-pigeon-info-large">
+              <span class="ring">${ringNumber}</span>
+              <span class="nickname">${pigeonName}</span>
+            </div>
+          </div>
+          
+          <div class="certificate-details-grid">
+            <div class="detail-item">
+              <span class="detail-label">Event</span>
+              <span class="detail-value">${eventName}</span>
+            </div>
+            <div class="detail-item">
+              <span class="detail-label">Release Date</span>
+              <span class="detail-value">${releaseDateStr}</span>
+            </div>
+            <div class="detail-item">
+              <span class="detail-label">Air Distance</span>
+              <span class="detail-value">${cert.distance.toFixed(2)} km</span>
+            </div>
+            <div class="detail-item">
+              <span class="detail-label">Speed</span>
+              <span class="detail-value">${cert.speed.toFixed(2)} m/min</span>
+            </div>
+            <div class="detail-item">
+              <span class="detail-label">Rank</span>
+              <span class="detail-value">#${cert.rank}</span>
+            </div>
+            <div class="detail-item">
+              <span class="detail-label">Issue Date</span>
+              <span class="detail-value">${formattedDate}</span>
+            </div>
+          </div>
+          
+          <div class="certificate-signatories">
+            <div class="signatory">
+              <span class="signature-line"></span>
+              <span class="signatory-name">Ash Cargullo</span>
+              <span class="signatory-title">Club Vice-President</span>
+            </div>
+            <div class="signatory">
+              <span class="signature-line"></span>
+              <span class="signatory-name">Vincent Macauyam</span>
+              <span class="signatory-title">Club President</span>
+            </div>
+          </div>
+          
+          <div class="certificate-verification">
+            <div class="certificate-qr-code" id="cert-qr-container">
+              <div style="width:80px;height:80px;background:#f0f0f0;border-radius:4px;display:flex;align-items:center;justify-content:center;font-size:10px;color:#999;">
+                <span id="qr-placeholder">QR</span>
+              </div>
+            </div>
+            <div class="certificate-verify-info">
+              <strong>Verify at:</strong> <span class="verify-url">${verifyUrl}</span>
+              <br>
+              <small>Certificate #${cert.certificateNumber}</small>
+            </div>
+          </div>
+        </div>
+      </div>
+    `;
+
+    this._generateQRCodeForCert(verifyUrl);
+
+    const isAdmin = this.currentUser?.role === "admin";
+    const existingButtons = container.querySelector(".certificate-actions");
+    if (existingButtons) existingButtons.remove();
+
+    const actionsDiv = document.createElement("div");
+    actionsDiv.className = "certificate-actions";
+    actionsDiv.style.cssText =
+      "display:flex;gap:8px;margin-top:16px;flex-wrap:wrap;";
+
+    const printBtn = document.createElement("button");
+    printBtn.className = "btn btn-primary";
+    printBtn.innerHTML = '<i class="fas fa-print"></i> Print';
+    printBtn.onclick = () => this.printCertificate();
+    actionsDiv.appendChild(printBtn);
+
+    const pdfBtn = document.createElement("button");
+    pdfBtn.className = "btn btn-success";
+    pdfBtn.innerHTML = '<i class="fas fa-file-pdf"></i> Download PDF';
+    pdfBtn.onclick = () => this.downloadCertificatePDF();
+    actionsDiv.appendChild(pdfBtn);
+
+    if (isAdmin) {
+      const reprintBtn = document.createElement("button");
+      reprintBtn.className = "btn btn-secondary";
+      reprintBtn.innerHTML = '<i class="fas fa-print"></i> Reprint for Admin';
+      reprintBtn.onclick = () => {
+        this.printCertificate();
+      };
+      actionsDiv.appendChild(reprintBtn);
+    }
+
+    container.appendChild(actionsDiv);
+  },
+
+  _generateQRCodeForCert: function (text) {
+    const container = document.getElementById("cert-qr-container");
+    if (!container) return;
+
+    try {
+      if (typeof QRCode === "undefined") {
+        console.warn("QRCode library not loaded");
+        return;
+      }
+
+      container.innerHTML = "";
+      const qrDiv = document.createElement("div");
+      qrDiv.id = "qr-code-element";
+      container.appendChild(qrDiv);
+
+      new QRCode(qrDiv, {
+        text: text,
+        width: 80,
+        height: 80,
+        colorDark: "#000000",
+        colorLight: "#ffffff",
+        correctLevel: QRCode.CorrectLevel.H,
+      });
+    } catch (e) {
+      console.warn("QR generation failed:", e);
+      container.innerHTML = `<div style="width:80px;height:80px;background:#f0f0f0;border-radius:4px;display:flex;align-items:center;justify-content:center;font-size:10px;color:#999;">QR</div>`;
+    }
+  },
+
+  printCertificate: function () {
     const content = document.getElementById("certificate-detail").innerHTML;
     const win = window.open("", "_blank");
     win.document.write(`
-      <html><head><title>Certificate</title>
-      <style>body { font-family: Arial, sans-serif; padding:20px; }</style>
-      </head><body>${content}</body></html>
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <title>Certificate - WingSync</title>
+        <link rel="stylesheet" href="style.css?v=4">
+        <style>
+          body { margin: 0; padding: 20px; background: #fff; }
+          .certificate-preview-wrapper { max-width: 820px; margin: 0 auto; }
+          .certificate-actions { display: none !important; }
+          .certificate-preview-header { text-align: center; margin-bottom: 20px; }
+          .certificate-preview-body { padding: 20px; }
+          .certificate-pigeon-display { display: flex; align-items: center; justify-content: center; gap: 20px; margin: 20px 0; }
+          .certificate-details-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px; max-width: 600px; margin: 20px auto; padding: 20px; background: #faf8f6; border-radius: 10px; }
+          .certificate-signatories { display: flex; justify-content: center; gap: 80px; margin: 30px 0; }
+          .signatory { text-align: center; }
+          .signature-line { display: block; width: 150px; border-bottom: 2px solid #1a2a33; margin: 0 auto 8px; }
+          .certificate-verification { display: flex; align-items: center; justify-content: center; gap: 20px; margin-top: 20px; padding: 16px; background: #faf8f6; border-radius: 8px; }
+          .rank-badge { display: inline-block; padding: 4px 20px; border-radius: 30px; font-size: 14px; font-weight: 700; letter-spacing: 1px; text-transform: uppercase; margin: 6px auto 14px; }
+          .rank-badge.gold { background: linear-gradient(135deg, #fef9e7, #fdf2d0); color: #b8860b; border: 1px solid #d4a017; }
+          .rank-badge.silver { background: linear-gradient(135deg, #f4f4f4, #e8e8e8); color: #6a6a6a; border: 1px solid #b0b0b0; }
+          .rank-badge.bronze { background: linear-gradient(135deg, #fdf2e6, #fce8d6); color: #a0522d; border: 1px solid #cd7f32; }
+          .rank-badge.participant { background: linear-gradient(135deg, #e8f5e9, #d4edda); color: #1e7a4a; border: 1px solid #2a7a62; }
+          @media print {
+            body { padding: 0; }
+            .certificate-actions { display: none !important; }
+            .rank-badge { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
+          }
+        </style>
+      </head>
+      <body>
+        ${content}
+        <script>
+          window.onload = function() { window.print(); }
+        <\/script>
+      </body>
+      </html>
     `);
     win.document.close();
-    win.print();
   },
 
-  downloadCertificatePDF() {
+  downloadCertificatePDF: function () {
     if (!this._currentCert) {
       this.showModal({
         title: "Error",
@@ -4620,34 +4791,337 @@ const app = {
       });
       return;
     }
+
+    this._generateCertificatePDF(this._currentCert);
+  },
+
+  _generateCertificatePDF: function (cert) {
+    this.showModal({
+      title: "Generating PDF",
+      message: "Please wait while your certificate is being prepared...",
+      icon: "⏳",
+      iconColor: "#2a7a62",
+      showButton: false,
+    });
+
+    const certElement = document.querySelector(
+      "#certificate-detail .certificate-preview-wrapper",
+    );
+
+    if (typeof html2canvas !== "undefined" && certElement) {
+      html2canvas(certElement, {
+        scale: 2,
+        backgroundColor: "#ffffff",
+        logging: false,
+        allowTaint: true,
+        useCORS: true,
+        width: 820,
+        height: 1100,
+      })
+        .then((canvas) => {
+          document.getElementById("custom-modal")?.remove();
+          this._canvasToPDF(canvas);
+        })
+        .catch((err) => {
+          console.error("html2canvas error:", err);
+          document.getElementById("custom-modal")?.remove();
+          this._fallbackPDF(cert);
+        });
+    } else {
+      this._fallbackPDF(cert);
+    }
+  },
+
+  _canvasToPDF: function (canvas) {
+    const { jsPDF } = window.jspdf;
+    const imgData = canvas.toDataURL("image/png");
+    const doc = new jsPDF("p", "mm", "a4");
+    const imgWidth = 210;
+    const imgHeight = (canvas.height * imgWidth) / canvas.width;
+    doc.addImage(imgData, "PNG", 0, 0, imgWidth, imgHeight);
+    const cert = this._currentCert;
+    doc.save(`certificate_${cert.certificateNumber}.pdf`);
+    document.getElementById("custom-modal")?.remove();
+    this.showModal({
+      title: "✅ PDF Downloaded",
+      message: `Certificate ${cert.certificateNumber} has been downloaded.`,
+      icon: "✅",
+      iconColor: "#27ae60",
+    });
+  },
+
+  _fallbackPDF: function (cert) {
     const { jsPDF } = window.jspdf;
     const doc = new jsPDF("p", "mm", "a4");
-    const cert = this._currentCert;
-    doc.setFontSize(18);
-    doc.text("Certificate of Achievement", 105, 30, { align: "center" });
+    const certData = this._prepareCertData(cert);
+
+    doc.setFillColor(255, 255, 255);
+    doc.rect(0, 0, 210, 297, "F");
+    doc.setDrawColor(201, 168, 76);
+    doc.setLineWidth(1.5);
+    doc.rect(10, 10, 190, 277);
+
+    doc.setFontSize(22);
+    doc.setTextColor(26, 42, 51);
+    doc.text("CERTIFICATE OF ACHIEVEMENT", 105, 40, { align: "center" });
+
+    doc.setFontSize(16);
+    const rankColor =
+      cert.rank === 1
+        ? "#b8860b"
+        : cert.rank === 2
+          ? "#a8a8a8"
+          : cert.rank === 3
+            ? "#cd7f32"
+            : "#2a7a62";
+    doc.setTextColor(rankColor);
+    doc.text(certData.rankLabel, 105, 60, { align: "center" });
+
     doc.setFontSize(14);
-    doc.text(cert.certificateNumber, 105, 45, { align: "center" });
+    doc.setTextColor(26, 42, 51);
+    doc.text("Presented to", 105, 85, { align: "center" });
+    doc.setFontSize(26);
+    doc.text(certData.playerName, 105, 108, { align: "center" });
+
     doc.setFontSize(12);
-    doc.text(`Player: ${cert.playerId ? cert.playerId.name : "N/A"}`, 20, 70);
-    doc.text(
-      `Pigeon: ${cert.pigeonId ? cert.pigeonId.ringNumber : "N/A"}`,
-      20,
-      85,
-    );
-    doc.text(`Event: ${cert.eventId ? cert.eventId.name : "Unknown"}`, 20, 100);
-    doc.text(
-      `Rank: ${cert.rank === 1 ? "Champion" : cert.rank === 2 ? "Second" : cert.rank === 3 ? "Third" : "Participation"}`,
-      20,
-      115,
-    );
-    doc.text(`Speed: ${cert.speed.toFixed(2)} m/min`, 20, 130);
-    doc.text(`Distance: ${cert.distance.toFixed(2)} km`, 20, 145);
-    doc.text(
-      `Issue Date: ${new Date(cert.issueDate).toLocaleDateString()}`,
-      20,
-      160,
-    );
+    doc.setTextColor(91, 111, 130);
+    doc.text("Pigeon:", 60, 135);
+    doc.setFontSize(16);
+    doc.setTextColor(26, 42, 51);
+    doc.text(certData.ringNumber + " - " + certData.pigeonNickname, 110, 135);
+
+    doc.setFontSize(11);
+    doc.setTextColor(26, 42, 51);
+    doc.text(`Event: ${certData.eventName}`, 40, 175);
+    doc.text(`Distance: ${certData.distance} km`, 40, 188);
+    doc.text(`Speed: ${certData.speed} m/min`, 40, 201);
+    doc.text(`Rank: #${cert.rank}`, 40, 214);
+
+    doc.setFontSize(10);
+    doc.setTextColor(138, 154, 168);
+    doc.text(`Issued: ${certData.issueDate}`, 105, 270, { align: "center" });
+    doc.text(`Certificate: ${cert.certificateNumber}`, 105, 282, {
+      align: "center",
+    });
+
     doc.save(`certificate_${cert.certificateNumber}.pdf`);
+    document.getElementById("custom-modal")?.remove();
+    this.showModal({
+      title: "✅ PDF Downloaded",
+      message: `Certificate ${cert.certificateNumber} has been downloaded.`,
+      icon: "✅",
+      iconColor: "#27ae60",
+    });
+  },
+
+  _prepareCertData: function (cert) {
+    let rankLabel;
+    if (cert.rank === 1) rankLabel = "CHAMPION";
+    else if (cert.rank === 2) rankLabel = "2ND PLACE";
+    else if (cert.rank === 3) rankLabel = "3RD PLACE";
+    else rankLabel = "PARTICIPANT";
+
+    const issueDate = new Date(cert.issueDate);
+    return {
+      playerName: cert.playerId?.name || "Unknown Player",
+      pigeonNickname: cert.pigeonId?.nickname || "No nickname",
+      ringNumber: cert.pigeonId?.ringNumber || "N/A",
+      eventName: cert.eventId?.name || "Unknown Event",
+      distance: cert.distance.toFixed(2),
+      speed: cert.speed.toFixed(2),
+      rank: cert.rank,
+      rankLabel: rankLabel,
+      issueDate: issueDate.toLocaleDateString("en-PH", {
+        year: "numeric",
+        month: "long",
+        day: "numeric",
+      }),
+      certificateNumber: cert.certificateNumber,
+    };
+  },
+
+  // ============================================================
+  //  ADMIN CERTIFICATE MANAGEMENT
+  // ============================================================
+
+  loadAdminCertificates: async function () {
+    const container = document.getElementById("admin-certificates-list");
+    const searchTerm =
+      document.getElementById("admin-cert-search")?.value || "";
+    const eventFilter =
+      document.getElementById("admin-cert-event-filter")?.value || "";
+
+    container.innerHTML = `<div style="text-align:center;padding:20px;color:var(--text-muted);">Loading certificates...</div>`;
+
+    try {
+      let url = `${API_URL}/admin/certificates?limit=200`;
+      if (eventFilter) url += `&eventId=${eventFilter}`;
+      if (searchTerm) url += `&search=${encodeURIComponent(searchTerm)}`;
+
+      const res = await fetchWithAuth(url);
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const data = await res.json();
+
+      const certs = data.certificates || [];
+      const total = data.total || 0;
+
+      document.getElementById("admin-cert-total-count").textContent = total;
+
+      if (certs.length === 0) {
+        container.innerHTML = `<div style="text-align:center;padding:40px;color:var(--text-muted);">
+          <i class="fas fa-award" style="font-size:48px;display:block;margin-bottom:12px;"></i>
+          <p>No certificates found. Generate certificates from Event Review.</p>
+        </div>`;
+        return;
+      }
+
+      let html = `<div style="overflow-x:auto;"><table style="width:100%;font-size:13px;">
+        <thead><tr>
+          <th>Certificate #</th>
+          <th>Player</th>
+          <th>Pigeon</th>
+          <th>Event</th>
+          <th>Rank</th>
+          <th>Speed (m/min)</th>
+          <th>Issued</th>
+          <th>Actions</th>
+        </tr></thead><tbody>`;
+
+      certs.forEach((c) => {
+        const rankEmoji =
+          c.rank === 1
+            ? "🥇"
+            : c.rank === 2
+              ? "🥈"
+              : c.rank === 3
+                ? "🥉"
+                : "🏅";
+        const rankLabel =
+          c.rank === 1
+            ? "Champion"
+            : c.rank === 2
+              ? "2nd"
+              : c.rank === 3
+                ? "3rd"
+                : `#${c.rank}`;
+        const avatarId = c.pigeonId?.avatarId || "";
+        const avatarHTML = avatarId
+          ? getPigeonAvatarSVG(avatarId, 24)
+          : getDefaultPigeonSVG(24);
+        const issueDate = new Date(c.issueDate).toLocaleDateString();
+
+        html += `<tr>
+          <td><strong>${c.certificateNumber}</strong></td>
+          <td>${c.playerId?.name || "Unknown"}</td>
+          <td>
+            <div style="display:flex;align-items:center;gap:6px;">
+              <span style="width:28px;height:28px;display:inline-block;border-radius:50%;overflow:hidden;flex-shrink:0;">${avatarHTML}</span>
+              ${c.pigeonId?.ringNumber || "N/A"}
+            </div>
+          </td>
+          <td>${c.eventId?.name || "Unknown"}</td>
+          <td>${rankEmoji} ${rankLabel}</td>
+          <td>${c.speed.toFixed(2)}</td>
+          <td>${issueDate}</td>
+          <td>
+            <button class="btn btn-sm btn-primary" onclick="app.viewAdminCertificate('${c._id}')"><i class="fas fa-eye"></i></button>
+            <button class="btn btn-sm btn-secondary" onclick="app.reprintCertificate('${c._id}')"><i class="fas fa-print"></i></button>
+            <button class="btn btn-sm btn-success" onclick="app.downloadAdminCertificate('${c._id}')"><i class="fas fa-file-pdf"></i></button>
+          </td>
+        </tr>`;
+      });
+
+      html += `</tbody></table></div>`;
+      container.innerHTML = html;
+
+      this._populateAdminCertEventFilter();
+    } catch (err) {
+      console.error("Load admin certificates error:", err);
+      container.innerHTML = `<p style="color:red;">Failed to load certificates.</p>`;
+    }
+  },
+
+  _populateAdminCertEventFilter: async function () {
+    const select = document.getElementById("admin-cert-event-filter");
+    if (!select) return;
+    const current = select.value;
+
+    try {
+      const res = await fetchWithAuth(`${API_URL}/admin/certificates/events`);
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const data = await res.json();
+      const events = data.events || [];
+
+      select.innerHTML = `<option value="">All Events</option>`;
+      events.forEach((e) => {
+        const opt = document.createElement("option");
+        opt.value = e.code;
+        opt.textContent = `${e.name} (${e.code})`;
+        select.appendChild(opt);
+      });
+      if (current) select.value = current;
+    } catch (err) {
+      console.error("Failed to load certificate events:", err);
+    }
+  },
+
+  viewAdminCertificate: async function (certId) {
+    try {
+      const res = await fetchWithAuth(`${API_URL}/certificates/${certId}`);
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const cert = await res.json();
+      this._currentCert = cert;
+      this._renderCertificateDetail(cert);
+      document.getElementById("modal-certificate").classList.add("show");
+    } catch (err) {
+      console.error("View admin certificate error:", err);
+      this.showModal({
+        title: "Error",
+        message: "Failed to load certificate.",
+        icon: "❌",
+        iconColor: "#c0392b",
+      });
+    }
+  },
+
+  reprintCertificate: async function (certId) {
+    try {
+      const res = await fetchWithAuth(
+        `${API_URL}/admin/certificates/${certId}/reprint`,
+      );
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const data = await res.json();
+      this._currentCert = data.certificate;
+      this._renderCertificateDetail(data.certificate);
+      document.getElementById("modal-certificate").classList.add("show");
+      setTimeout(() => this.printCertificate(), 500);
+    } catch (err) {
+      console.error("Reprint error:", err);
+      this.showModal({
+        title: "Error",
+        message: "Failed to reprint certificate.",
+        icon: "❌",
+        iconColor: "#c0392b",
+      });
+    }
+  },
+
+  downloadAdminCertificate: async function (certId) {
+    try {
+      const res = await fetchWithAuth(`${API_URL}/certificates/${certId}`);
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const cert = await res.json();
+      this._currentCert = cert;
+      await this._generateCertificatePDF(cert);
+    } catch (err) {
+      console.error("Download admin certificate error:", err);
+      this.showModal({
+        title: "Error",
+        message: "Failed to download certificate.",
+        icon: "❌",
+        iconColor: "#c0392b",
+      });
+    }
   },
 
   // ============================================================
