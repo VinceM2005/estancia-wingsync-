@@ -1435,12 +1435,16 @@ const app = {
     if (current) select.value = current;
   },
 
+  // ============================================================
+  //  ADMIN EVENT REVIEW – UPDATED with Certificate Generation
+  // ============================================================
   loadAdminReview: async function () {
     const select = document.getElementById("review-event-select");
     const eventCode = select ? select.value : "";
+    const container = document.getElementById("review-results");
+
     if (!eventCode) {
-      document.getElementById("review-results").innerHTML =
-        "<p>Select an event to review registrations.</p>";
+      container.innerHTML = "<p>Select an event to review registrations.</p>";
       return;
     }
 
@@ -1451,24 +1455,67 @@ const app = {
       if (!res.ok) throw new Error("Failed to fetch registrations");
       const data = await res.json();
       const registrations = data.registrations || [];
+      const eventData = data.event || {};
 
+      // Determine if certificates can be generated
+      const isResultVerification = eventData.state === "Result Verification";
+      const certsGenerated = eventData.certificatesGenerated || false;
+      const canGenerate = isResultVerification && !certsGenerated;
+
+      // Build the HTML
       let html = `
-      <div style="overflow-x:auto; margin-top:12px;">
-        <table class="review-table" style="width:100%; font-size:14px;">
-          <thead>
-            <tr>
-              <th>Player</th>
-              <th>Pigeons</th>
-              <th>Status</th>
-              <th>Valid</th>
-              <th>Actions</th>
-            </tr>
-          </thead>
-          <tbody>
-    `;
+        <div style="margin: 12px 0 16px; padding: 12px 16px; background: var(--bg); border-radius: 8px; border-left: 4px solid ${isResultVerification ? '#27ae60' : '#e67e22'};">
+          <div style="display: flex; flex-wrap: wrap; align-items: center; gap: 12px 24px;">
+            <div>
+              <span style="font-weight: 600;">Event State:</span>
+              <span style="font-weight: 700; color: ${isResultVerification ? '#27ae60' : '#e67e22'};">
+                ${eventData.state || 'Unknown'}
+              </span>
+              ${isResultVerification ? ' ✅' : ''}
+            </div>
+            <div>
+              <span style="font-weight: 600;">Certificates:</span>
+              <span style="font-weight: 700; color: ${certsGenerated ? '#27ae60' : '#e67e22'};">
+                ${certsGenerated ? '✅ Generated' : 'Not Generated'}
+              </span>
+            </div>
+            ${canGenerate ? `
+              <button class="btn btn-success" onclick="app.generateCertificatesForEvent('${eventCode}')" style="margin-left: auto; padding: 8px 24px;">
+                <i class="fas fa-file-certificate"></i> Generate Certificates
+              </button>
+            ` : ''}
+            ${isResultVerification && certsGenerated ? `
+              <span style="margin-left: auto; font-size: 13px; color: var(--text-muted);">
+                <i class="fas fa-check-circle" style="color: #27ae60;"></i> Certificates already generated
+              </span>
+            ` : ''}
+            ${!isResultVerification ? `
+              <span style="margin-left: auto; font-size: 13px; color: var(--text-muted);">
+                <i class="fas fa-info-circle"></i> Event must be in <strong>Result Verification</strong> to generate certificates
+              </span>
+            ` : ''}
+          </div>
+        </div>
+      `;
+
+      // Registrations table
+      html += `
+        <div style="overflow-x:auto; margin-top: 12px;">
+          <table class="review-table" style="width:100%; font-size:14px;">
+            <thead>
+              <tr>
+                <th>Player</th>
+                <th>Pigeons</th>
+                <th>Status</th>
+                <th>Valid</th>
+                <th>Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+      `;
 
       if (registrations.length === 0) {
-        html += `<tr><td colspan="5" style="text-align:center; color:#999;">No registrations yet.</td></tr>`;
+        html += `<tr><td colspan="5" style="text-align:center; color:#999; padding:20px;">No registrations yet.</td></tr>`;
       } else {
         for (const reg of registrations) {
           const validClass = reg.valid ? "badge-valid" : "badge-invalid";
@@ -1492,24 +1539,99 @@ const app = {
             pigeonList = reg.ringNumbers ? reg.ringNumbers.join(", ") : "N/A";
           }
           html += `
-          <tr>
-            <td>${reg.playerName}</td>
-            <td>${pigeonList}</td>
-            <td>${reg.status}</td>
-            <td><span class="${validClass}">${reg.valid ? "✅" : "❌"}</span></td>
-            <td>
-              ${!reg.valid ? `<button class="btn btn-sm btn-danger" onclick="app.removeRegistration('${eventCode}', '${reg.playerId}')">Remove</button>` : ""}
-            </td>
-          </tr>
-        `;
+            <tr>
+              <td>${reg.playerName}</td>
+              <td>${pigeonList}</td>
+              <td>${reg.status}</td>
+              <td><span class="${validClass}">${reg.valid ? "✅" : "❌"}</span></td>
+              <td>
+                ${!reg.valid ? `<button class="btn btn-sm btn-danger" onclick="app.removeRegistration('${eventCode}', '${reg.playerId}')">Remove</button>` : ""}
+              </td>
+            </tr>
+          `;
         }
       }
       html += `</tbody></table></div>`;
-      document.getElementById("review-results").innerHTML = html;
+      container.innerHTML = html;
     } catch (err) {
       console.error("Load admin review error:", err);
-      document.getElementById("review-results").innerHTML =
-        `<p style="color:red;">Failed to load registrations.</p>`;
+      container.innerHTML = `<p style="color:red;">Failed to load registrations.</p>`;
+    }
+  },
+
+  // ============================================================
+  //  CERTIFICATE GENERATION (NEW)
+  // ============================================================
+  generateCertificatesForEvent: async function (eventCode) {
+    if (!eventCode) {
+      this.showModal({
+        title: "Error",
+        message: "No event selected.",
+        icon: "❌",
+        iconColor: "#c0392b",
+      });
+      return;
+    }
+
+    // Confirm with user
+    if (!confirm(`Generate certificates for event ${eventCode}? This will create certificates for all pigeons with results.`)) {
+      return;
+    }
+
+    // Show loading
+    const button = document.querySelector(`button[onclick*="generateCertificatesForEvent('${eventCode}')"]`);
+    if (button) {
+      button.disabled = true;
+      button.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Generating...';
+    }
+
+    try {
+      const res = await fetchWithAuth(
+        `${API_URL}/admin/events/${eventCode}/generate-certificates`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+        }
+      );
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        throw new Error(data.error || "Failed to generate certificates");
+      }
+
+      this.showModal({
+        title: "✅ Certificates Generated",
+        message: `Successfully generated ${data.count || 'certificates'} for event ${eventCode}.`,
+        icon: "✅",
+        iconColor: "#27ae60",
+      });
+
+      // Refresh the admin review view
+      this.loadAdminReview();
+
+      // Refresh the admin certificates view if it's visible
+      const certView = document.getElementById("view-admin-certificates");
+      if (certView && !certView.classList.contains("hidden")) {
+        this.loadAdminCertificates();
+      }
+
+      // Also refresh the event lookup
+      this.fetchAllEvents();
+
+    } catch (err) {
+      console.error("Certificate generation error:", err);
+      this.showModal({
+        title: "Generation Failed",
+        message: err.message || "Unable to generate certificates. Please check that the event has results and is in Result Verification state.",
+        icon: "❌",
+        iconColor: "#c0392b",
+      });
+    } finally {
+      if (button) {
+        button.disabled = false;
+        button.innerHTML = '<i class="fas fa-file-certificate"></i> Generate Certificates';
+      }
     }
   },
 
@@ -1560,6 +1682,7 @@ const app = {
           else if (id === "view-certificates") this.loadCertificates();
           else if (id === "view-admin-certificates")
             this.loadAdminCertificates();
+          else if (id === "view-event-review") this.loadAdminReview();
         }
         this.updateClockDisplay();
       }
@@ -1879,7 +2002,6 @@ const app = {
         .getElementById("admin-stats-container")
         .classList.remove("hidden");
 
-      // Start admin certificate refresh
       if (this._adminCertRefreshInterval)
         clearInterval(this._adminCertRefreshInterval);
       this._adminCertRefreshInterval = setInterval(() => {
