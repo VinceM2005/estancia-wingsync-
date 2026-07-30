@@ -106,14 +106,6 @@ const PIGEON_AVATARS = [
   },
 ];
 
-function getPigeonAvatarSVG(avatarId, size = 80) {
-  const avatar = PIGEON_AVATARS.find((a) => a.id === avatarId);
-  if (!avatar) {
-    return getDefaultPigeonSVG(size);
-  }
-  return `<img src="${avatar.image}" alt="${avatar.name}" style="width:${size}px;height:${size}px;object-fit:cover;border-radius:50%;display:block;background:#f0ece8;">`;
-}
-
 function getDefaultPigeonSVG(size = 80) {
   return `<svg width="${size}" height="${size}" viewBox="0 0 80 80" xmlns="http://www.w3.org/2000/svg">
     <rect width="80" height="80" rx="12" fill="#e8e0d8"/>
@@ -128,6 +120,23 @@ function getDefaultPigeonSVG(size = 80) {
     <circle cx="40" cy="55" r="11" fill="#a8b8c8"/>
     <path d="M30 52 Q40 58 50 52" stroke="#6a7a8a" stroke-width="1" fill="none"/>
   </svg>`;
+}
+
+// FIX: Add fallback data URI for missing avatar images
+function getDefaultPigeonSVGDataUri(size = 80) {
+  const svg = getDefaultPigeonSVG(size);
+  const trimmed = svg.replace(/\s+/g, " ").trim();
+  const base64 = btoa(trimmed);
+  return `data:image/svg+xml;base64,${base64}`;
+}
+
+function getPigeonAvatarSVG(avatarId, size = 80) {
+  const avatar = PIGEON_AVATARS.find((a) => a.id === avatarId);
+  if (!avatar) {
+    return getDefaultPigeonSVG(size);
+  }
+  const defaultDataUri = getDefaultPigeonSVGDataUri(size);
+  return `<img src="${avatar.image}" alt="${avatar.name}" style="width:${size}px;height:${size}px;object-fit:cover;border-radius:50%;display:block;background:#f0ece8;" onerror="this.onerror=null;this.src='${defaultDataUri}';">`;
 }
 
 function getAvatarPreviewHTML(avatar, size = 52) {
@@ -455,6 +464,16 @@ const app = {
     this.syncServerTime();
     setInterval(() => this.syncServerTime(), 30000);
 
+    // Check if we're on a certificate verification route
+    const path = window.location.pathname;
+    if (path.startsWith("/verify/")) {
+      const hash = path.substring(8); // remove '/verify/'
+      if (hash) {
+        this.showVerificationView(hash);
+        return; // don't process login
+      }
+    }
+
     const sessionStr = sessionStorage.getItem("wingsync_user");
     const token = sessionStorage.getItem("wingsync_token");
     if (sessionStr && token) {
@@ -463,6 +482,71 @@ const app = {
     }
 
     this.initStickerGenerator();
+  },
+
+  // ===== NEW: Certificate Verification View =====
+  showVerificationView: async function (hash) {
+    // Hide login, show app, but only the verification view
+    document.getElementById("login-screen").classList.add("hidden");
+    document.getElementById("app-screen").classList.remove("hidden");
+    document.getElementById("header-user").innerText =
+      "Certificate Verification";
+
+    // Hide all sidebar items except logout
+    document
+      .querySelectorAll(".sidebar-menu li")
+      .forEach((li) => (li.style.display = "none"));
+    document.querySelector(".sidebar-footer").style.display = "block";
+
+    // Show only the verification view
+    document
+      .querySelectorAll(".view-section")
+      .forEach((el) => el.classList.add("hidden"));
+    const verifyView = document.getElementById("view-certificate-verify");
+    if (verifyView) verifyView.classList.remove("hidden");
+
+    try {
+      const res = await fetch(`${API_URL}/certificates/verify/${hash}`);
+      if (!res.ok) throw new Error("Certificate not found");
+      const data = await res.json();
+      this._renderVerificationResult(data);
+    } catch (err) {
+      document.getElementById("cert-verify-result").innerHTML = `
+        <p style="color: red; font-size: 18px;">❌ ${err.message || "Invalid or expired certificate."}</p>
+      `;
+    }
+  },
+
+  _renderVerificationResult: function (data) {
+    const container = document.getElementById("cert-verify-result");
+    if (!container) return;
+    container.innerHTML = `
+      <div style="max-width: 600px; margin: 0 auto; padding: 20px; background: var(--card-bg); border-radius: 12px; border: 1px solid var(--border);">
+        <div style="text-align: center; margin-bottom: 16px;">
+          <span style="font-size: 48px;">✅</span>
+          <h2 style="color: var(--primary);">Valid Certificate</h2>
+        </div>
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px 16px; margin: 12px 0;">
+          <div><strong>Certificate #</strong></div>
+          <div>${data.certificateNumber}</div>
+          <div><strong>Player</strong></div>
+          <div>${data.player}</div>
+          <div><strong>Pigeon</strong></div>
+          <div>${data.pigeon}</div>
+          <div><strong>Event</strong></div>
+          <div>${data.event}</div>
+          <div><strong>Rank</strong></div>
+          <div>#${data.rank}</div>
+          <div><strong>Speed</strong></div>
+          <div>${data.speed.toFixed(2)} m/min</div>
+          <div><strong>Issue Date</strong></div>
+          <div>${new Date(data.issueDate).toLocaleDateString()}</div>
+        </div>
+        <div style="text-align: center; margin-top: 16px; font-size: 14px; color: var(--text-muted);">
+          This certificate is digitally verified and authentic.
+        </div>
+      </div>
+    `;
   },
 
   cleanupScanner() {

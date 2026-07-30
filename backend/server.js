@@ -420,9 +420,10 @@ async function generateStickersForEvent(eventId) {
           if (processedSet.has(key)) continue;
           processedSet.add(key);
 
+          // FIX: null check for pigeonId before calling toString()
           const existing = await RaceCode.findOne({
             eventId,
-            pigeonId: pigeonId.toString(),
+            pigeonId: pigeonId ? pigeonId.toString() : null,
           }).session(session);
           if (existing) continue;
 
@@ -433,7 +434,7 @@ async function generateStickersForEvent(eventId) {
             code,
             status: "unused",
             registrationId: reg._id,
-            pigeonId,
+            pigeonId: pigeonId || null,
           });
           await raceCode.save({ session });
           generatedCodes.push({ playerId: reg.playerId, pigeonId, code });
@@ -1003,7 +1004,8 @@ app.post(
           session.endSession();
           return res.status(400).json({ error: "Registration is not locked." });
         }
-        if (!raceCode.pigeonId.startsWith("LEGACY_")) {
+        // FIX: null check for pigeonId before calling startsWith
+        if (raceCode.pigeonId && !raceCode.pigeonId.startsWith("LEGACY_")) {
           const pigeon = await Pigeon.findOne({
             _id: raceCode.pigeonId,
             ownerId: userId,
@@ -2408,13 +2410,39 @@ app.post(
   },
 );
 
+// ============================================================
+//  CERTIFICATE ENDPOINTS (FIXED: enriched with event & player names)
+// ============================================================
+
 app.get("/api/certificates/player", async (req, res) => {
   try {
     const playerId = req.user.id;
-    const certs = await Certificate.find({ playerId })
-      .populate("eventId", "name releaseTime")
+    let certs = await Certificate.find({ playerId })
       .populate("pigeonId", "ringNumber nickname color avatarId")
-      .sort({ issueDate: -1 });
+      .sort({ issueDate: -1 })
+      .lean();
+
+    // Enrich with event and player names
+    const eventIds = [...new Set(certs.map((c) => c.eventId))];
+    const events = await Event.find({ code: { $in: eventIds } })
+      .select("code name")
+      .lean();
+    const eventMap = {};
+    events.forEach((e) => (eventMap[e.code] = e));
+
+    const playerIds = [...new Set(certs.map((c) => c.playerId))];
+    const users = await User.find({ id: { $in: playerIds } })
+      .select("id name")
+      .lean();
+    const userMap = {};
+    users.forEach((u) => (userMap[u.id] = u));
+
+    certs = certs.map((c) => ({
+      ...c,
+      eventId: eventMap[c.eventId] || { name: "Unknown" },
+      playerId: userMap[c.playerId] || { name: "Unknown" },
+    }));
+
     res.json(certs);
   } catch (error) {
     console.error("Error fetching player certificates:", error);
@@ -2424,16 +2452,29 @@ app.get("/api/certificates/player", async (req, res) => {
 
 app.get("/api/certificates/:certificateId", async (req, res) => {
   try {
-    const cert = await Certificate.findOne({ _id: req.params.certificateId })
-      .populate("eventId", "name releaseTime lat lng")
-      .populate("playerId", "id name")
-      .populate("pigeonId", "ringNumber nickname avatarId");
+    let cert = await Certificate.findOne({ _id: req.params.certificateId })
+      .populate("pigeonId", "ringNumber nickname avatarId")
+      .lean();
+
     if (!cert) {
       return res.status(404).json({ error: "Certificate not found." });
     }
-    if (req.user.id !== cert.playerId.id && req.user.role !== "admin") {
+
+    if (req.user.id !== cert.playerId && req.user.role !== "admin") {
       return res.status(403).json({ error: "Access denied." });
     }
+
+    // Enrich event and player
+    const event = await Event.findOne({ code: cert.eventId })
+      .select("name releaseTime lat lng")
+      .lean();
+    const player = await User.findOne({ id: cert.playerId })
+      .select("id name")
+      .lean();
+
+    cert.eventId = event || { name: "Unknown Event" };
+    cert.playerId = player || { id: cert.playerId, name: "Unknown" };
+
     res.json(cert);
   } catch (error) {
     console.error("Error fetching certificate:", error);
@@ -2468,7 +2509,7 @@ app.get("/api/certificates/verify/:hash", async (req, res) => {
 });
 
 // ============================================================
-//  ADMIN CERTIFICATE MANAGEMENT ENDPOINTS
+//  ADMIN CERTIFICATE MANAGEMENT (FIXED: enriched with event & player names)
 // ============================================================
 
 app.get("/api/admin/certificates", requireAdmin, async (req, res) => {
@@ -2495,29 +2536,46 @@ app.get("/api/admin/certificates", requireAdmin, async (req, res) => {
 
     const query = { ...filter, ...searchFilter };
 
-    const certs = await Certificate.find(query)
-      .populate("eventId", "name releaseTime code")
-      .populate("playerId", "id name")
+    let certs = await Certificate.find(query)
       .populate("pigeonId", "ringNumber nickname avatarId")
       .sort({ issueDate: -1 })
       .skip(parseInt(skip))
       .limit(parseInt(limit))
       .lean();
 
+    // Enrich with event and player names
+    const eventIds = [...new Set(certs.map((c) => c.eventId))];
+    const events = await Event.find({ code: { $in: eventIds } })
+      .select("code name releaseTime")
+      .lean();
+    const eventMap = {};
+    events.forEach((e) => (eventMap[e.code] = e));
+
+    const playerIds = [...new Set(certs.map((c) => c.playerId))];
+    const users = await User.find({ id: { $in: playerIds } })
+      .select("id name")
+      .lean();
+    const userMap = {};
+    users.forEach((u) => (userMap[u.id] = u));
+
+    certs = certs.map((c) => ({
+      ...c,
+      eventId: eventMap[c.eventId] || {
+        name: "Unknown Event",
+        code: c.eventId,
+      },
+      playerId: userMap[c.playerId] || { id: c.playerId, name: "Unknown" },
+    }));
+
+    // If search was by name, filter again because we didn't filter by player/event name in DB
     let results = certs;
     if (search && !searchFilter.certificateNumber) {
-      const allCerts = await Certificate.find(filter)
-        .populate("eventId", "name releaseTime code")
-        .populate("playerId", "id name")
-        .populate("pigeonId", "ringNumber nickname avatarId")
-        .lean();
-
       const searchRegex = new RegExp(search, "i");
-      results = allCerts.filter((cert) => {
-        const playerName = cert.playerId ? cert.playerId.name : "";
-        const certNumber = cert.certificateNumber || "";
-        const pigeonRing = cert.pigeonId ? cert.pigeonId.ringNumber : "";
-        const eventName = cert.eventId ? cert.eventId.name : "";
+      results = certs.filter((c) => {
+        const playerName = c.playerId?.name || "";
+        const certNumber = c.certificateNumber || "";
+        const pigeonRing = c.pigeonId?.ringNumber || "";
+        const eventName = c.eventId?.name || "";
         return (
           searchRegex.test(playerName) ||
           searchRegex.test(certNumber) ||
@@ -2525,7 +2583,7 @@ app.get("/api/admin/certificates", requireAdmin, async (req, res) => {
           searchRegex.test(eventName)
         );
       });
-      results = results.slice(parseInt(skip), parseInt(skip) + parseInt(limit));
+      results = results.slice(0, parseInt(limit));
     }
 
     const total = await Certificate.countDocuments(query);
@@ -2561,13 +2619,23 @@ app.get(
   requireAdmin,
   async (req, res) => {
     try {
-      const cert = await Certificate.findOne({ _id: req.params.certificateId })
-        .populate("eventId", "name releaseTime code lat lng")
-        .populate("playerId", "id name")
-        .populate("pigeonId", "ringNumber nickname avatarId");
+      let cert = await Certificate.findOne({ _id: req.params.certificateId })
+        .populate("pigeonId", "ringNumber nickname avatarId")
+        .lean();
       if (!cert) {
         return res.status(404).json({ error: "Certificate not found." });
       }
+
+      const event = await Event.findOne({ code: cert.eventId })
+        .select("name releaseTime code lat lng")
+        .lean();
+      const player = await User.findOne({ id: cert.playerId })
+        .select("id name")
+        .lean();
+
+      cert.eventId = event || { name: "Unknown Event" };
+      cert.playerId = player || { id: cert.playerId, name: "Unknown" };
+
       res.json({ success: true, certificate: cert });
     } catch (error) {
       console.error("Certificate reprint error:", error);
