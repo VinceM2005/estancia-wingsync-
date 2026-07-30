@@ -122,7 +122,6 @@ function getDefaultPigeonSVG(size = 80) {
   </svg>`;
 }
 
-// FIX: Add fallback data URI for missing avatar images
 function getDefaultPigeonSVGDataUri(size = 80) {
   const svg = getDefaultPigeonSVG(size);
   const trimmed = svg.replace(/\s+/g, " ").trim();
@@ -136,7 +135,6 @@ function getPigeonAvatarSVG(avatarId, size = 80) {
     return getDefaultPigeonSVG(size);
   }
   const defaultDataUri = getDefaultPigeonSVGDataUri(size);
-  // For certificate, we want a clean image with object-fit cover
   return `<img src="${avatar.image}" alt="${avatar.name}" style="width:${size}px;height:${size}px;object-fit:cover;border-radius:50%;display:block;background:#f0ece8;" onerror="this.onerror=null;this.src='${defaultDataUri}';">`;
 }
 
@@ -465,13 +463,12 @@ const app = {
     this.syncServerTime();
     setInterval(() => this.syncServerTime(), 30000);
 
-    // Check if we're on a certificate verification route
     const path = window.location.pathname;
     if (path.startsWith("/verify/")) {
-      const hash = path.substring(8); // remove '/verify/'
+      const hash = path.substring(8);
       if (hash) {
         this.showVerificationView(hash);
-        return; // don't process login
+        return;
       }
     }
 
@@ -485,21 +482,17 @@ const app = {
     this.initStickerGenerator();
   },
 
-  // ===== NEW: Certificate Verification View =====
   showVerificationView: async function (hash) {
-    // Hide login, show app, but only the verification view
     document.getElementById("login-screen").classList.add("hidden");
     document.getElementById("app-screen").classList.remove("hidden");
     document.getElementById("header-user").innerText =
       "Certificate Verification";
 
-    // Hide all sidebar items except logout
     document
       .querySelectorAll(".sidebar-menu li")
       .forEach((li) => (li.style.display = "none"));
     document.querySelector(".sidebar-footer").style.display = "block";
 
-    // Show only the verification view
     document
       .querySelectorAll(".view-section")
       .forEach((el) => el.classList.add("hidden"));
@@ -528,20 +521,13 @@ const app = {
           <h2 style="color: var(--primary);">Valid Certificate</h2>
         </div>
         <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px 16px; margin: 12px 0;">
-          <div><strong>Certificate #</strong></div>
-          <div>${data.certificateNumber}</div>
-          <div><strong>Player</strong></div>
-          <div>${data.player}</div>
-          <div><strong>Pigeon</strong></div>
-          <div>${data.pigeon}</div>
-          <div><strong>Event</strong></div>
-          <div>${data.event}</div>
-          <div><strong>Rank</strong></div>
-          <div>#${data.rank}</div>
-          <div><strong>Speed</strong></div>
-          <div>${data.speed.toFixed(2)} m/min</div>
-          <div><strong>Issue Date</strong></div>
-          <div>${new Date(data.issueDate).toLocaleDateString()}</div>
+          <div><strong>Certificate #</strong></div><div>${data.certificateNumber}</div>
+          <div><strong>Player</strong></div><div>${data.player}</div>
+          <div><strong>Pigeon</strong></div><div>${data.pigeon}</div>
+          <div><strong>Event</strong></div><div>${data.event}</div>
+          <div><strong>Rank</strong></div><div>#${data.rank}</div>
+          <div><strong>Speed</strong></div><div>${data.speed.toFixed(2)} m/min</div>
+          <div><strong>Issue Date</strong></div><div>${new Date(data.issueDate).toLocaleDateString()}</div>
         </div>
         <div style="text-align: center; margin-top: 16px; font-size: 14px; color: var(--text-muted);">
           This certificate is digitally verified and authentic.
@@ -672,9 +658,7 @@ const app = {
       fps: 20,
       qrbox: { width: 280, height: 280 },
       aspectRatio: undefined,
-      experimentalFeatures: {
-        useBarCodeDetectorIfSupported: true,
-      },
+      experimentalFeatures: { useBarCodeDetectorIfSupported: true },
     };
 
     console.log("[QR Scanner] Starting scanner with config:", config);
@@ -747,9 +731,7 @@ const app = {
         const capabilities = videoTrack.getCapabilities();
         if (capabilities.torch) {
           flashOn = !flashOn;
-          await videoTrack.applyConstraints({
-            advanced: [{ torch: flashOn }],
-          });
+          await videoTrack.applyConstraints({ advanced: [{ torch: flashOn }] });
           flashStatus.textContent = flashOn ? "✅ Flash ON" : "Flash OFF";
           flashBtn.style.background = flashOn ? "#ffd700" : "";
           flashBtn.style.color = flashOn ? "#333" : "";
@@ -913,7 +895,7 @@ const app = {
                   advanced: [{ focusMode: "continuous" }, { zoom: 1.0 }],
                 });
               } catch (e) {
-                // ignore
+                /* ignore */
               }
               if (trackRetryInterval) {
                 clearInterval(trackRetryInterval);
@@ -1542,12 +1524,10 @@ const app = {
       const registrations = data.registrations || [];
       const eventData = data.event || {};
 
-      // Determine if certificates can be generated
       const isResultVerification = eventData.state === "Result Verification";
       const certsGenerated = eventData.certificatesGenerated || false;
       const canGenerate = isResultVerification && !certsGenerated;
 
-      // Build the HTML with proper certificate generation UI
       let html = `
         <div style="margin: 12px 0 16px; padding: 12px 16px; background: var(--bg); border-radius: 8px; border-left: 4px solid ${isResultVerification ? "#27ae60" : "#e67e22"};">
           <div style="display: flex; flex-wrap: wrap; align-items: center; gap: 12px 24px;">
@@ -1595,7 +1575,6 @@ const app = {
         </div>
       `;
 
-      // Registrations table
       html += `
         <div style="overflow-x:auto; margin-top: 12px;">
           <table class="review-table" style="width:100%; font-size:14px;">
@@ -1670,7 +1649,6 @@ const app = {
       return;
     }
 
-    // Confirm with user
     if (
       !confirm(
         `Generate certificates for event ${eventCode}? This will create certificates for all pigeons with results.`,
@@ -1679,7 +1657,6 @@ const app = {
       return;
     }
 
-    // Show loading
     const button = document.querySelector(
       `button[onclick*="generateCertificatesForEvent('${eventCode}')"]`,
     );
@@ -1703,7 +1680,6 @@ const app = {
         throw new Error(data.error || "Failed to generate certificates");
       }
 
-      // Show success
       const count = data.count || "certificates";
       this.showModal({
         title: "✅ Certificates Generated",
@@ -1712,16 +1688,11 @@ const app = {
         iconColor: "#27ae60",
       });
 
-      // Refresh the admin review view
       this.loadAdminReview();
-
-      // Refresh the admin certificates view if it's visible
       const certView = document.getElementById("view-admin-certificates");
       if (certView && !certView.classList.contains("hidden")) {
         this.loadAdminCertificates();
       }
-
-      // Refresh the event lookup
       this.fetchAllEvents();
     } catch (err) {
       console.error("Certificate generation error:", err);
@@ -4228,7 +4199,6 @@ const app = {
         pigeons.forEach((p) => {
           const statusClass = p.status === "Active" ? "" : "inactive";
           const avatarId = p.avatarId || "";
-          // Fallback: if avatarId doesn't load, use default SVG
           const avatarHTML = avatarId
             ? getPigeonAvatarSVG(avatarId, 60)
             : getDefaultPigeonSVG(60);
@@ -4763,11 +4733,11 @@ const app = {
       });
   },
 
-  // ----- REDESIGNED CERTIFICATE TEMPLATE -----
+  // ----- REDESIGNED CERTIFICATE TEMPLATE (matches reference) -----
   _renderCertificateDetail: function (cert) {
     const container = document.getElementById("certificate-detail");
 
-    // Determine rank details
+    // Rank details
     let rankLabel, rankEmoji, rankColor, rankClass;
     if (cert.rank === 1) {
       rankLabel = "CHAMPION";
@@ -4796,7 +4766,6 @@ const app = {
       rankClass = "participant";
     }
 
-    // Get avatar
     const avatarId = cert.pigeonId?.avatarId || "";
     const avatarHTML = avatarId
       ? getPigeonAvatarSVG(avatarId, 120)
@@ -4830,29 +4799,25 @@ const app = {
     const baseUrl = window.location.origin;
     const verifyUrl = `${baseUrl}/verify/${cert.qrHash || ""}`;
 
-    // Build HTML with redesigned layout
+    // Build HTML with refined layout
     container.innerHTML = `
       <div class="certificate-preview-wrapper">
-        <!-- Border layers via CSS: double border with gold outline and corners -->
+        <!-- Double border wrapper -->
         <div class="certificate-inner">
           <!-- Header -->
           <div class="certificate-header">
-            <div class="certificate-logo">
-              <img src="wingsync-logo.png" alt="Wingsync" style="height:50px; width:auto;">
-            </div>
             <div class="certificate-powered">POWERED BY WINGSYNC</div>
             <div class="certificate-club">MALINAO RACING PIGEON CLUB</div>
             <div class="certificate-mrpc">MRPC</div>
             <div class="certificate-title">CERTIFICATE</div>
           </div>
 
-          <!-- Body: Split into left (avatar + decoration) and right (text) -->
+          <!-- Body: Left (avatar) + Right (text) -->
           <div class="certificate-body">
             <div class="certificate-left">
               <div class="avatar-frame gold-frame">
                 ${avatarHTML}
               </div>
-              <!-- Decorative laurel -->
               <div class="laurel-decoration">
                 <span class="laurel">🏅</span>
                 <span class="laurel">🏅</span>
@@ -4875,7 +4840,7 @@ const app = {
             </div>
           </div>
 
-          <!-- Footer: Signatures and QR -->
+          <!-- Footer: Signature & QR -->
           <div class="certificate-footer">
             <div class="signature-left">
               <div class="signed-label">Signed on:</div>
@@ -4900,10 +4865,9 @@ const app = {
       </div>
     `;
 
-    // Generate QR
     this._generateQRCodeForCert(verifyUrl);
 
-    // Add action buttons
+    // Add action buttons (unchanged)
     const actionsDiv = document.createElement("div");
     actionsDiv.className = "certificate-actions";
     actionsDiv.style.cssText =
@@ -4976,7 +4940,6 @@ const app = {
           .certificate-inner { background: #fefcf8; border: 1px solid #d4af37; padding: 30px 35px; border-radius: 8px; position: relative; }
           .certificate-inner::before { content: ''; position: absolute; top: 10px; left: 10px; right: 10px; bottom: 10px; border: 1px solid #d4af37; border-radius: 4px; pointer-events: none; }
           .certificate-header { text-align: center; border-bottom: 2px solid #d4af37; padding-bottom: 12px; margin-bottom: 20px; }
-          .certificate-logo { margin-bottom: 4px; }
           .certificate-powered { font-size: 12px; letter-spacing: 3px; color: #6a7a7a; font-weight: 600; }
           .certificate-club { font-size: 14px; font-weight: 700; color: #1a4a3a; letter-spacing: 1px; }
           .certificate-mrpc { font-size: 28px; font-weight: 700; color: #d4af37; letter-spacing: 4px; margin: 2px 0; }
@@ -5100,7 +5063,7 @@ const app = {
   // ----- FALLBACK PDF (jsPDF) with redesigned layout -----
   _fallbackPDF: function (cert) {
     const { jsPDF } = window.jspdf;
-    const doc = new jsPDF("l", "mm", "a4"); // landscape
+    const doc = new jsPDF("l", "mm", "a4");
     const pageWidth = 297;
     const pageHeight = 210;
     const margin = 20;
@@ -5151,7 +5114,6 @@ const app = {
     const avatarX = 40;
     const avatarY = 85;
     const avatarSize = 50;
-    // Draw gold circle
     doc.setDrawColor(212, 175, 55);
     doc.setLineWidth(2);
     doc.circle(
@@ -5166,9 +5128,7 @@ const app = {
       avatarSize / 2,
       "F",
     );
-    // Draw a simple placeholder pigeon (circle + details) or try to use an image?
-    // Since we can't embed image easily here, we'll draw a stylized pigeon icon.
-    // Actually, we can attempt to draw a simple pigeon using shapes.
+    // Draw a simple placeholder pigeon (circle + details)
     doc.setFillColor(138, 154, 168);
     doc.circle(avatarX + avatarSize / 2, avatarY + avatarSize / 2 - 6, 10, "F");
     doc.setFillColor(168, 184, 200);
