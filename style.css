@@ -1989,18 +1989,18 @@ tr:hover td {
   border-right-width: 3px;
   border-radius: 0 4px 0 0;
 }
+
 /* ======================================== */
-/* ===== ENHANCED CERTIFICATE STYLES ===== */
+/*        REDESIGNED CERTIFICATE STYLES      */
 /* ======================================== */
 
-.certificate-preview-wrapper {
+.certificate-wrapper {
   max-width: 820px;
   margin: 0 auto;
-  background: #f9f5ee; /* cream base */
-  border: 8px double #1a4a3a; /* emerald green double border */
+  background: #f9f5ee;
+  border: 8px double #1a4a3a;
   border-radius: 12px;
   padding: 20px;
-  position: relative;
   box-shadow:
     0 0 0 2px #d4af37,
     0 0 0 4px #1a4a3a;
@@ -2025,13 +2025,24 @@ tr:hover td {
   pointer-events: none;
 }
 
-/* Header */
+/* ---------- HEADER ---------- */
 .certificate-header {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
   text-align: center;
+  padding-bottom: 16px;
   border-bottom: 2px solid #d4af37;
-  padding-bottom: 12px;
-  margin-bottom: 20px;
+  margin-bottom: 18px;
 }
+
+.certificate-logo {
+  width: 80px;
+  height: 80px;
+  object-fit: contain;
+  margin-bottom: 6px;
+}
+
 .certificate-powered {
   font-size: 12px;
   letter-spacing: 3px;
@@ -2039,12 +2050,14 @@ tr:hover td {
   font-weight: 600;
   text-transform: uppercase;
 }
+
 .certificate-club {
   font-size: 14px;
   font-weight: 700;
   color: #1a4a3a;
   letter-spacing: 1px;
 }
+
 .certificate-mrpc {
   font-size: 28px;
   font-weight: 700;
@@ -2052,6 +2065,7 @@ tr:hover td {
   letter-spacing: 4px;
   margin: 2px 0;
 }
+
 .certificate-title {
   font-size: 48px;
   font-weight: 700;
@@ -2060,17 +2074,38 @@ tr:hover td {
   font-family: "Playfair Display", "Times New Roman", serif;
 }
 
-/* Body */
+/* ---------- DIVIDER ---------- */
+.certificate-divider {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  margin: 8px 0 20px;
+}
+.divider-line {
+  flex: 1;
+  height: 1px;
+  background: linear-gradient(to right, transparent, #d4af37, transparent);
+}
+.divider-icon {
+  font-size: 18px;
+  color: #d4af37;
+  flex-shrink: 0;
+}
+
+/* ---------- BODY ---------- */
 .certificate-body {
   display: flex;
   gap: 30px;
   align-items: center;
   margin: 16px 0;
 }
+
 .certificate-left {
   flex: 0 0 160px;
   text-align: center;
 }
+
 .avatar-frame {
   width: 140px;
   height: 140px;
@@ -2080,6 +2115,10 @@ tr:hover td {
   background: #fff;
   margin: 0 auto;
   box-shadow: 0 0 20px rgba(212, 175, 55, 0.3);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
 }
 .avatar-frame img,
 .avatar-frame svg {
@@ -2088,23 +2127,28 @@ tr:hover td {
   object-fit: cover;
   border-radius: 50%;
 }
+
 .laurel-decoration {
   margin-top: 10px;
   font-size: 28px;
   letter-spacing: 8px;
   color: #d4af37;
 }
+
 .certificate-right {
   flex: 1;
   text-align: center;
 }
+
 .certificate-text {
   font-family: "Playfair Display", "Times New Roman", serif;
   color: #1a2a33;
 }
+
 .certify-line {
   font-size: 18px;
   font-weight: 500;
+  margin: 0 0 4px;
 }
 .pigeon-name {
   font-size: 32px;
@@ -2116,10 +2160,11 @@ tr:hover td {
   font-size: 18px;
   font-weight: 500;
   color: #4a5a5a;
+  margin: 2px 0;
 }
 .has-flown {
   font-size: 16px;
-  margin-top: 10px;
+  margin: 10px 0 2px;
 }
 .event-name {
   font-size: 24px;
@@ -2161,18 +2206,21 @@ tr:hover td {
 }
 .in-said {
   font-size: 14px;
+  margin-top: 2px;
 }
 
-/* Footer */
+/* ---------- FOOTER ---------- */
 .certificate-footer {
-  display: flex;
-  justify-content: space-between;
-  align-items: flex-end;
-  margin-top: 20px;
+  display: grid;
+  grid-template-columns: 1fr 2fr 1fr;
+  align-items: end;
+  gap: 16px;
+  margin-top: 24px;
   border-top: 1px solid #d4af37;
   padding-top: 16px;
 }
-.signature-left {
+
+.footer-left {
   text-align: left;
 }
 .signed-label {
@@ -2186,8 +2234,10 @@ tr:hover td {
   font-weight: 600;
   color: #1a2a33;
 }
-.signature-right {
+
+.footer-middle {
   display: flex;
+  justify-content: center;
   gap: 40px;
 }
 .signatory {
@@ -2202,16 +2252,18 @@ tr:hover td {
   font-size: 12px;
   color: #6a7a7a;
 }
-.qr-code-container {
+
+.footer-right {
   text-align: center;
 }
 .qr-label {
   font-size: 10px;
   color: #6a7a7a;
+  margin-top: 2px;
 }
 
-/* Dark theme adjustments */
-[data-theme="dark"] .certificate-preview-wrapper {
+/* ---------- DARK THEME OVERRIDES ---------- */
+[data-theme="dark"] .certificate-wrapper {
   background: #1a2332;
   border-color: #3ea082;
   box-shadow:
@@ -2263,10 +2315,28 @@ tr:hover td {
 [data-theme="dark"] .certificate-footer {
   border-top-color: #d4af37;
 }
+[data-theme="dark"] .divider-line {
+  background: linear-gradient(to right, transparent, #d4af37, transparent);
+}
+[data-theme="dark"] .divider-icon {
+  color: #d4af37;
+}
+[data-theme="dark"] .rank-gold {
+  color: #d4af37;
+}
+[data-theme="dark"] .rank-silver {
+  color: #a8a8a8;
+}
+[data-theme="dark"] .rank-bronze {
+  color: #cd7f32;
+}
+[data-theme="dark"] .rank-participant {
+  color: #3ea082;
+}
 
-/* Responsive */
+/* ---------- RESPONSIVE ---------- */
 @media (max-width: 768px) {
-  .certificate-preview-wrapper {
+  .certificate-wrapper {
     padding: 12px;
   }
   .certificate-inner {
@@ -2293,17 +2363,23 @@ tr:hover td {
     font-size: 28px;
   }
   .certificate-footer {
-    flex-direction: column;
-    align-items: center;
-    gap: 16px;
-  }
-  .signature-right {
-    flex-direction: column;
+    grid-template-columns: 1fr;
     gap: 12px;
+    text-align: center;
+  }
+  .footer-left {
+    text-align: center;
+  }
+  .footer-middle {
+    flex-direction: column;
+    gap: 8px;
+  }
+  .footer-right {
+    text-align: center;
   }
 }
 @media (max-width: 480px) {
-  .certificate-preview-wrapper {
+  .certificate-wrapper {
     padding: 8px;
   }
   .certificate-inner {

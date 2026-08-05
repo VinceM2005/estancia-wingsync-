@@ -4745,17 +4745,17 @@ const app = {
       rankColor = "#d4af37";
       rankClass = "gold";
     } else if (cert.rank === 2) {
-      rankLabel = "1ST PLACE";
+      rankLabel = "2ND PLACE";
       rankEmoji = "🥇";
       rankColor = "#c0c0c0";
       rankClass = "silver";
     } else if (cert.rank === 3) {
-      rankLabel = "2ND PLACE";
+      rankLabel = "3RD PLACE";
       rankEmoji = "🥈";
       rankColor = "#cd7f32";
       rankClass = "bronze";
     } else if (cert.rank === 4) {
-      rankLabel = "3RD PLACE";
+      rankLabel = "4TH PLACE";
       rankEmoji = "🥉";
       rankColor = "#cd7f32";
       rankClass = "bronze";
@@ -4799,23 +4799,31 @@ const app = {
     const baseUrl = window.location.origin;
     const verifyUrl = `${baseUrl}/verify/${cert.qrHash || ""}`;
 
-    // Build HTML with refined layout
+    // Build HTML with redesigned layout
     container.innerHTML = `
-      <div class="certificate-preview-wrapper">
-        <!-- Double border wrapper -->
+      <div class="certificate-wrapper">
         <div class="certificate-inner">
-          <!-- Header -->
-          <div class="certificate-header">
+
+          <!-- ===== HEADER ===== -->
+          <header class="certificate-header">
+            <img src="/wingsync-logo.png" alt="WingSync Logo" class="certificate-logo" />
             <div class="certificate-powered">POWERED BY WINGSYNC</div>
             <div class="certificate-club">MALINAO RACING PIGEON CLUB</div>
             <div class="certificate-mrpc">MRPC</div>
             <div class="certificate-title">CERTIFICATE</div>
+          </header>
+
+          <!-- ===== DECORATIVE DIVIDER ===== -->
+          <div class="certificate-divider">
+            <span class="divider-line"></span>
+            <span class="divider-icon">✦</span>
+            <span class="divider-line"></span>
           </div>
 
-          <!-- Body: Left (avatar) + Right (text) -->
+          <!-- ===== BODY ===== -->
           <div class="certificate-body">
             <div class="certificate-left">
-              <div class="avatar-frame gold-frame">
+              <div class="avatar-frame">
                 ${avatarHTML}
               </div>
               <div class="laurel-decoration">
@@ -4825,42 +4833,43 @@ const app = {
             </div>
             <div class="certificate-right">
               <div class="certificate-text">
-                <div class="certify-line">This is to certify that</div>
-                <div class="pigeon-name">${pigeonName}</div>
-                <div class="ring-band">Ring Band No. ${ringNumber}</div>
-                <div class="has-flown">has flown from</div>
-                <div class="event-name">${eventName}</div>
-                <div class="distance-line">covering a distance of <span class="value">${distance} km</span></div>
-                <div class="date-line">on <span class="value">${releaseDateStr}</span></div>
-                <div class="speed-line">with a recorded velocity of <span class="value">${speed} m/min</span></div>
-                <div class="and-achieved">and achieved</div>
+                <p class="certify-line">This is to certify that</p>
+                <h1 class="pigeon-name">${pigeonName}</h1>
+                <p class="ring-band">Ring Band No. ${ringNumber}</p>
+                <p class="has-flown">has flown from</p>
+                <h2 class="event-name">${eventName}</h2>
+                <p class="distance-line">covering a distance of <span class="value">${distance} km</span></p>
+                <p class="date-line">on <span class="value">${releaseDateStr}</span></p>
+                <p class="speed-line">with a recorded velocity of <span class="value">${speed} m/min</span></p>
+                <p class="and-achieved">and achieved</p>
                 <div class="placement rank-${rankClass}">${rankEmoji} ${rankLabel}</div>
-                <div class="in-said">in the said race.</div>
+                <p class="in-said">in the said race.</p>
               </div>
             </div>
           </div>
 
-          <!-- Footer: Signature & QR -->
-          <div class="certificate-footer">
-            <div class="signature-left">
+          <!-- ===== FOOTER ===== -->
+          <footer class="certificate-footer">
+            <div class="footer-left">
               <div class="signed-label">Signed on:</div>
               <div class="signed-date">${formattedDate}</div>
             </div>
-            <div class="signature-right">
+            <div class="footer-middle">
               <div class="signatory">
                 <div class="sig-name">Ash Cargullo</div>
-                <div class="sig-title">Club Vice-President</div>
+                <div class="sig-title">Club Vice‑President</div>
               </div>
               <div class="signatory">
                 <div class="sig-name">Vincent Macauyam</div>
                 <div class="sig-title">Club President</div>
               </div>
             </div>
-            <div class="qr-code-container">
+            <div class="footer-right">
               <div id="cert-qr-container" style="width:80px;height:80px;"></div>
               <div class="qr-label">Verify with QR</div>
             </div>
-          </div>
+          </footer>
+
         </div>
       </div>
     `;
