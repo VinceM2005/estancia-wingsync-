@@ -1989,7 +1989,6 @@ tr:hover td {
   border-right-width: 3px;
   border-radius: 0 4px 0 0;
 }
-
 /* ======================================== */
 /* ===== ENHANCED CERTIFICATE STYLES ===== */
 /* ======================================== */
@@ -2007,7 +2006,6 @@ tr:hover td {
     0 0 0 4px #1a4a3a;
 }
 
-/* Inner decorative border */
 .certificate-inner {
   background: #fefcf8;
   border: 1px solid #d4af37;
@@ -2039,6 +2037,7 @@ tr:hover td {
   letter-spacing: 3px;
   color: #6a7a7a;
   font-weight: 600;
+  text-transform: uppercase;
 }
 .certificate-club {
   font-size: 14px;
@@ -2088,9 +2087,6 @@ tr:hover td {
   height: 100%;
   object-fit: cover;
   border-radius: 50%;
-}
-.avatar-frame svg {
-  display: block;
 }
 .laurel-decoration {
   margin-top: 10px;
@@ -2214,7 +2210,7 @@ tr:hover td {
   color: #6a7a7a;
 }
 
-/* Dark theme certificate */
+/* Dark theme adjustments */
 [data-theme="dark"] .certificate-preview-wrapper {
   background: #1a2332;
   border-color: #3ea082;
@@ -2268,7 +2264,7 @@ tr:hover td {
   border-top-color: #d4af37;
 }
 
-/* Responsive certificate */
+/* Responsive */
 @media (max-width: 768px) {
   .certificate-preview-wrapper {
     padding: 12px;

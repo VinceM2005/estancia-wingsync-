@@ -5066,13 +5066,13 @@ const app = {
     const doc = new jsPDF("l", "mm", "a4");
     const pageWidth = 297;
     const pageHeight = 210;
-    const margin = 20;
+    const margin = 18;
 
-    // Background cream
+    // 1. Background cream
     doc.setFillColor(249, 245, 238);
     doc.rect(0, 0, pageWidth, pageHeight, "F");
 
-    // Double border: emerald green outer, gold inner
+    // 2. Double border: outer emerald, inner gold
     doc.setDrawColor(26, 74, 58);
     doc.setLineWidth(2);
     doc.rect(margin, margin, pageWidth - 2 * margin, pageHeight - 2 * margin);
@@ -5084,10 +5084,9 @@ const app = {
       pageWidth - 2 * margin - 8,
       pageHeight - 2 * margin - 8,
     );
-
-    // Inner border
+    // Inner decorative border
     doc.setDrawColor(26, 74, 58);
-    doc.setLineWidth(1);
+    doc.setLineWidth(0.5);
     doc.rect(
       margin + 10,
       margin + 10,
@@ -5095,117 +5094,153 @@ const app = {
       pageHeight - 2 * margin - 20,
     );
 
-    // Header
-    doc.setFontSize(12);
-    doc.setTextColor(26, 74, 58);
+    // 3. Header section
+    const headerY = margin + 18;
     doc.setFont("helvetica", "bold");
-    doc.text("POWERED BY WINGSYNC", pageWidth / 2, 30, "center");
-    doc.setFontSize(14);
-    doc.text("MALINAO RACING PIGEON CLUB", pageWidth / 2, 38, "center");
-    doc.setFontSize(28);
-    doc.setTextColor(212, 175, 55);
-    doc.text("MRPC", pageWidth / 2, 50, "center");
-    doc.setFontSize(48);
-    doc.setTextColor(26, 74, 58);
-    doc.setFont("helvetica", "bold");
-    doc.text("CERTIFICATE", pageWidth / 2, 68, "center");
+    doc.setFontSize(11);
+    doc.setTextColor(106, 122, 122);
+    doc.text("POWERED BY WINGSYNC", pageWidth / 2, headerY, {
+      align: "center",
+    });
 
-    // Body: left avatar, right text
-    const avatarX = 40;
-    const avatarY = 85;
-    const avatarSize = 50;
+    doc.setFontSize(13);
+    doc.setTextColor(26, 74, 58);
+    doc.text("MALINAO RACING PIGEON CLUB", pageWidth / 2, headerY + 8, {
+      align: "center",
+    });
+
+    doc.setFontSize(24);
+    doc.setTextColor(212, 175, 55);
+    doc.text("MRPC", pageWidth / 2, headerY + 20, { align: "center" });
+
+    doc.setFontSize(40);
+    doc.setTextColor(26, 74, 58);
+    doc.setFont("helvetica", "bold");
+    doc.text("CERTIFICATE", pageWidth / 2, headerY + 38, { align: "center" });
+
+    // Separator line
     doc.setDrawColor(212, 175, 55);
-    doc.setLineWidth(2);
-    doc.circle(
-      avatarX + avatarSize / 2,
-      avatarY + avatarSize / 2,
-      avatarSize / 2 + 4,
-    );
+    doc.setLineWidth(1);
+    doc.line(margin + 30, headerY + 48, pageWidth - margin - 30, headerY + 48);
+
+    // 4. Body: left avatar, right text
+    const bodyY = headerY + 60;
+
+    // Left: pigeon avatar (circle with bird placeholder)
+    const avatarX = margin + 20;
+    const avatarSize = 50;
+    const avatarCenterX = avatarX + avatarSize / 2;
+    const avatarCenterY = bodyY + 10;
+
+    // Gold circle border
+    doc.setDrawColor(212, 175, 55);
+    doc.setLineWidth(3);
+    doc.circle(avatarCenterX, avatarCenterY, avatarSize / 2 + 4);
+
+    // White background
     doc.setFillColor(255, 255, 255);
-    doc.circle(
-      avatarX + avatarSize / 2,
-      avatarY + avatarSize / 2,
-      avatarSize / 2,
-      "F",
-    );
-    // Draw a simple placeholder pigeon (circle + details)
+    doc.circle(avatarCenterX, avatarCenterY, avatarSize / 2, "F");
+
+    // Draw a simple bird silhouette (using shapes)
     doc.setFillColor(138, 154, 168);
-    doc.circle(avatarX + avatarSize / 2, avatarY + avatarSize / 2 - 6, 10, "F");
-    doc.setFillColor(168, 184, 200);
-    doc.circle(avatarX + avatarSize / 2, avatarY + avatarSize / 2 - 2, 8, "F");
+    // Body
+    doc.circle(avatarCenterX, avatarCenterY - 4, 10, "F");
+    // Head
+    doc.circle(avatarCenterX, avatarCenterY - 14, 6, "F");
+    // Beak (triangle)
+    doc.setFillColor(232, 160, 48);
+    doc.triangle(
+      avatarCenterX + 6,
+      avatarCenterY - 16,
+      avatarCenterX + 10,
+      avatarCenterY - 14,
+      avatarCenterX + 6,
+      avatarCenterY - 12,
+      "F",
+    );
+    // Eye
     doc.setFillColor(42, 42, 42);
-    doc.circle(
-      avatarX + avatarSize / 2 - 4,
-      avatarY + avatarSize / 2 - 6,
-      2,
+    doc.circle(avatarCenterX + 3, avatarCenterY - 16, 1.5, "F");
+    // Tail
+    doc.setFillColor(138, 154, 168);
+    doc.triangle(
+      avatarCenterX - 8,
+      avatarCenterY + 2,
+      avatarCenterX - 14,
+      avatarCenterY + 8,
+      avatarCenterX - 8,
+      avatarCenterY + 12,
       "F",
     );
-    doc.circle(
-      avatarX + avatarSize / 2 + 4,
-      avatarY + avatarSize / 2 - 6,
-      2,
-      "F",
-    );
-    doc.setFillColor(232, 224, 216);
-    doc.circle(avatarX + avatarSize / 2, avatarY + avatarSize / 2 + 8, 10, "F");
-    doc.setFillColor(168, 184, 200);
-    doc.circle(avatarX + avatarSize / 2, avatarY + avatarSize / 2 + 10, 8, "F");
 
-    // Decorative laurel
-    doc.setFontSize(20);
+    // Laurel decoration (left and right of avatar)
+    doc.setFontSize(22);
     doc.setTextColor(212, 175, 55);
-    doc.text("🏅", avatarX + 10, avatarY + avatarSize + 14);
-    doc.text("🏅", avatarX + avatarSize - 10, avatarY + avatarSize + 14);
+    doc.text("🏅", avatarX + 10, bodyY + 40);
+    doc.text("🏅", avatarX + avatarSize - 10, bodyY + 40);
 
-    // Right side text
-    const textX = 110;
-    let y = 85;
+    // Right: text content
+    const textX = avatarX + avatarSize + 30;
+    let y = bodyY;
+
+    doc.setFont("helvetica", "normal");
     doc.setFontSize(14);
     doc.setTextColor(26, 42, 51);
-    doc.setFont("helvetica", "normal");
     doc.text("This is to certify that", textX, y);
     y += 10;
-    doc.setFontSize(24);
-    doc.setTextColor(26, 74, 58);
-    doc.setFont("helvetica", "bold");
+
+    // Pigeon name (large)
     const pigeonName = cert.pigeonId?.nickname || "No nickname";
-    const ringNumber = cert.pigeonId?.ringNumber || "N/A";
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(28);
+    doc.setTextColor(26, 74, 58);
     doc.text(pigeonName, textX, y);
-    y += 8;
+    y += 10;
+
+    const ringNumber = cert.pigeonId?.ringNumber || "N/A";
+    doc.setFont("helvetica", "normal");
     doc.setFontSize(14);
     doc.setTextColor(74, 90, 90);
-    doc.setFont("helvetica", "normal");
     doc.text(`Ring Band No. ${ringNumber}`, textX, y);
     y += 10;
+
     doc.setFontSize(14);
     doc.setTextColor(26, 42, 51);
     doc.text("has flown from", textX, y);
     y += 8;
+
+    const eventName = cert.eventId?.name || "Unknown Event";
+    doc.setFont("helvetica", "bold");
     doc.setFontSize(20);
     doc.setTextColor(26, 74, 58);
-    doc.setFont("helvetica", "bold");
-    const eventName = cert.eventId?.name || "Unknown Event";
     doc.text(eventName, textX, y);
-    y += 8;
+    y += 10;
+
+    const distance = cert.distance ? cert.distance.toFixed(2) : "0.00";
+    const releaseDate = cert.eventId?.releaseTime
+      ? new Date(cert.eventId.releaseTime).toLocaleDateString("en-US", {
+          year: "numeric",
+          month: "numeric",
+          day: "numeric",
+        })
+      : "N/A";
+    doc.setFont("helvetica", "normal");
     doc.setFontSize(14);
     doc.setTextColor(26, 42, 51);
-    doc.setFont("helvetica", "normal");
-    const distance = cert.distance.toFixed(2);
-    const releaseDate = cert.eventId?.releaseTime
-      ? new Date(cert.eventId.releaseTime).toLocaleDateString()
-      : "N/A";
     doc.text(`covering a distance of ${distance} km`, textX, y);
     y += 8;
     doc.text(`on ${releaseDate}`, textX, y);
     y += 8;
-    const speed = cert.speed.toFixed(2);
+    const speed = cert.speed ? cert.speed.toFixed(2) : "0.00";
     doc.text(`with a recorded velocity of ${speed} m/min`, textX, y);
     y += 10;
+
     doc.text("and achieved", textX, y);
     y += 12;
-    // Placement
+
+    // Placement / Rank
     let placementText = "";
-    let rankColor = [212, 175, 55];
+    let rankColor = [212, 175, 55]; // gold
     if (cert.rank === 1) placementText = "🏆 CHAMPION";
     else if (cert.rank === 2) placementText = "🥇 1ST PLACE";
     else if (cert.rank === 3) placementText = "🥈 2ND PLACE";
@@ -5214,55 +5249,59 @@ const app = {
       placementText = "🏅 PARTICIPANT";
       rankColor = [42, 122, 98];
     }
+    doc.setFont("helvetica", "bold");
     doc.setFontSize(32);
     doc.setTextColor(rankColor[0], rankColor[1], rankColor[2]);
-    doc.setFont("helvetica", "bold");
     doc.text(placementText, textX, y);
-    y += 10;
+    y += 12;
+
     doc.setFontSize(12);
     doc.setTextColor(26, 42, 51);
     doc.setFont("helvetica", "normal");
     doc.text("in the said race.", textX, y);
 
-    // Footer
-    const footerY = 175;
+    // 5. Footer
+    const footerY = pageHeight - margin - 25;
     doc.setDrawColor(212, 175, 55);
     doc.setLineWidth(1);
-    doc.line(margin + 20, footerY, pageWidth - margin - 20, footerY);
-    // Signed on left
+    doc.line(margin + 30, footerY, pageWidth - margin - 30, footerY);
+
+    // Left: signed date
+    const signedDate = new Date(cert.issueDate).toLocaleDateString("en-US", {
+      year: "numeric",
+      month: "long",
+      day: "numeric",
+    });
     doc.setFontSize(11);
     doc.setTextColor(106, 122, 122);
     doc.text("Signed on:", margin + 30, footerY + 8);
     doc.setFontSize(14);
     doc.setTextColor(26, 42, 51);
-    const issueDate = new Date(cert.issueDate).toLocaleDateString("en-PH", {
-      year: "numeric",
-      month: "long",
-      day: "numeric",
-    });
-    doc.text(issueDate, margin + 30, footerY + 18);
-    // Signatories right
-    const sigX = 190;
-    doc.setFontSize(14);
-    doc.setTextColor(26, 42, 51);
-    doc.setFont("helvetica", "bold");
-    doc.text("Ash Cargullo", sigX, footerY + 8);
-    doc.setFontSize(10);
-    doc.setTextColor(106, 122, 122);
-    doc.setFont("helvetica", "normal");
-    doc.text("Club Vice-President", sigX, footerY + 16);
-    doc.setFontSize(14);
-    doc.setTextColor(26, 42, 51);
-    doc.setFont("helvetica", "bold");
-    doc.text("Vincent Macauyam", sigX + 50, footerY + 8);
-    doc.setFontSize(10);
-    doc.setTextColor(106, 122, 122);
-    doc.setFont("helvetica", "normal");
-    doc.text("Club President", sigX + 50, footerY + 16);
+    doc.text(signedDate, margin + 30, footerY + 18);
 
-    // QR placeholder (simple square)
-    const qrX = pageWidth - margin - 30;
-    const qrY = footerY + 6;
+    // Right: signatures (two columns)
+    const sigLeft = pageWidth - margin - 80;
+    doc.setFontSize(14);
+    doc.setTextColor(26, 42, 51);
+    doc.setFont("helvetica", "bold");
+    doc.text("Ash Cargullo", sigLeft, footerY + 8);
+    doc.setFontSize(10);
+    doc.setTextColor(106, 122, 122);
+    doc.setFont("helvetica", "normal");
+    doc.text("Club Vice-President", sigLeft, footerY + 16);
+
+    doc.setFontSize(14);
+    doc.setTextColor(26, 42, 51);
+    doc.setFont("helvetica", "bold");
+    doc.text("Vincent Macauyam", sigLeft + 50, footerY + 8);
+    doc.setFontSize(10);
+    doc.setTextColor(106, 122, 122);
+    doc.setFont("helvetica", "normal");
+    doc.text("Club President", sigLeft + 50, footerY + 16);
+
+    // QR code placeholder (rightmost)
+    const qrX = pageWidth - margin - 25;
+    const qrY = footerY + 4;
     doc.setDrawColor(0, 0, 0);
     doc.setLineWidth(1);
     doc.rect(qrX, qrY, 20, 20);
@@ -5270,6 +5309,7 @@ const app = {
     doc.setTextColor(0, 0, 0);
     doc.text("QR", qrX + 6, qrY + 12);
 
+    // Save the PDF
     doc.save(`certificate_${cert.certificateNumber}.pdf`);
     document.getElementById("custom-modal")?.remove();
     this.showModal({
