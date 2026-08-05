@@ -2288,6 +2288,7 @@ app.put(
       }
 
       let allowed = false;
+      // Existing transitions
       if (state === "Registration Open") {
         if (event.state === "Draft" || event.state === "Registration Closed") {
           allowed = true;
@@ -2297,9 +2298,17 @@ app.put(
           allowed = true;
         }
       }
+      // NEW: Manual override for Result Verification (ONE‑WAY)
+      else if (state === "Result Verification") {
+        if (event.state === "Live Race") {
+          allowed = true;
+        }
+      }
+      // Block reverting from Result Verification to Live Race (no else-if for Live Race)
+
       if (!allowed) {
         return res.status(400).json({
-          error: `Cannot set state to ${state} from current state ${event.state}. Only allowed: Draft→Registration Open, Registration Open↔Registration Closed.`,
+          error: `Cannot set state to ${state} from current state ${event.state}. Allowed: Draft→Registration Open, Registration Open↔Registration Closed, Live Race→Result Verification (one‑way only).`,
         });
       }
 
@@ -2311,9 +2320,7 @@ app.put(
       res.json({ success: true, event });
     } catch (error) {
       console.error("Error updating registration settings:", error);
-      res
-        .status(500)
-        .json({ error: "Failed to update registration settings." });
+      res.status(500).json({ error: "Failed to update registration settings." });
     }
   },
 );
