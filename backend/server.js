@@ -80,6 +80,7 @@ mongoose
     await seedDatabase();
     await migrateEvents();
     await ensureIndexes();
+    await ensureCounters(); // <-- NEW: initialise certificate counter
     startStateUpdater();
   })
   .catch((err) => console.error("❌ DB Error:", err));
@@ -89,11 +90,24 @@ mongoose
 // ============================================================
 async function ensureIndexes() {
   try {
-    // Drop the old sparse unique index if it exists
+    // 1. Migrate null pigeonIds to "LEGACY" to enforce uniqueness
+    const nullPigeonCodes = await RaceCode.find({ pigeonId: null });
+    if (nullPigeonCodes.length > 0) {
+      console.log(
+        `🔄 Migrating ${nullPigeonCodes.length} race codes with null pigeonId...`,
+      );
+      for (const rc of nullPigeonCodes) {
+        rc.pigeonId = `LEGACY_${rc.code}`;
+        await rc.save();
+      }
+      console.log("✅ Null pigeonId migration complete.");
+    }
+
+    // Drop old EventRegistration index if it exists
     await EventRegistration.collection
       .dropIndex("eventId_1_playerId_1_pigeonIds_1")
       .catch(() => {});
-    // Create the new unique index on eventId + playerId
+    // Create new unique index on (eventId, playerId)
     await EventRegistration.collection.createIndex(
       { eventId: 1, playerId: 1 },
       { unique: true },
@@ -102,17 +116,26 @@ async function ensureIndexes() {
       "✅ Unique index on EventRegistration (eventId, playerId) ensured.",
     );
 
-    // NEW: Ensure unique index on RaceCode (eventId, pigeonId) to prevent duplicates
-    // Drop any existing index that might conflict
+    // RaceCode index is defined in the schema (unique, not sparse) – no manual creation needed.
+    // We only drop any leftover index that might conflict (optional).
     await RaceCode.collection.dropIndex("eventId_1_pigeonId_1").catch(() => {});
-    await RaceCode.collection.createIndex(
-      { eventId: 1, pigeonId: 1 },
-      { unique: true, sparse: true },
+    console.log(
+      "✅ Unique index on RaceCode (eventId, pigeonId) ensured (via schema).",
     );
-    console.log("✅ Unique index on RaceCode (eventId, pigeonId) ensured.");
   } catch (err) {
     console.error("❌ Error creating index:", err);
   }
+}
+
+// ===== NEW: Ensure GlobalCounter for certificate numbers =====
+async function ensureCounters() {
+  const year = new Date().getFullYear();
+  await GlobalCounter.findOneAndUpdate(
+    { name: "certificate", year: year },
+    { $setOnInsert: { seq: 0 } },
+    { upsert: true },
+  );
+  console.log(`✅ Certificate counter for ${year} initialised.`);
 }
 
 // ============================================================
@@ -182,7 +205,7 @@ const RaceCodeSchema = new mongoose.Schema({
 RaceCodeSchema.index({ eventId: 1, userId: 1, status: 1 });
 RaceCodeSchema.index(
   { eventId: 1, pigeonId: 1 },
-  { unique: true, sparse: true },
+  { unique: true }, // no sparse
 );
 
 const CounterSchema = new mongoose.Schema({
@@ -191,6 +214,14 @@ const CounterSchema = new mongoose.Schema({
   count: { type: Number, default: 0 },
 });
 CounterSchema.index({ eventId: 1, userId: 1 }, { unique: true });
+
+// NEW: Global counter for certificates (atomic)
+const GlobalCounterSchema = new mongoose.Schema({
+  name: { type: String, required: true, unique: true },
+  year: { type: Number, required: true },
+  seq: { type: Number, default: 0 },
+});
+const GlobalCounter = mongoose.model("GlobalCounter", GlobalCounterSchema);
 
 const ResultSchema = new mongoose.Schema({
   eventId: { type: String, required: true },
@@ -420,7 +451,6 @@ async function generateStickersForEvent(eventId) {
           if (processedSet.has(key)) continue;
           processedSet.add(key);
 
-          // FIX: null check for pigeonId before calling toString()
           const existing = await RaceCode.findOne({
             eventId,
             pigeonId: pigeonId ? pigeonId.toString() : null,
@@ -434,7 +464,7 @@ async function generateStickersForEvent(eventId) {
             code,
             status: "unused",
             registrationId: reg._id,
-            pigeonId: pigeonId || null,
+            pigeonId: pigeonId ? pigeonId.toString() : `LEGACY_${code}`,
           });
           await raceCode.save({ session });
           generatedCodes.push({ playerId: reg.playerId, pigeonId, code });
@@ -1004,7 +1034,6 @@ app.post(
           session.endSession();
           return res.status(400).json({ error: "Registration is not locked." });
         }
-        // FIX: null check for pigeonId before calling startsWith
         if (raceCode.pigeonId && !raceCode.pigeonId.startsWith("LEGACY_")) {
           const pigeon = await Pigeon.findOne({
             _id: raceCode.pigeonId,
@@ -1380,6 +1409,8 @@ app.delete("/api/users/player/:id", requireAdmin, async (req, res) => {
     await Result.deleteMany({ userId: id });
     await RaceCode.deleteMany({ userId: id });
     await Counter.deleteMany({ userId: id });
+    await EventRegistration.deleteMany({ playerId: id });
+    await Pigeon.deleteMany({ ownerId: id });
     await Log.create({ message: `Admin deleted player ${id}` });
     res.json({ success: true });
   } catch (error) {
@@ -2288,7 +2319,6 @@ app.put(
       }
 
       let allowed = false;
-      // Existing transitions
       if (state === "Registration Open") {
         if (event.state === "Draft" || event.state === "Registration Closed") {
           allowed = true;
@@ -2297,14 +2327,11 @@ app.put(
         if (event.state === "Registration Open") {
           allowed = true;
         }
-      }
-      // NEW: Manual override for Result Verification (ONE‑WAY)
-      else if (state === "Result Verification") {
+      } else if (state === "Result Verification") {
         if (event.state === "Live Race") {
           allowed = true;
         }
       }
-      // Block reverting from Result Verification to Live Race (no else-if for Live Race)
 
       if (!allowed) {
         return res.status(400).json({
@@ -2320,7 +2347,9 @@ app.put(
       res.json({ success: true, event });
     } catch (error) {
       console.error("Error updating registration settings:", error);
-      res.status(500).json({ error: "Failed to update registration settings." });
+      res
+        .status(500)
+        .json({ error: "Failed to update registration settings." });
     }
   },
 );
@@ -2330,8 +2359,12 @@ app.put(
 // ============================================================
 async function generateCertificateNumber() {
   const year = new Date().getFullYear();
-  const count = await Certificate.countDocuments();
-  const seq = String(count + 1).padStart(4, "0");
+  const counter = await GlobalCounter.findOneAndUpdate(
+    { name: "certificate", year: year },
+    { $inc: { seq: 1 } },
+    { new: true, upsert: true },
+  );
+  const seq = String(counter.seq).padStart(4, "0");
   return `WSC-${year}-${seq}`;
 }
 
@@ -2429,7 +2462,6 @@ app.get("/api/certificates/player", async (req, res) => {
       .sort({ issueDate: -1 })
       .lean();
 
-    // Enrich with event and player names
     const eventIds = [...new Set(certs.map((c) => c.eventId))];
     const events = await Event.find({ code: { $in: eventIds } })
       .select("code name")
@@ -2471,7 +2503,6 @@ app.get("/api/certificates/:certificateId", async (req, res) => {
       return res.status(403).json({ error: "Access denied." });
     }
 
-    // Enrich event and player
     const event = await Event.findOne({ code: cert.eventId })
       .select("name releaseTime lat lng")
       .lean();
@@ -2550,7 +2581,6 @@ app.get("/api/admin/certificates", requireAdmin, async (req, res) => {
       .limit(parseInt(limit))
       .lean();
 
-    // Enrich with event and player names
     const eventIds = [...new Set(certs.map((c) => c.eventId))];
     const events = await Event.find({ code: { $in: eventIds } })
       .select("code name releaseTime")
@@ -2574,7 +2604,6 @@ app.get("/api/admin/certificates", requireAdmin, async (req, res) => {
       playerId: userMap[c.playerId] || { id: c.playerId, name: "Unknown" },
     }));
 
-    // If search was by name, filter again because we didn't filter by player/event name in DB
     let results = certs;
     if (search && !searchFilter.certificateNumber) {
       const searchRegex = new RegExp(search, "i");
