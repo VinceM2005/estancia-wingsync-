@@ -80,7 +80,7 @@ mongoose
     await seedDatabase();
     await migrateEvents();
     await ensureIndexes();
-    await ensureCounters(); // <-- NEW: initialise certificate counter
+    await ensureCounters();
     startStateUpdater();
   })
   .catch((err) => console.error("❌ DB Error:", err));
@@ -90,7 +90,6 @@ mongoose
 // ============================================================
 async function ensureIndexes() {
   try {
-    // 1. Migrate null pigeonIds to "LEGACY" to enforce uniqueness
     const nullPigeonCodes = await RaceCode.find({ pigeonId: null });
     if (nullPigeonCodes.length > 0) {
       console.log(
@@ -103,11 +102,9 @@ async function ensureIndexes() {
       console.log("✅ Null pigeonId migration complete.");
     }
 
-    // Drop old EventRegistration index if it exists
     await EventRegistration.collection
       .dropIndex("eventId_1_playerId_1_pigeonIds_1")
       .catch(() => {});
-    // Create new unique index on (eventId, playerId)
     await EventRegistration.collection.createIndex(
       { eventId: 1, playerId: 1 },
       { unique: true },
@@ -116,8 +113,6 @@ async function ensureIndexes() {
       "✅ Unique index on EventRegistration (eventId, playerId) ensured.",
     );
 
-    // RaceCode index is defined in the schema (unique, not sparse) – no manual creation needed.
-    // We only drop any leftover index that might conflict (optional).
     await RaceCode.collection.dropIndex("eventId_1_pigeonId_1").catch(() => {});
     console.log(
       "✅ Unique index on RaceCode (eventId, pigeonId) ensured (via schema).",
@@ -127,7 +122,6 @@ async function ensureIndexes() {
   }
 }
 
-// ===== NEW: Ensure GlobalCounter for certificate numbers =====
 async function ensureCounters() {
   const year = new Date().getFullYear();
   await GlobalCounter.findOneAndUpdate(
@@ -203,10 +197,7 @@ const RaceCodeSchema = new mongoose.Schema({
   pigeonId: { type: String, ref: "Pigeon" },
 });
 RaceCodeSchema.index({ eventId: 1, userId: 1, status: 1 });
-RaceCodeSchema.index(
-  { eventId: 1, pigeonId: 1 },
-  { unique: true }, // no sparse
-);
+RaceCodeSchema.index({ eventId: 1, pigeonId: 1 }, { unique: true });
 
 const CounterSchema = new mongoose.Schema({
   eventId: { type: String, required: true },
@@ -215,7 +206,6 @@ const CounterSchema = new mongoose.Schema({
 });
 CounterSchema.index({ eventId: 1, userId: 1 }, { unique: true });
 
-// NEW: Global counter for certificates (atomic)
 const GlobalCounterSchema = new mongoose.Schema({
   name: { type: String, required: true, unique: true },
   year: { type: Number, required: true },
@@ -247,7 +237,6 @@ const LogSchema = new mongoose.Schema({
 });
 LogSchema.index({ createdAt: 1 }, { expireAfterSeconds: 2592000 });
 
-// ===== PIGEON & REGISTRATION SCHEMAS =====
 const PigeonSchema = new mongoose.Schema({
   ringNumber: { type: String, required: true, unique: true },
   ownerId: { type: String, required: true, index: true },
@@ -388,6 +377,9 @@ function getStateIndex(state) {
   return STATE_ORDER.indexOf(state);
 }
 
+// ============================================================
+//  ORIGINAL generateStickersForEvent - UNCHANGED
+// ============================================================
 async function generateStickersForEvent(eventId) {
   const MAX_RETRIES = 3;
   let attempt = 0;
@@ -483,6 +475,157 @@ async function generateStickersForEvent(eventId) {
 
       const log = new Log({
         message: `Generated ${generatedCodes.length} stickers for event ${event.name || eventId} (${eventId}).`,
+      });
+      await log.save({ session });
+
+      await session.commitTransaction();
+      session.endSession();
+      return { generated: generatedCodes.length, codes: generatedCodes };
+    } catch (error) {
+      await session.abortTransaction();
+      session.endSession();
+      if (
+        error.code === 112 ||
+        (error.errorLabels &&
+          error.errorLabels.includes("TransientTransactionError"))
+      ) {
+        attempt++;
+        if (attempt < MAX_RETRIES) {
+          console.warn(
+            `WriteConflict in sticker generation for event ${eventId}, retrying in ${delay}ms (attempt ${attempt}/${MAX_RETRIES})`,
+          );
+          await new Promise((resolve) => setTimeout(resolve, delay));
+          delay *= 2;
+          continue;
+        }
+      }
+      console.error("Sticker generation error:", error);
+      throw error;
+    }
+  }
+  throw new Error(
+    `Failed to generate stickers after ${MAX_RETRIES} attempts due to write conflicts.`,
+  );
+}
+
+// ============================================================
+//  NEW: ENHANCED STICKER GENERATION WITH PIGEON VALIDATION
+//  ADD THIS NEW FUNCTION - DOES NOT MODIFY EXISTING CODE
+// ============================================================
+async function generateStickersForEventWithPigeonValidation(eventId) {
+  const MAX_RETRIES = 3;
+  let attempt = 0;
+  let delay = 100;
+
+  while (attempt < MAX_RETRIES) {
+    const session = await mongoose.startSession();
+    session.startTransaction();
+    try {
+      const event = await Event.findOne({ code: eventId }).session(session);
+      if (!event) throw new Error("Event not found");
+
+      const existingCount = await RaceCode.countDocuments({ eventId }).session(
+        session,
+      );
+      if (existingCount > 0) {
+        await session.abortTransaction();
+        session.endSession();
+        return {
+          generated: 0,
+          message:
+            "Stickers already exist for this event. Use 'Regenerate' only if state is Sticker Generated.",
+        };
+      }
+
+      const allowedStates = ["Registration Closed", "Sticker Generated"];
+      if (!allowedStates.includes(event.state)) {
+        if (event.state === "Draft") {
+          await session.abortTransaction();
+          session.endSession();
+          return {
+            generated: 0,
+            message: "Cannot generate stickers for Draft event.",
+          };
+        }
+        if (event.state === "Result Verification") {
+          await session.abortTransaction();
+          session.endSession();
+          return {
+            generated: 0,
+            message: "Cannot generate stickers after result verification.",
+          };
+        }
+      }
+
+      const registrations = await EventRegistration.find({ eventId }).session(
+        session,
+      );
+      if (registrations.length === 0) {
+        await session.abortTransaction();
+        session.endSession();
+        return { generated: 0, message: "No registrations found." };
+      }
+
+      const generatedCodes = [];
+      const processedSet = new Set();
+      for (const reg of registrations) {
+        const pigeonIds = reg.pigeonIds || [];
+        for (const pigeonId of pigeonIds) {
+          const key = `${reg.playerId}_${pigeonId}`;
+          if (processedSet.has(key)) continue;
+          processedSet.add(key);
+
+          const existing = await RaceCode.findOne({
+            eventId,
+            pigeonId: pigeonId ? pigeonId.toString() : null,
+          }).session(session);
+          if (existing) continue;
+
+          const code = await getUniqueRaceCode();
+          const raceCode = new RaceCode({
+            eventId,
+            userId: reg.playerId,
+            code,
+            status: "unused",
+            registrationId: reg._id,
+            pigeonId: pigeonId ? pigeonId.toString() : `LEGACY_${code}`,
+          });
+          await raceCode.save({ session });
+
+          // Get pigeon details for sticker display
+          let pigeonDetails = null;
+          if (pigeonId) {
+            const pigeon = await Pigeon.findById(pigeonId).session(session);
+            if (pigeon) {
+              pigeonDetails = {
+                ringNumber: pigeon.ringNumber,
+                nickname: pigeon.nickname || "",
+                avatarId: pigeon.avatarId || "",
+              };
+            }
+          }
+
+          generatedCodes.push({
+            playerId: reg.playerId,
+            pigeonId: pigeonId ? pigeonId.toString() : null,
+            code,
+            pigeonDetails,
+          });
+        }
+      }
+
+      await EventRegistration.updateMany(
+        { eventId },
+        { status: "locked", updatedAt: new Date() },
+      ).session(session);
+
+      if (event.state !== "Sticker Generated") {
+        event.state = "Sticker Generated";
+        await event.save({ session });
+      }
+
+      const log = new Log({
+        message: `Generated ${generatedCodes.length} stickers with pigeon validation for event ${event.name || eventId} (${eventId}).`,
       });
       await log.save({ session });
 
@@ -834,7 +977,7 @@ app.get("/api/time", async (req, res) => {
 // ============================================================
 app.use("/api", authenticateToken);
 
-// ----- Existing routes -----
+// ----- Existing routes (UNCHANGED) -----
 app.get("/api/events/active", async (req, res) => {
   try {
     const events = await Event.find({
@@ -922,6 +1065,9 @@ app.get("/api/events/registrations-summary", async (req, res) => {
   }
 });
 
+// ============================================================
+//  ORIGINAL CLOCK-IN ENDPOINT - UNCHANGED
+// ============================================================
 app.post(
   "/api/clockin",
   clockinLimiter,
@@ -1192,6 +1338,302 @@ app.post(
       await session.abortTransaction();
       session.endSession();
       console.error("Clock-in error:", error);
+      if (error.code === 11000) {
+        return res
+          .status(400)
+          .json({ error: "This code has already been used for this event." });
+      }
+      res.status(500).json({
+        error:
+          "An internal error occurred during clock-in. Please try again later.",
+      });
+    }
+  },
+);
+
+// ============================================================
+//  NEW: ENHANCED CLOCK-IN WITH PIGEON VALIDATION
+//  ADD THIS NEW ENDPOINT - DOES NOT MODIFY EXISTING CODE
+// ============================================================
+app.post(
+  "/api/clockin-enhanced",
+  clockinLimiter,
+  [
+    body("userId").notEmpty().withMessage("User ID required"),
+    body("eventCode").notEmpty().withMessage("Event code required"),
+  ],
+  async (req, res) => {
+    const session = await mongoose.startSession();
+    session.startTransaction();
+    try {
+      const errors = validationResult(req);
+      if (!errors.isEmpty()) {
+        await session.abortTransaction();
+        session.endSession();
+        return res.status(400).json({ error: errors.array()[0].msg });
+      }
+      const { userId, eventCode } = matchedData(req);
+      const arrivalTime = new Date();
+
+      const user = await User.findOne({ id: userId }).session(session);
+      if (!user) {
+        await session.abortTransaction();
+        session.endSession();
+        return res.status(400).json({ error: "Invalid user" });
+      }
+      if (user.lat == null || user.lng == null) {
+        await session.abortTransaction();
+        session.endSession();
+        return res.status(400).json({
+          error: "Player loft coordinates missing. Please update profile.",
+        });
+      }
+
+      // Find the race code - using findOne instead of findOneAndUpdate to validate first
+      const raceCode = await RaceCode.findOne({
+        code: eventCode,
+        status: "unused",
+      }).session(session);
+
+      if (!raceCode) {
+        await session.abortTransaction();
+        session.endSession();
+        return res
+          .status(400)
+          .json({ error: "Invalid or already used race code." });
+      }
+
+      if (raceCode.userId !== userId) {
+        await session.abortTransaction();
+        session.endSession();
+        return res
+          .status(400)
+          .json({ error: "This code does not belong to you." });
+      }
+
+      // ===== ENHANCED PIGEON VALIDATION =====
+      // Store the pigeon ID from the code for validation
+      const assignedPigeonId = raceCode.pigeonId;
+
+      // If the code is for a specific pigeon, validate it belongs to the user
+      if (assignedPigeonId && !assignedPigeonId.startsWith("LEGACY_")) {
+        const pigeon = await Pigeon.findOne({
+          _id: assignedPigeonId,
+          ownerId: userId,
+          status: "Active",
+        }).session(session);
+
+        if (!pigeon) {
+          // The pigeon is no longer active or doesn't belong to the user
+          await session.abortTransaction();
+          session.endSession();
+          return res.status(400).json({
+            error:
+              "This sticker code is for a pigeon that is no longer active or does not belong to you.",
+          });
+        }
+
+        // Pigeon is valid - we'll use this pigeon ID in the result
+        // This ensures the correct pigeon is recorded
+      }
+      // ===== END OF ENHANCED PIGEON VALIDATION =====
+
+      // Now mark the code as used
+      raceCode.status = "used";
+      raceCode.usedAt = new Date();
+      await raceCode.save({ session });
+
+      const event = await Event.findOne({ code: raceCode.eventId }).session(
+        session,
+      );
+      if (!event) {
+        // Revert the code status
+        raceCode.status = "unused";
+        raceCode.usedAt = null;
+        await raceCode.save({ session });
+        await session.abortTransaction();
+        session.endSession();
+        return res.status(400).json({ error: "Event not found" });
+      }
+
+      if (event.state !== "Live Race") {
+        // Revert the code status
+        raceCode.status = "unused";
+        raceCode.usedAt = null;
+        await raceCode.save({ session });
+        await session.abortTransaction();
+        session.endSession();
+        return res.status(400).json({
+          error: `Clock‑in is only allowed during Live Race (current state: ${event.state}).`,
+        });
+      }
+
+      if (raceCode.registrationId) {
+        const registration = await EventRegistration.findOne({
+          _id: raceCode.registrationId,
+          playerId: userId,
+          eventId: event.code,
+        }).session(session);
+        if (!registration) {
+          // Revert the code status
+          raceCode.status = "unused";
+          raceCode.usedAt = null;
+          await raceCode.save({ session });
+          await session.abortTransaction();
+          session.endSession();
+          return res.status(400).json({ error: "Registration not found." });
+        }
+        if (registration.status !== "locked") {
+          // Revert the code status
+          raceCode.status = "unused";
+          raceCode.usedAt = null;
+          await raceCode.save({ session });
+          await session.abortTransaction();
+          session.endSession();
+          return res.status(400).json({ error: "Registration is not locked." });
+        }
+      }
+
+      const totalCodes = await RaceCode.countDocuments({
+        eventId: event.code,
+        userId,
+      }).session(session);
+
+      let counter = await Counter.findOne({
+        eventId: event.code,
+        userId: userId,
+      }).session(session);
+
+      if (!counter) {
+        counter = new Counter({
+          eventId: event.code,
+          userId: userId,
+          count: 0,
+        });
+        await counter.save({ session });
+      }
+
+      if (counter.count >= totalCodes) {
+        // Revert the code status
+        raceCode.status = "unused";
+        raceCode.usedAt = null;
+        await raceCode.save({ session });
+        await session.abortTransaction();
+        session.endSession();
+        return res.status(400).json({
+          error: "You have already clocked all your pigeons for this event.",
+        });
+      }
+
+      counter.count += 1;
+      await counter.save({ session });
+      const newCount = counter.count;
+
+      const release = new Date(event.releaseTime);
+      const arrival = new Date(arrivalTime);
+      if (isNaN(release.getTime()) || isNaN(arrival.getTime())) {
+        counter.count -= 1;
+        await counter.save({ session });
+        // Revert the code status
+        raceCode.status = "unused";
+        raceCode.usedAt = null;
+        await raceCode.save({ session });
+        await session.abortTransaction();
+        session.endSession();
+        return res.status(400).json({ error: "Invalid date format" });
+      }
+      const flightHours = (arrival - release) / (1000 * 60 * 60);
+      if (flightHours <= 0) {
+        counter.count -= 1;
+        await counter.save({ session });
+        // Revert the code status
+        raceCode.status = "unused";
+        raceCode.usedAt = null;
+        await raceCode.save({ session });
+        await session.abortTransaction();
+        session.endSession();
+        return res
+          .status(400)
+          .json({ error: "Arrival time must be after release time" });
+      }
+
+      let distanceKm;
+      try {
+        distanceKm = calculateDistance(
+          user.lat,
+          user.lng,
+          event.lat,
+          event.lng,
+        );
+      } catch (err) {
+        counter.count -= 1;
+        await counter.save({ session });
+        // Revert the code status
+        raceCode.status = "unused";
+        raceCode.usedAt = null;
+        await raceCode.save({ session });
+        await session.abortTransaction();
+        session.endSession();
+        return res.status(400).json({ error: "Error calculating distance" });
+      }
+
+      const speedKPH = parseFloat((distanceKm / flightHours).toFixed(4));
+      const speedMPM = parseFloat(
+        ((distanceKm * 1000) / (flightHours * 60)).toFixed(4),
+      );
+
+      // Use the assigned pigeon ID from the code
+      const resultPigeonId =
+        assignedPigeonId && !assignedPigeonId.startsWith("LEGACY_")
+          ? assignedPigeonId
+          : null;
+
+      const result = await Result.create(
+        [
+          {
+            eventId: event.code,
+            userId: user.id,
+            userName: user.name,
+            clockInNumber: newCount,
+            clockInCode: eventCode,
+            distanceKm: distanceKm,
+            arrivalTime: arrival,
+            flightTimeHours: flightHours,
+            speedKPH,
+            speedMPM,
+            pigeonId: resultPigeonId,
+            registrationId: raceCode.registrationId || null,
+          },
+        ],
+        { session },
+      );
+
+      await Log.create(
+        [
+          {
+            message: `${userId} clocked in with code ${eventCode} for pigeon ${resultPigeonId || "Legacy"}. Distance: ${distanceKm.toFixed(
+              4,
+            )}km, Speed: ${speedMPM.toFixed(4)} m/min`,
+          },
+        ],
+        { session },
+      );
+
+      await session.commitTransaction();
+      session.endSession();
+
+      res.json({
+        success: true,
+        result: result[0],
+        distance: distanceKm,
+        speed: speedMPM,
+        eventName: event.name,
+        pigeonId: resultPigeonId,
+      });
+    } catch (error) {
+      await session.abortTransaction();
+      session.endSession();
+      console.error("Enhanced clock-in error:", error);
       if (error.code === 11000) {
         return res
           .status(400)
@@ -2202,7 +2644,7 @@ app.delete(
   },
 );
 
-// ===== STICKER GENERATION (manual) =====
+// ===== STICKER GENERATION (manual) - UNCHANGED =====
 app.post(
   "/api/admin/events/:eventId/generate-stickers",
   requireAdmin,
@@ -2231,6 +2673,42 @@ app.post(
   },
 );
 
+// ============================================================
+//  NEW: ENHANCED STICKER GENERATION ENDPOINT
+//  ADD THIS NEW ENDPOINT - DOES NOT MODIFY EXISTING CODE
+// ============================================================
+app.post(
+  "/api/admin/events/:eventId/generate-stickers-enhanced",
+  requireAdmin,
+  async (req, res) => {
+    try {
+      const { eventId } = req.params;
+      const event = await Event.findOne({ code: eventId });
+      if (!event) {
+        return res.status(404).json({ error: "Event not found." });
+      }
+
+      const result =
+        await generateStickersForEventWithPigeonValidation(eventId);
+      if (result.generated === 0 && result.message) {
+        return res.json({ success: true, message: result.message });
+      }
+
+      res.json({
+        success: true,
+        message: `Generated ${result.generated} stickers with pigeon validation.`,
+        codes: result.codes || [],
+      });
+    } catch (error) {
+      console.error("Error generating enhanced stickers:", error);
+      res.status(500).json({ error: "Failed to generate enhanced stickers." });
+    }
+  },
+);
+
+// ============================================================
+//  EXISTING get codes endpoint - UNCHANGED
+// ============================================================
 app.get("/api/admin/events/:eventId/codes", requireAdmin, async (req, res) => {
   try {
     const { eventId } = req.params;
@@ -2280,6 +2758,84 @@ app.get("/api/admin/events/:eventId/codes", requireAdmin, async (req, res) => {
     res.status(500).json({ error: "Failed to fetch codes." });
   }
 });
+
+// ============================================================
+//  NEW: GET CODES WITH PIGEON DETAILS ENDPOINT
+//  ADD THIS NEW ENDPOINT - DOES NOT MODIFY EXISTING CODE
+// ============================================================
+app.get(
+  "/api/admin/events/:eventId/codes-with-pigeons",
+  requireAdmin,
+  async (req, res) => {
+    try {
+      const { eventId } = req.params;
+      const event = await Event.findOne({ code: eventId });
+      if (!event) {
+        return res.status(404).json({ error: "Event not found." });
+      }
+
+      const raceCodes = await RaceCode.aggregate([
+        { $match: { eventId } },
+        {
+          $lookup: {
+            from: "users",
+            localField: "userId",
+            foreignField: "id",
+            as: "user",
+          },
+        },
+        { $unwind: { path: "$user", preserveNullAndEmptyArrays: true } },
+        {
+          $lookup: {
+            from: "pigeons",
+            localField: "pigeonId",
+            foreignField: "_id",
+            as: "pigeon",
+          },
+        },
+        { $unwind: { path: "$pigeon", preserveNullAndEmptyArrays: true } },
+        {
+          $project: {
+            code: 1,
+            status: 1,
+            usedAt: 1,
+            generatedAt: 1,
+            playerName: { $ifNull: ["$user.name", "Unknown"] },
+            playerId: { $ifNull: ["$user.id", null] },
+            pigeonId: { $ifNull: ["$pigeon._id", null] },
+            ringNumber: { $ifNull: ["$pigeon.ringNumber", null] },
+            nickname: { $ifNull: ["$pigeon.nickname", ""] },
+            avatarId: { $ifNull: ["$pigeon.avatarId", ""] },
+            pigeonName: {
+              $cond: [
+                {
+                  $and: [
+                    { $ne: ["$pigeon.nickname", ""] },
+                    { $ne: ["$pigeon.nickname", null] },
+                  ],
+                },
+                {
+                  $concat: [
+                    "$pigeon.nickname",
+                    " (",
+                    "$pigeon.ringNumber",
+                    ")",
+                  ],
+                },
+                "$pigeon.ringNumber",
+              ],
+            },
+          },
+        },
+      ]);
+
+      res.json({ success: true, codes: raceCodes, eventName: event.name });
+    } catch (error) {
+      console.error("Error fetching race codes with pigeons:", error);
+      res.status(500).json({ error: "Failed to fetch codes with pigeons." });
+    }
+  },
+);
 
 app.put(
   "/api/admin/events/:eventId/registration-settings",
