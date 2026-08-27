@@ -4744,11 +4744,12 @@ const app = {
       if (j === 3 && k !== 13) return `${r}RD PLACE`;
       return `${r}TH PLACE`;
     };
+    // Template ranking is always gold-styled
     if (n === 1) return { label: "CHAMPION", rankClass: "gold" };
-    if (n === 2) return { label: "2ND PLACE", rankClass: "silver" };
-    if (n === 3) return { label: "3RD PLACE", rankClass: "bronze" };
-    if (n > 3) return { label: ordinal(n), rankClass: "participant" };
-    return { label: "PARTICIPANT", rankClass: "participant" };
+    if (n === 2) return { label: "2ND PLACE", rankClass: "gold" };
+    if (n === 3) return { label: "3RD PLACE", rankClass: "gold" };
+    if (n > 3) return { label: ordinal(n), rankClass: "gold" };
+    return { label: "PARTICIPANT", rankClass: "gold" };
   },
 
   _escapeCertHtml: function (str) {
@@ -4801,50 +4802,79 @@ const app = {
 
     const baseUrl = window.location.origin;
     const verifyUrl = `${baseUrl}/verify/${cert.qrHash || ""}`;
-    const logoSrc = "wingsync-logo.png";
+
+    // Inline teal wings – avoids black PNG bar over the header
+    const logoSvg = `
+      <svg viewBox="0 0 120 70" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+        <defs>
+          <linearGradient id="certWingGrad" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stop-color="#3ec4b0"/>
+            <stop offset="55%" stop-color="#1a8a78"/>
+            <stop offset="100%" stop-color="#0d5c4f"/>
+          </linearGradient>
+        </defs>
+        <path d="M58 62 C40 48 18 40 6 22 C22 28 36 34 48 48 C52 54 55 58 58 62Z" fill="url(#certWingGrad)"/>
+        <path d="M62 62 C80 48 102 40 114 22 C98 28 84 34 72 48 C68 54 65 58 62 62Z" fill="url(#certWingGrad)"/>
+        <path d="M58 62 C48 44 34 30 22 14 C36 26 46 38 54 52 C56 56 57 59 58 62Z" fill="#2aa890" opacity="0.85"/>
+        <path d="M62 62 C72 44 86 30 98 14 C84 26 74 38 66 52 C64 56 63 59 62 62Z" fill="#2aa890" opacity="0.85"/>
+        <path d="M60 64 L56 52 L60 54 L64 52 Z" fill="#c9a84c"/>
+      </svg>`;
 
     const cornerSvg = `
-      <svg viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
-        <path d="M4 28C4 12 12 4 28 4" stroke="currentColor" stroke-width="2"/>
-        <path d="M8 34C8 18 18 8 34 8" stroke="currentColor" stroke-width="1.2" opacity="0.7"/>
-        <path d="M4 16C10 10 16 8 22 6M4 22C12 14 20 10 28 8" stroke="currentColor" stroke-width="1.4"/>
-        <path d="M14 4C18 10 20 16 22 22M20 4C24 12 26 18 28 24" stroke="currentColor" stroke-width="1.4"/>
-        <circle cx="10" cy="10" r="2.2" fill="currentColor"/>
-        <path d="M18 18c4-6 10-8 16-8" stroke="currentColor" stroke-width="1.2" opacity="0.8"/>
+      <svg viewBox="0 0 80 80" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+        <path d="M6 36C6 14 14 6 36 6" stroke="currentColor" stroke-width="2.4"/>
+        <path d="M10 42C10 20 20 10 42 10" stroke="currentColor" stroke-width="1.3" opacity="0.75"/>
+        <path d="M6 20C14 12 22 9 30 7M6 28C16 18 26 12 38 9" stroke="currentColor" stroke-width="1.5"/>
+        <path d="M18 6C22 14 25 22 27 30M26 6C30 16 33 24 35 32" stroke="currentColor" stroke-width="1.5"/>
+        <path d="M12 12c8-2 14 2 16 10M20 8c6 4 8 12 6 18" stroke="currentColor" stroke-width="1.2" opacity="0.85"/>
+        <circle cx="12" cy="12" r="2.4" fill="currentColor"/>
+        <path d="M28 28c6-8 14-10 22-8" stroke="currentColor" stroke-width="1.2" opacity="0.7"/>
       </svg>`;
 
     const laurelSvg = `
       <svg viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
-        <g fill="none" stroke="#b8963e" stroke-width="2.2" stroke-linecap="round">
-          <path d="M28 118c8 28 34 52 72 52s64-24 72-52"/>
-          <path d="M36 112c6 22 28 42 64 42s58-20 64-42"/>
-        </g>
         <g fill="#b8963e">
-          <ellipse cx="40" cy="108" rx="7" ry="12" transform="rotate(-35 40 108)" opacity="0.9"/>
-          <ellipse cx="48" cy="128" rx="7" ry="12" transform="rotate(-15 48 128)" opacity="0.9"/>
-          <ellipse cx="62" cy="144" rx="7" ry="12" transform="rotate(5 62 144)" opacity="0.9"/>
-          <ellipse cx="82" cy="156" rx="7" ry="12" transform="rotate(25 82 156)" opacity="0.9"/>
-          <ellipse cx="160" cy="108" rx="7" ry="12" transform="rotate(35 160 108)" opacity="0.9"/>
-          <ellipse cx="152" cy="128" rx="7" ry="12" transform="rotate(15 152 128)" opacity="0.9"/>
-          <ellipse cx="138" cy="144" rx="7" ry="12" transform="rotate(-5 138 144)" opacity="0.9"/>
-          <ellipse cx="118" cy="156" rx="7" ry="12" transform="rotate(-25 118 156)" opacity="0.9"/>
+          <ellipse cx="34" cy="78" rx="6" ry="13" transform="rotate(-55 34 78)" opacity="0.92"/>
+          <ellipse cx="30" cy="98" rx="6.5" ry="13" transform="rotate(-40 30 98)" opacity="0.92"/>
+          <ellipse cx="32" cy="118" rx="6.5" ry="13" transform="rotate(-25 32 118)" opacity="0.92"/>
+          <ellipse cx="40" cy="136" rx="6.5" ry="13" transform="rotate(-10 40 136)" opacity="0.92"/>
+          <ellipse cx="54" cy="150" rx="6.5" ry="13" transform="rotate(8 54 150)" opacity="0.92"/>
+          <ellipse cx="72" cy="160" rx="6.5" ry="13" transform="rotate(22 72 160)" opacity="0.92"/>
+          <ellipse cx="92" cy="166" rx="6.5" ry="13" transform="rotate(38 92 166)" opacity="0.92"/>
+          <ellipse cx="166" cy="78" rx="6" ry="13" transform="rotate(55 166 78)" opacity="0.92"/>
+          <ellipse cx="170" cy="98" rx="6.5" ry="13" transform="rotate(40 170 98)" opacity="0.92"/>
+          <ellipse cx="168" cy="118" rx="6.5" ry="13" transform="rotate(25 168 118)" opacity="0.92"/>
+          <ellipse cx="160" cy="136" rx="6.5" ry="13" transform="rotate(10 160 136)" opacity="0.92"/>
+          <ellipse cx="146" cy="150" rx="6.5" ry="13" transform="rotate(-8 146 150)" opacity="0.92"/>
+          <ellipse cx="128" cy="160" rx="6.5" ry="13" transform="rotate(-22 128 160)" opacity="0.92"/>
+          <ellipse cx="108" cy="166" rx="6.5" ry="13" transform="rotate(-38 108 166)" opacity="0.92"/>
         </g>
+        <path d="M36 70C28 100 48 158 100 170C152 158 172 100 164 70" fill="none" stroke="#b8963e" stroke-width="1.4" opacity="0.55"/>
       </svg>`;
 
     const badgeSvg = `
-      <svg viewBox="0 0 80 56" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
-        <path d="M8 22c0-2 2-4 8-4h48c6 0 8 2 8 4v8c0 10-14 18-32 18S8 40 8 30v-8z" fill="#0a3d30" stroke="#b8963e" stroke-width="2"/>
-        <path d="M28 14h24l4 10H24l4-10z" fill="#0a3d30" stroke="#b8963e" stroke-width="1.5"/>
-        <path d="M40 20c6 0 10 3 11 7-2 1-5 2-11 2s-9-1-11-2c1-4 5-7 11-7z" fill="#b8963e"/>
-        <circle cx="34" cy="34" r="1.6" fill="#b8963e"/>
-        <circle cx="40" cy="34" r="1.6" fill="#b8963e"/>
-        <circle cx="46" cy="34" r="1.6" fill="#b8963e"/>
+      <svg viewBox="0 0 90 58" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+        <path d="M6 26c0-3 3-5 10-5h58c7 0 10 2 10 5v6c0 12-16 20-39 20S6 44 6 32v-6z" fill="#0a3d30" stroke="#b8963e" stroke-width="2"/>
+        <path d="M4 28c8 2 14 2 20 0M86 28c-8 2-14 2-20 0" stroke="#b8963e" stroke-width="1.5" fill="none"/>
+        <path d="M32 12h26l5 12H27l5-12z" fill="#0a3d30" stroke="#b8963e" stroke-width="1.6"/>
+        <path d="M45 18c7 0 11 3.2 12 7.5-2.2 1-5.5 2-12 2s-9.8-1-12-2c1-4.3 5-7.5 12-7.5z" fill="#b8963e"/>
+        <circle cx="38" cy="36" r="1.7" fill="#b8963e"/>
+        <circle cx="45" cy="36" r="1.7" fill="#b8963e"/>
+        <circle cx="52" cy="36" r="1.7" fill="#b8963e"/>
+      </svg>`;
+
+    const flourishSvg = `
+      <svg viewBox="0 0 120 16" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+        <path d="M4 8c18-7 36-7 52 0 16 7 34 7 52 0" fill="none" stroke="#b8963e" stroke-width="1.3"/>
+        <path d="M50 8c4-5 10-5 14 0-4 5-10 5-14 0z" fill="#b8963e"/>
+        <circle cx="8" cy="8" r="1.4" fill="#b8963e"/>
+        <circle cx="112" cy="8" r="1.4" fill="#b8963e"/>
       </svg>`;
 
     const ornamentSvg = `
-      <svg class="orn-side" viewBox="0 0 60 20" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
-        <path d="M2 10c8-8 18-8 28 0 10 8 20 8 28 0" fill="none" stroke="#b8963e" stroke-width="1.5"/>
-        <circle cx="30" cy="10" r="2" fill="#b8963e"/>
+      <svg class="orn-side" viewBox="0 0 70 24" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+        <path d="M2 12c10-10 22-10 34 0 12 10 24 10 34 0" fill="none" stroke="#b8963e" stroke-width="1.4"/>
+        <path d="M28 12c3-4 8-4 11 0-3 4-8 4-11 0z" fill="#b8963e"/>
       </svg>`;
 
     container.innerHTML = `
@@ -4857,17 +4887,13 @@ const app = {
             <div class="cert-corner cert-corner-br">${cornerSvg}</div>
 
             <header class="cert-header">
-              <img src="${logoSrc}" alt="WingSync" class="cert-logo" crossorigin="anonymous" />
+              <div class="cert-logo-wrap">${logoSvg}</div>
               <div class="cert-brand">WINGSYNC</div>
               <div class="cert-powered">POWERED BY WINGSYNC</div>
               <div class="cert-club">MALINAO RACING PIGEON CLUB</div>
               <div class="cert-mrpc">MRPC</div>
               <h1 class="cert-title">CERTIFICATE</h1>
-              <div class="cert-title-flourish">
-                <span class="fl-line"></span>
-                <span>❧</span>
-                <span class="fl-line"></span>
-              </div>
+              <div class="cert-title-flourish">${flourishSvg}</div>
             </header>
 
             <div class="cert-main">
@@ -4992,7 +5018,7 @@ const app = {
 
     const origin = window.location.origin;
     const basePath = window.location.pathname.replace(/\/[^/]*$/, "/");
-    const cssHref = `${origin}${basePath}style.css?v=6`;
+    const cssHref = `${origin}${basePath}style.css?v=7`;
     const fontHref =
       "https://fonts.googleapis.com/css2?family=Cinzel:wght@400;600;700&family=Great+Vibes&family=Libre+Baskerville:ital,wght@0,400;0,700;1,400&display=swap";
     const faHref =
