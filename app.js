@@ -4733,7 +4733,7 @@ const app = {
       });
   },
 
-  // ----- CERTIFICATE TEMPLATE (matches wingsync_cert-temp.png) -----
+  // ----- CERTIFICATE TEMPLATE (full CSS layout matching MRPC design) -----
   _getCertificateRankMeta: function (rank) {
     const n = Number(rank) || 0;
     const ordinal = (r) => {
@@ -4744,15 +4744,19 @@ const app = {
       if (j === 3 && k !== 13) return `${r}RD PLACE`;
       return `${r}TH PLACE`;
     };
-    if (n === 1)
-      return { label: "CHAMPION", rankClass: "gold" };
-    if (n === 2)
-      return { label: "2ND PLACE", rankClass: "silver" };
-    if (n === 3)
-      return { label: "3RD PLACE", rankClass: "bronze" };
-    if (n > 3)
-      return { label: ordinal(n), rankClass: "participant" };
+    if (n === 1) return { label: "CHAMPION", rankClass: "gold" };
+    if (n === 2) return { label: "2ND PLACE", rankClass: "silver" };
+    if (n === 3) return { label: "3RD PLACE", rankClass: "bronze" };
+    if (n > 3) return { label: ordinal(n), rankClass: "participant" };
     return { label: "PARTICIPANT", rankClass: "participant" };
+  },
+
+  _escapeCertHtml: function (str) {
+    return String(str ?? "")
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;");
   },
 
   _renderCertificateDetail: function (cert) {
@@ -4760,11 +4764,12 @@ const app = {
     const { label: rankLabel, rankClass } = this._getCertificateRankMeta(
       cert.rank,
     );
+    const esc = (s) => this._escapeCertHtml(s);
 
     const avatarId = cert.pigeonId?.avatarId || "";
     const avatarHTML = avatarId
-      ? getPigeonAvatarSVG(avatarId, 160)
-      : getDefaultPigeonSVG(160);
+      ? getPigeonAvatarSVG(avatarId, 180)
+      : getDefaultPigeonSVG(180);
 
     const issueDate = new Date(cert.issueDate);
     const formattedDate = issueDate.toLocaleDateString("en-PH", {
@@ -4786,7 +4791,6 @@ const app = {
 
     const nickname = (cert.pigeonId?.nickname || "").trim();
     const ringNumber = cert.pigeonId?.ringNumber || "N/A";
-    // Template placeholder: "( Pigeon name with ringband no. )"
     const pigeonDisplay = nickname
       ? `${nickname} (${ringNumber})`
       : ringNumber;
@@ -4797,31 +4801,122 @@ const app = {
 
     const baseUrl = window.location.origin;
     const verifyUrl = `${baseUrl}/verify/${cert.qrHash || ""}`;
+    const logoSrc = "wingsync-logo.png";
+
+    const cornerSvg = `
+      <svg viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+        <path d="M4 28C4 12 12 4 28 4" stroke="currentColor" stroke-width="2"/>
+        <path d="M8 34C8 18 18 8 34 8" stroke="currentColor" stroke-width="1.2" opacity="0.7"/>
+        <path d="M4 16C10 10 16 8 22 6M4 22C12 14 20 10 28 8" stroke="currentColor" stroke-width="1.4"/>
+        <path d="M14 4C18 10 20 16 22 22M20 4C24 12 26 18 28 24" stroke="currentColor" stroke-width="1.4"/>
+        <circle cx="10" cy="10" r="2.2" fill="currentColor"/>
+        <path d="M18 18c4-6 10-8 16-8" stroke="currentColor" stroke-width="1.2" opacity="0.8"/>
+      </svg>`;
+
+    const laurelSvg = `
+      <svg viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+        <g fill="none" stroke="#b8963e" stroke-width="2.2" stroke-linecap="round">
+          <path d="M28 118c8 28 34 52 72 52s64-24 72-52"/>
+          <path d="M36 112c6 22 28 42 64 42s58-20 64-42"/>
+        </g>
+        <g fill="#b8963e">
+          <ellipse cx="40" cy="108" rx="7" ry="12" transform="rotate(-35 40 108)" opacity="0.9"/>
+          <ellipse cx="48" cy="128" rx="7" ry="12" transform="rotate(-15 48 128)" opacity="0.9"/>
+          <ellipse cx="62" cy="144" rx="7" ry="12" transform="rotate(5 62 144)" opacity="0.9"/>
+          <ellipse cx="82" cy="156" rx="7" ry="12" transform="rotate(25 82 156)" opacity="0.9"/>
+          <ellipse cx="160" cy="108" rx="7" ry="12" transform="rotate(35 160 108)" opacity="0.9"/>
+          <ellipse cx="152" cy="128" rx="7" ry="12" transform="rotate(15 152 128)" opacity="0.9"/>
+          <ellipse cx="138" cy="144" rx="7" ry="12" transform="rotate(-5 138 144)" opacity="0.9"/>
+          <ellipse cx="118" cy="156" rx="7" ry="12" transform="rotate(-25 118 156)" opacity="0.9"/>
+        </g>
+      </svg>`;
+
+    const badgeSvg = `
+      <svg viewBox="0 0 80 56" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+        <path d="M8 22c0-2 2-4 8-4h48c6 0 8 2 8 4v8c0 10-14 18-32 18S8 40 8 30v-8z" fill="#0a3d30" stroke="#b8963e" stroke-width="2"/>
+        <path d="M28 14h24l4 10H24l4-10z" fill="#0a3d30" stroke="#b8963e" stroke-width="1.5"/>
+        <path d="M40 20c6 0 10 3 11 7-2 1-5 2-11 2s-9-1-11-2c1-4 5-7 11-7z" fill="#b8963e"/>
+        <circle cx="34" cy="34" r="1.6" fill="#b8963e"/>
+        <circle cx="40" cy="34" r="1.6" fill="#b8963e"/>
+        <circle cx="46" cy="34" r="1.6" fill="#b8963e"/>
+      </svg>`;
+
+    const ornamentSvg = `
+      <svg class="orn-side" viewBox="0 0 60 20" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+        <path d="M2 10c8-8 18-8 28 0 10 8 20 8 28 0" fill="none" stroke="#b8963e" stroke-width="1.5"/>
+        <circle cx="30" cy="10" r="2" fill="#b8963e"/>
+      </svg>`;
 
     container.innerHTML = `
       <div class="certificate-wrapper">
         <div class="certificate-sheet" id="certificate-sheet">
-          <div class="cert-cover cert-cover-avatar" aria-hidden="true"></div>
-          <div class="cert-field cert-avatar">${avatarHTML}</div>
+          <div class="cert-frame">
+            <div class="cert-corner cert-corner-tl">${cornerSvg}</div>
+            <div class="cert-corner cert-corner-tr">${cornerSvg}</div>
+            <div class="cert-corner cert-corner-bl">${cornerSvg}</div>
+            <div class="cert-corner cert-corner-br">${cornerSvg}</div>
 
-          <div class="cert-cover cert-cover-name" aria-hidden="true"></div>
-          <div class="cert-field cert-name" title="${pigeonDisplay}">${pigeonDisplay}</div>
+            <header class="cert-header">
+              <img src="${logoSrc}" alt="WingSync" class="cert-logo" crossorigin="anonymous" />
+              <div class="cert-brand">WINGSYNC</div>
+              <div class="cert-powered">POWERED BY WINGSYNC</div>
+              <div class="cert-club">MALINAO RACING PIGEON CLUB</div>
+              <div class="cert-mrpc">MRPC</div>
+              <h1 class="cert-title">CERTIFICATE</h1>
+              <div class="cert-title-flourish">
+                <span class="fl-line"></span>
+                <span>❧</span>
+                <span class="fl-line"></span>
+              </div>
+            </header>
 
-          <div class="cert-cover cert-cover-body" aria-hidden="true"></div>
-          <div class="cert-field cert-body">
-            has flown from <span class="cert-value">${eventName}</span>
-            a distance of <span class="cert-value">${distance} km</span>
-            on <span class="cert-value">${releaseDateStr}</span>,
-            recording of a velocity of <span class="cert-value">${speed} m/min</span>
-            and thereby won
+            <div class="cert-main">
+              <div class="cert-avatar-col">
+                <div class="cert-avatar-wrap">
+                  <div class="cert-laurel">${laurelSvg}</div>
+                  <div class="cert-avatar-ring">${avatarHTML}</div>
+                  <div class="cert-badge">${badgeSvg}</div>
+                </div>
+              </div>
+              <div class="cert-text">
+                <p class="cert-intro">This is to certify that</p>
+                <p class="cert-name">${esc(pigeonDisplay)}</p>
+                <p class="cert-body">
+                  has flown from <span class="cert-value">${esc(eventName)}</span>
+                  a distance of <span class="cert-value">${esc(distance)} km</span>
+                  on <span class="cert-value">${esc(releaseDateStr)}</span>,
+                  recording of a velocity of <span class="cert-value">${esc(speed)} m/min</span>
+                  and thereby won
+                </p>
+                <p class="cert-rank rank-${rankClass}">— ${esc(rankLabel)} —</p>
+                <p class="cert-closing">in the said race.</p>
+              </div>
+            </div>
+
+            <footer class="cert-footer">
+              <div class="cert-signed">
+                <div class="cert-signed-date">${esc(formattedDate)}</div>
+                <div class="cert-signed-label">Signed on,</div>
+              </div>
+              <div class="cert-ornament">
+                ${ornamentSvg}
+                <div class="cert-trophy"><i class="fas fa-trophy"></i></div>
+                ${ornamentSvg}
+              </div>
+              <div class="cert-sigs">
+                <div class="cert-sig">
+                  <span class="cert-sig-name">Ash Cargullo</span>
+                  <span class="cert-sig-title">Club Vice-President</span>
+                </div>
+                <div class="cert-sig">
+                  <span class="cert-sig-name">Vincent Macauyam</span>
+                  <span class="cert-sig-title">Club President</span>
+                </div>
+              </div>
+            </footer>
+
+            <div class="cert-qr" id="cert-qr-container"></div>
           </div>
-
-          <div class="cert-cover cert-cover-rank" aria-hidden="true"></div>
-          <div class="cert-field cert-rank rank-${rankClass}">— ${rankLabel} —</div>
-
-          <div class="cert-field cert-signed">${formattedDate}</div>
-
-          <div class="cert-field cert-qr" id="cert-qr-container"></div>
         </div>
       </div>
     `;
@@ -4866,7 +4961,7 @@ const app = {
       const qrDiv = document.createElement("div");
       qrDiv.id = "qr-code-element";
       container.appendChild(qrDiv);
-      const size = Math.max(48, Math.floor(container.clientWidth || 64));
+      const size = Math.max(44, Math.floor(container.clientWidth || 48));
       new QRCode(qrDiv, {
         text: text,
         width: size,
@@ -4897,10 +4992,11 @@ const app = {
 
     const origin = window.location.origin;
     const basePath = window.location.pathname.replace(/\/[^/]*$/, "/");
-    const cssHref = `${origin}${basePath}style.css?v=5`;
+    const cssHref = `${origin}${basePath}style.css?v=6`;
     const fontHref =
       "https://fonts.googleapis.com/css2?family=Cinzel:wght@400;600;700&family=Great+Vibes&family=Libre+Baskerville:ital,wght@0,400;0,700;1,400&display=swap";
-    const bgUrl = `${origin}${basePath}wingsync_cert-temp.png`;
+    const faHref =
+      "https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css";
 
     win.document.write(`<!DOCTYPE html>
 <html>
@@ -4909,30 +5005,19 @@ const app = {
   <title>Certificate - WingSync</title>
   <base href="${origin}${basePath}" />
   <link rel="stylesheet" href="${fontHref}" />
+  <link rel="stylesheet" href="${faHref}" />
   <link rel="stylesheet" href="${cssHref}" />
   <style>
     @page { size: landscape; margin: 8mm; }
-    html, body {
-      margin: 0;
-      padding: 0;
-      background: #fff;
-    }
+    html, body { margin: 0; padding: 0; background: #fff; }
     body {
       display: flex;
       align-items: center;
       justify-content: center;
       min-height: 100vh;
     }
-    .certificate-wrapper {
-      max-width: none;
-      width: 100%;
-    }
-    .certificate-sheet {
-      box-shadow: none;
-      width: 100%;
-      max-height: 100vh;
-      background-image: url("${bgUrl}") !important;
-    }
+    .certificate-wrapper { max-width: none; width: 100%; }
+    .certificate-sheet { box-shadow: none; width: 100%; }
     .certificate-actions { display: none !important; }
     * {
       -webkit-print-color-adjust: exact !important;
@@ -4941,19 +5026,10 @@ const app = {
   </style>
 </head>
 <body>
-  <div class="certificate-wrapper">
-    ${sheet.outerHTML}
-  </div>
+  <div class="certificate-wrapper">${sheet.outerHTML}</div>
   <script>
     window.onload = function () {
-      var img = new Image();
-      img.onload = function () {
-        setTimeout(function () { window.focus(); window.print(); }, 300);
-      };
-      img.onerror = function () {
-        setTimeout(function () { window.focus(); window.print(); }, 500);
-      };
-      img.src = "${bgUrl}";
+      setTimeout(function () { window.focus(); window.print(); }, 450);
     };
   <\/script>
 </body>
@@ -4988,7 +5064,6 @@ const app = {
     );
 
     if (typeof html2canvas !== "undefined" && certElement) {
-      // Ensure template background paints into the canvas
       html2canvas(certElement, {
         scale: 2,
         backgroundColor: "#f4efe3",
@@ -5047,45 +5122,50 @@ const app = {
     const doc = new jsPDF("l", "mm", "a4");
     const pageWidth = 297;
     const pageHeight = 210;
-    const margin = 14;
+    const margin = 12;
     const { label: rankLabel } = this._getCertificateRankMeta(cert.rank);
 
-    doc.setFillColor(251, 247, 239);
+    doc.setFillColor(244, 239, 227);
     doc.rect(0, 0, pageWidth, pageHeight, "F");
 
-    doc.setDrawColor(13, 61, 50);
-    doc.setLineWidth(2.2);
-    doc.rect(margin, margin, pageWidth - 2 * margin, pageHeight - 2 * margin);
     doc.setDrawColor(184, 150, 62);
-    doc.setLineWidth(0.7);
+    doc.setLineWidth(1.2);
+    doc.rect(margin, margin, pageWidth - 2 * margin, pageHeight - 2 * margin);
+    doc.setDrawColor(10, 61, 48);
+    doc.setLineWidth(4);
     doc.rect(
-      margin + 3.5,
-      margin + 3.5,
-      pageWidth - 2 * margin - 7,
-      pageHeight - 2 * margin - 7,
+      margin + 3,
+      margin + 3,
+      pageWidth - 2 * margin - 6,
+      pageHeight - 2 * margin - 6,
+    );
+    doc.setDrawColor(184, 150, 62);
+    doc.setLineWidth(0.8);
+    doc.rect(
+      margin + 7,
+      margin + 7,
+      pageWidth - 2 * margin - 14,
+      pageHeight - 2 * margin - 14,
     );
 
     const cx = pageWidth / 2;
-    let y = margin + 16;
+    let y = margin + 18;
 
     doc.setFont("helvetica", "bold");
-    doc.setFontSize(9);
+    doc.setFontSize(8);
     doc.setTextColor(90, 100, 100);
     doc.text("POWERED BY WINGSYNC", cx, y, { align: "center" });
-    y += 8;
-
-    doc.setFontSize(13);
-    doc.setTextColor(13, 61, 50);
-    doc.text("MALINAO RACING PIGEON CLUB", cx, y, { align: "center" });
     y += 7;
-
-    doc.setFontSize(11);
+    doc.setFontSize(13);
+    doc.setTextColor(10, 61, 48);
+    doc.text("MALINAO RACING PIGEON CLUB", cx, y, { align: "center" });
+    y += 6;
+    doc.setFontSize(10);
     doc.setTextColor(184, 150, 62);
     doc.text("— MRPC —", cx, y, { align: "center" });
-    y += 10;
-
-    doc.setFontSize(28);
-    doc.setTextColor(13, 61, 50);
+    y += 9;
+    doc.setFontSize(26);
+    doc.setTextColor(10, 61, 48);
     doc.text("CERTIFICATE", cx, y, { align: "center" });
     y += 12;
 
@@ -5110,93 +5190,87 @@ const app = {
       day: "numeric",
     });
 
-    // Avatar circle (left)
-    const avatarX = margin + 28;
-    const avatarY = pageHeight / 2 + 4;
+    const avatarX = margin + 32;
+    const avatarY = pageHeight / 2 + 6;
     doc.setDrawColor(184, 150, 62);
-    doc.setLineWidth(1.5);
+    doc.setLineWidth(1.4);
     doc.circle(avatarX, avatarY, 22);
-    doc.setFillColor(244, 238, 227);
+    doc.setFillColor(239, 232, 216);
     doc.circle(avatarX, avatarY, 20, "F");
-    doc.setFontSize(8);
-    doc.setTextColor(120, 120, 120);
-    doc.text("AVATAR", avatarX, avatarY + 2, { align: "center" });
 
-    const textX = margin + 62;
-    const textW = pageWidth - margin - textX - 10;
-    y = pageHeight / 2 - 28;
+    const textX = margin + 68;
+    const textW = pageWidth - margin - textX - 12;
+    y = pageHeight / 2 - 26;
 
     doc.setFont("times", "italic");
-    doc.setFontSize(12);
+    doc.setFontSize(11);
     doc.setTextColor(26, 36, 32);
     doc.text("This is to certify that", textX + textW / 2, y, {
       align: "center",
     });
+    y += 8;
+    doc.setFont("times", "bold");
+    doc.setFontSize(16);
+    doc.setTextColor(10, 61, 48);
+    doc.text(pigeonDisplay, textX + textW / 2, y, { align: "center" });
+    doc.setDrawColor(150, 150, 150);
+    doc.setLineWidth(0.3);
+    doc.line(textX + 8, y + 2, textX + textW - 8, y + 2);
     y += 9;
 
-    doc.setFont("times", "bold");
-    doc.setFontSize(18);
-    doc.setTextColor(13, 61, 50);
-    doc.text(pigeonDisplay, textX + textW / 2, y, { align: "center" });
-    doc.setDrawColor(180, 180, 180);
-    doc.setLineWidth(0.3);
-    doc.line(textX + 10, y + 2, textX + textW - 10, y + 2);
-    y += 10;
-
     doc.setFont("times", "normal");
-    doc.setFontSize(11);
+    doc.setFontSize(10);
     doc.setTextColor(26, 36, 32);
     const body =
       `has flown from ${eventName} a distance of ${distance} km on ${releaseDate}, ` +
       `recording of a velocity of ${speed} m/min and thereby won`;
-    const bodyLines = doc.splitTextToSize(body, textW - 8);
+    const bodyLines = doc.splitTextToSize(body, textW - 6);
     doc.text(bodyLines, textX + textW / 2, y, { align: "center" });
-    y += bodyLines.length * 5 + 6;
+    y += bodyLines.length * 4.5 + 5;
 
     doc.setFont("times", "bold");
-    doc.setFontSize(20);
+    doc.setFontSize(18);
     doc.setTextColor(184, 150, 62);
     doc.text(`— ${rankLabel} —`, textX + textW / 2, y, { align: "center" });
-    y += 8;
-
+    y += 7;
     doc.setFont("times", "normal");
-    doc.setFontSize(11);
+    doc.setFontSize(10);
     doc.setTextColor(26, 36, 32);
     doc.text("in the said race.", textX + textW / 2, y, { align: "center" });
 
-    const footerY = pageHeight - margin - 22;
-    doc.setDrawColor(100, 100, 100);
+    const footerY = pageHeight - margin - 18;
+    doc.setDrawColor(80, 80, 80);
     doc.setLineWidth(0.4);
-    doc.line(margin + 12, footerY, margin + 55, footerY);
-    doc.setFontSize(10);
+    doc.line(margin + 14, footerY, margin + 55, footerY);
+    doc.setFontSize(9);
     doc.setTextColor(26, 36, 32);
-    doc.text(signedDate, margin + 33.5, footerY - 2, { align: "center" });
+    doc.text(signedDate, margin + 34.5, footerY - 2, { align: "center" });
     doc.setFontSize(8);
-    doc.setTextColor(90, 90, 90);
-    doc.text("Signed on,", margin + 33.5, footerY + 5, { align: "center" });
+    doc.setTextColor(80, 80, 80);
+    doc.text("Signed on,", margin + 34.5, footerY + 5, { align: "center" });
 
     doc.setFont("times", "italic");
-    doc.setFontSize(12);
+    doc.setFontSize(11);
     doc.setTextColor(26, 36, 32);
-    doc.text("Ash Cargullo", pageWidth - margin - 28, footerY - 8, {
+    doc.text("Ash Cargullo", pageWidth - margin - 32, footerY - 10, {
       align: "center",
     });
     doc.setFont("helvetica", "normal");
-    doc.setFontSize(8);
-    doc.setTextColor(90, 90, 90);
-    doc.text("Club Vice-President", pageWidth - margin - 28, footerY - 2, {
+    doc.setFontSize(7);
+    doc.setTextColor(80, 80, 80);
+    doc.text("Club Vice-President", pageWidth - margin - 32, footerY - 4, {
       align: "center",
     });
     doc.setFont("times", "italic");
-    doc.setFontSize(12);
+    doc.setFontSize(11);
     doc.setTextColor(26, 36, 32);
-    doc.text("Vincent Macauyam", pageWidth - margin - 28, footerY + 8, {
+    doc.text("Vincent Macauyam", pageWidth - margin - 32, footerY + 6, {
       align: "center",
     });
     doc.setFont("helvetica", "normal");
-    doc.setFontSize(8);
-    doc.setTextColor(90, 90, 90);
-    doc.text("Club President", pageWidth - margin - 28, footerY + 14, {
+    doc.setFontSize(7);
+    doc.setTextColor(80, 80, 80);
+    doc.text("Club President", pageWidth - margin - 32, footerY + 12, {
       align: "center",
     });
 

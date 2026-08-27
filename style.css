@@ -1991,7 +1991,7 @@ tr:hover td {
 }
 
 /* ======================================== */
-/*   CERTIFICATE – matches MRPC template   */
+/*   CERTIFICATE – MRPC formal landscape   */
 /* ======================================== */
 
 .certificate-modal-content {
@@ -2009,10 +2009,10 @@ tr:hover td {
 }
 
 .certificate-wrapper {
-  --cert-green: #0d3d32;
+  --cert-green: #0a3d30;
   --cert-green-deep: #062820;
   --cert-gold: #b8963e;
-  --cert-gold-soft: #c9a84c;
+  --cert-gold-light: #d4af57;
   --cert-cream: #f4efe3;
   --cert-ink: #1a2420;
   width: 100%;
@@ -2025,107 +2025,245 @@ tr:hover td {
 .certificate-sheet {
   position: relative;
   width: 100%;
-  aspect-ratio: 1536 / 1024;
-  background-color: var(--cert-cream);
-  background-image: url("wingsync_cert-temp.png");
-  background-size: 100% 100%;
-  background-position: center;
-  background-repeat: no-repeat;
-  overflow: hidden;
-  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.18);
-}
-
-/* Cover template placeholders with cream, then paint live data */
-.cert-cover {
-  position: absolute;
+  aspect-ratio: 1.5 / 1;
   background: var(--cert-cream);
-  z-index: 1;
-}
-
-.cert-field {
-  position: absolute;
-  z-index: 2;
-  box-sizing: border-box;
-  text-align: center;
-  color: var(--cert-ink);
-  font-family: "Libre Baskerville", "Times New Roman", Times, serif;
-}
-
-/* Pigeon avatar – sits inside the template laurel circle */
-.cert-cover-avatar {
-  left: 11.3%;
-  top: 41.8%;
-  width: 19.2%;
-  aspect-ratio: 1;
-  height: auto;
-  border-radius: 50%;
-}
-
-.cert-avatar {
-  left: 11.3%;
-  top: 41.8%;
-  width: 19.2%;
-  aspect-ratio: 1;
-  height: auto;
-  border-radius: 50%;
+  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.18);
   overflow: hidden;
+}
+
+/* Gold → green → gold ornate frame */
+.cert-frame {
+  position: absolute;
+  inset: 2.2%;
+  background: var(--cert-cream);
+  border: 2px solid var(--cert-gold);
+  box-shadow:
+    0 0 0 10px var(--cert-green),
+    0 0 0 12px var(--cert-gold);
+  padding: 2.2% 3% 2% ;
+  display: flex;
+  flex-direction: column;
+  box-sizing: border-box;
+}
+
+.cert-corner {
+  position: absolute;
+  width: 56px;
+  height: 56px;
+  z-index: 3;
+  pointer-events: none;
+  color: var(--cert-gold);
+}
+.cert-corner svg {
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+.cert-corner-tl {
+  top: -2px;
+  left: -2px;
+}
+.cert-corner-tr {
+  top: -2px;
+  right: -2px;
+  transform: scaleX(-1);
+}
+.cert-corner-bl {
+  bottom: -2px;
+  left: -2px;
+  transform: scaleY(-1);
+}
+.cert-corner-br {
+  bottom: -2px;
+  right: -2px;
+  transform: scale(-1);
+}
+
+/* ----- HEADER ----- */
+.cert-header {
+  text-align: center;
+  flex: 0 0 auto;
+  padding-top: 0.2%;
+}
+
+.cert-logo {
+  width: clamp(42px, 6.5%, 68px);
+  height: auto;
+  display: block;
+  margin: 0 auto 2px;
+  mix-blend-mode: screen;
+  filter: contrast(1.08) brightness(1.05);
+}
+
+.cert-brand {
+  font-family: "Cinzel", "Times New Roman", serif;
+  font-weight: 700;
+  font-size: clamp(10px, 1.15vw, 14px);
+  letter-spacing: 0.28em;
+  color: #111;
+  line-height: 1.1;
+}
+
+.cert-powered {
+  font-family: "Libre Baskerville", Georgia, serif;
+  font-size: clamp(7px, 0.72vw, 9px);
+  letter-spacing: 0.22em;
+  color: #5a6560;
+  margin-bottom: 4px;
+  text-transform: uppercase;
+}
+
+.cert-club {
+  font-family: "Cinzel", "Times New Roman", serif;
+  font-weight: 700;
+  font-size: clamp(13px, 1.7vw, 22px);
+  color: var(--cert-green);
+  letter-spacing: 0.06em;
+  line-height: 1.15;
+}
+
+.cert-mrpc {
   display: flex;
   align-items: center;
   justify-content: center;
-  background: var(--cert-cream);
-  border: 1.5px solid var(--cert-gold);
-  padding: 0;
+  gap: 10px;
+  margin: 3px 0 2px;
+  font-family: "Cinzel", "Times New Roman", serif;
+  font-weight: 600;
+  font-size: clamp(10px, 1.05vw, 13px);
+  color: var(--cert-gold);
+  letter-spacing: 0.2em;
+}
+.cert-mrpc::before,
+.cert-mrpc::after {
+  content: "";
+  width: clamp(36px, 8%, 70px);
+  height: 1px;
+  background: var(--cert-gold);
 }
 
-.cert-avatar img,
-.cert-avatar svg {
-  width: 100%;
-  height: 100%;
+.cert-title {
+  margin: 2px 0 0;
+  font-family: "Cinzel", "Times New Roman", serif;
+  font-weight: 700;
+  font-size: clamp(22px, 3.2vw, 40px);
+  color: var(--cert-green);
+  letter-spacing: 0.18em;
+  line-height: 1.05;
+}
+
+.cert-title-flourish {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  margin-top: 2px;
+  color: var(--cert-gold);
+  font-size: clamp(10px, 1.1vw, 14px);
+}
+.cert-title-flourish .fl-line {
+  width: clamp(28px, 6%, 55px);
+  height: 1px;
+  background: linear-gradient(90deg, transparent, var(--cert-gold), transparent);
+}
+
+/* ----- BODY ----- */
+.cert-main {
+  flex: 1 1 auto;
+  display: grid;
+  grid-template-columns: 0.34fr 0.66fr;
+  gap: 1.5%;
+  align-items: center;
+  min-height: 0;
+  padding: 0.5% 1% 0;
+}
+
+.cert-avatar-wrap {
+  position: relative;
+  width: 86%;
+  max-width: 210px;
+  margin: 0 auto;
+  aspect-ratio: 1;
+}
+
+.cert-avatar-ring {
+  position: absolute;
+  inset: 8%;
+  border-radius: 50%;
+  border: 2px solid var(--cert-gold);
+  box-shadow: 0 0 0 1px rgba(184, 150, 62, 0.35);
+  overflow: hidden;
+  background: #efe8d8;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.cert-avatar-ring img,
+.cert-avatar-ring svg {
+  width: 100% !important;
+  height: 100% !important;
   object-fit: cover;
   display: block;
+  border-radius: 50%;
 }
 
-/* Keep “This is to certify that” from the PNG; replace name line only */
-.cert-cover-name {
-  left: 33%;
-  top: 46.2%;
-  width: 54%;
-  height: 6.2%;
+.cert-laurel {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  pointer-events: none;
+  color: var(--cert-gold);
+}
+.cert-laurel svg {
+  width: 100%;
+  height: 100%;
+}
+
+.cert-badge {
+  position: absolute;
+  left: 50%;
+  bottom: -2%;
+  transform: translateX(-50%);
+  z-index: 3;
+  width: 34%;
+  min-width: 42px;
+}
+
+.cert-text {
+  text-align: center;
+  font-family: "Libre Baskerville", "Times New Roman", Times, serif;
+  color: var(--cert-ink);
+  padding: 0 2% 0 0;
+}
+
+.cert-intro {
+  margin: 0 0 4px;
+  font-size: clamp(11px, 1.15vw, 15px);
+  font-style: italic;
 }
 
 .cert-name {
-  left: 33%;
-  top: 46.4%;
-  width: 54%;
+  margin: 0 auto 6px;
+  max-width: 95%;
   font-family: "Cinzel", "Times New Roman", serif;
   font-weight: 700;
-  font-size: clamp(13px, 2.05vw, 24px);
+  font-size: clamp(16px, 2.2vw, 28px);
   color: var(--cert-green);
-  line-height: 1.25;
-  letter-spacing: 0.02em;
-  border-bottom: 1px solid rgba(120, 120, 120, 0.35);
-  padding-bottom: 1px;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-/* Event / distance / date / speed sentence */
-.cert-cover-body {
-  left: 33%;
-  top: 52.8%;
-  width: 55%;
-  height: 8.8%;
+  letter-spacing: 0.03em;
+  line-height: 1.2;
+  border-bottom: 1px solid rgba(90, 90, 90, 0.35);
+  padding-bottom: 4px;
+  word-break: break-word;
 }
 
 .cert-body {
-  left: 33%;
-  top: 53%;
-  width: 55%;
-  font-size: clamp(8.5px, 1vw, 12.5px);
-  line-height: 1.4;
+  margin: 8px auto 6px;
+  max-width: 96%;
+  font-size: clamp(10px, 1.05vw, 13.5px);
+  line-height: 1.45;
   color: var(--cert-ink);
-  padding: 0 2px;
 }
 
 .cert-body .cert-value {
@@ -2133,24 +2271,14 @@ tr:hover td {
   color: var(--cert-green);
 }
 
-/* Ranking */
-.cert-cover-rank {
-  left: 33%;
-  top: 62.8%;
-  width: 54%;
-  height: 5.8%;
-}
-
 .cert-rank {
-  left: 33%;
-  top: 63%;
-  width: 54%;
+  margin: 8px 0 4px;
   font-family: "Cinzel", "Times New Roman", serif;
   font-weight: 700;
-  font-size: clamp(14px, 2.2vw, 28px);
+  font-size: clamp(18px, 2.5vw, 32px);
   color: var(--cert-gold);
-  letter-spacing: 0.06em;
-  line-height: 1.2;
+  letter-spacing: 0.08em;
+  line-height: 1.15;
 }
 
 .cert-rank.rank-gold {
@@ -2166,61 +2294,144 @@ tr:hover td {
   color: var(--cert-green);
 }
 
-/* Date sits on the template “Signed on,” line (label stays in PNG) */
-.cert-signed {
-  left: 12.6%;
-  top: 83.9%;
-  width: 17.2%;
-  font-size: clamp(8px, 0.95vw, 12px);
-  font-weight: 700;
-  color: var(--cert-ink);
-  line-height: 1.1;
+.cert-closing {
+  margin: 0;
+  font-size: clamp(10px, 1.05vw, 13px);
 }
 
-/* Small QR tucked in bottom-right margin */
+/* ----- FOOTER ----- */
+.cert-footer {
+  flex: 0 0 auto;
+  display: grid;
+  grid-template-columns: 1fr 1.1fr 1fr;
+  align-items: end;
+  gap: 8px;
+  padding-top: 1%;
+  margin-top: auto;
+}
+
+.cert-signed {
+  text-align: center;
+  max-width: 160px;
+}
+.cert-signed-date {
+  font-family: "Libre Baskerville", Georgia, serif;
+  font-size: clamp(10px, 1vw, 13px);
+  font-weight: 700;
+  color: var(--cert-ink);
+  border-bottom: 1px solid rgba(40, 40, 40, 0.45);
+  padding-bottom: 2px;
+  min-height: 1.2em;
+}
+.cert-signed-label {
+  margin-top: 3px;
+  font-size: clamp(9px, 0.9vw, 11px);
+  color: #444;
+  font-family: "Libre Baskerville", Georgia, serif;
+}
+
+.cert-ornament {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  color: var(--cert-gold);
+  padding-bottom: 4px;
+}
+.cert-ornament .orn-side {
+  width: 48px;
+  height: 18px;
+  opacity: 0.95;
+}
+.cert-trophy {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  background: var(--cert-green);
+  border: 2px solid var(--cert-gold);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--cert-gold-light);
+  font-size: 16px;
+  flex-shrink: 0;
+}
+
+.cert-sigs {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  padding-bottom: 2px;
+}
+.cert-sig {
+  text-align: center;
+  min-width: 140px;
+}
+.cert-sig-name {
+  display: block;
+  font-family: "Great Vibes", cursive;
+  font-size: clamp(16px, 1.8vw, 24px);
+  color: var(--cert-ink);
+  line-height: 1.1;
+  border-bottom: 1px solid rgba(40, 40, 40, 0.35);
+  padding: 0 8px 1px;
+  margin-bottom: 2px;
+}
+.cert-sig-title {
+  display: block;
+  font-family: "Libre Baskerville", Georgia, serif;
+  font-size: clamp(8px, 0.85vw, 11px);
+  color: #444;
+}
+
 .cert-qr {
-  left: auto;
-  right: 3.4%;
-  top: auto;
-  bottom: 3.4%;
-  width: 6.5%;
-  aspect-ratio: 1;
-  height: auto;
+  position: absolute;
+  right: 1.2%;
+  bottom: 1.2%;
+  width: 52px;
+  height: 52px;
   background: #fff;
   padding: 2px;
   border: 1px solid rgba(0, 0, 0, 0.12);
+  z-index: 4;
   display: flex;
   align-items: center;
   justify-content: center;
 }
-
 .cert-qr img,
 .cert-qr canvas {
   width: 100% !important;
   height: 100% !important;
   display: block;
 }
-
 .cert-qr > div {
   width: 100% !important;
   height: 100% !important;
 }
 
-/* Keep certificate cream even in dark app theme */
+/* Dark theme: keep certificate cream */
 [data-theme="dark"] .certificate-sheet,
-[data-theme="dark"] .cert-cover {
-  background-color: var(--cert-cream);
+[data-theme="dark"] .cert-frame {
+  background: var(--cert-cream);
 }
+[data-theme="dark"] .cert-club,
+[data-theme="dark"] .cert-title,
 [data-theme="dark"] .cert-name,
 [data-theme="dark"] .cert-body .cert-value {
   color: var(--cert-green);
 }
+[data-theme="dark"] .cert-intro,
 [data-theme="dark"] .cert-body,
-[data-theme="dark"] .cert-signed {
+[data-theme="dark"] .cert-closing,
+[data-theme="dark"] .cert-signed-date,
+[data-theme="dark"] .cert-sig-name {
   color: var(--cert-ink);
 }
+[data-theme="dark"] .cert-brand {
+  color: #111;
+}
 
-/* Modal / mobile scroll */
 @media (max-width: 768px) {
   .certificate-modal-content {
     max-width: 100vw !important;
@@ -2230,14 +2441,13 @@ tr:hover td {
     overflow-y: auto;
   }
   .certificate-wrapper {
-    min-width: 640px;
+    min-width: 720px;
   }
   #certificate-detail {
     overflow-x: auto;
   }
 }
 
-/* Print: single landscape page matching template */
 @media print {
   .certificate-actions,
   .modal-header,
@@ -2253,9 +2463,9 @@ tr:hover td {
     width: 100%;
     box-shadow: none;
   }
-  .certificate-sheet {
-    -webkit-print-color-adjust: exact;
-    print-color-adjust: exact;
+  * {
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
   }
 }
 
