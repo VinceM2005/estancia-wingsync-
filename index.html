@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Wingsync - Pigeon Clocking System</title>
     <link rel="manifest" href="manifest.json" />
-    <link rel="stylesheet" href="style.css?v=4" />
+    <link rel="stylesheet" href="style.css?v=5" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="mobile-web-app-capable" content="yes" />
     <meta
@@ -20,6 +20,14 @@
       href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css"
     />
 
+    <!-- Certificate fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Cinzel:wght@400;600;700&family=Great+Vibes&family=Libre+Baskerville:ital,wght@0,400;0,700;1,400&display=swap"
+      rel="stylesheet"
+    />
+
     <!-- Lucide Icons -->
     <script src="https://unpkg.com/lucide@latest"></script>
     <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
@@ -30,12 +38,13 @@
       defer
     ></script>
 
-    <!-- QR Code + Barcode + PDF -->
+    <!-- QR Code + Barcode + PDF + Canvas -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.6/dist/JsBarcode.all.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
 
-    <link rel="stylesheet" href="style.css" />
+    <link rel="stylesheet" href="style.css?v=5" />
     <style>
       /* ===== ADDITIONAL STYLES FOR UI COMPONENTS ===== */
       .pigeons-grid {
@@ -2456,7 +2465,7 @@
 
     <!-- Certificate Modal -->
     <div id="modal-certificate" class="modal-overlay">
-      <div class="modal-content" style="max-width: 700px">
+      <div class="modal-content certificate-modal-content">
         <div class="modal-header">
           <h3><i class="fas fa-award"></i> Certificate</h3>
           <button
@@ -2467,20 +2476,6 @@
           </button>
         </div>
         <div id="certificate-detail"></div>
-        <button
-          class="btn btn-primary"
-          style="width: 100%; margin-top: 12px"
-          onclick="app.printCertificate()"
-        >
-          <i class="fas fa-print"></i> Print
-        </button>
-        <button
-          class="btn btn-secondary"
-          style="width: 100%; margin-top: 8px"
-          onclick="app.downloadCertificatePDF()"
-        >
-          <i class="fas fa-file-pdf"></i> Download PDF
-        </button>
       </div>
     </div>
 
