@@ -1030,6 +1030,8 @@ const app = {
       widthMm,
       heightMm,
       dpi,
+      ringNumber = "",
+      nickname = "",
     ) => {
       const widthPx = Math.round((widthMm / 25.4) * dpi);
       const heightPx = Math.round((heightMm / 25.4) * dpi);
@@ -1041,12 +1043,12 @@ const app = {
       ctx.fillStyle = "#ffffff";
       ctx.fillRect(0, 0, widthPx, heightPx);
 
-      const topHeightPx = Math.round((6 / 10) * heightPx);
+      const topHeightPx = Math.round((5.5 / 10) * heightPx);
       const bottomHeightPx = heightPx - topHeightPx;
-      const marginPx = Math.round((1 / 25.4) * dpi);
+      const marginPx = Math.round((0.8 / 25.4) * dpi);
       const scratchWidthPx = Math.round((22 / 25.4) * dpi);
 
-      const qrSizeMm = 5.5;
+      const qrSizeMm = 5.0;
       const qrSizePx = Math.round((qrSizeMm / 25.4) * dpi);
       const qrX = marginPx;
       const qrY = Math.round((topHeightPx - qrSizePx) / 2);
@@ -1068,85 +1070,78 @@ const app = {
         ctx.drawImage(qrCanvas, qrX, qrY, qrSizePx, qrSizePx);
       }
 
+      // Sticker code (unique race code bound to this pigeon)
       const codeText = code;
-      const gapPx = Math.round((2 / 25.4) * dpi);
+      const gapPx = Math.round((1.5 / 25.4) * dpi);
       const textStartX = qrX + qrSizePx + gapPx;
       const textAvailableWidth = scratchWidthPx - textStartX - marginPx;
-      const textAvailableHeight = topHeightPx - 2 * marginPx;
 
-      let fontSize = textAvailableHeight * 1.0;
+      let fontSize = Math.round(topHeightPx * 0.72);
       const estimatedWidth = codeText.length * fontSize * 0.6;
       if (estimatedWidth > textAvailableWidth) {
         fontSize = textAvailableWidth / (codeText.length * 0.6);
       }
-      fontSize = Math.min(48, Math.max(14, Math.round(fontSize)));
+      fontSize = Math.min(42, Math.max(12, Math.round(fontSize)));
 
       ctx.textAlign = "left";
       ctx.textBaseline = "middle";
       ctx.fillStyle = "#000000";
       ctx.font = `bold ${fontSize}px monospace`;
+      ctx.fillText(codeText, textStartX, topHeightPx / 2);
 
-      const metrics = ctx.measureText(codeText);
-      const textWidth = metrics.width;
-      const startX = textStartX + (textAvailableWidth - textWidth) / 2;
-
-      if (startX < qrX + qrSizePx + gapPx) {
-        ctx.textAlign = "left";
-        ctx.fillText(codeText, textStartX, topHeightPx / 2);
-      } else {
-        ctx.fillText(codeText, startX, topHeightPx / 2);
-      }
+      // Bottom band: RING (unique pigeon) + player — so stickers cannot be swapped blindly
+      const ringLabel = (ringNumber || "NO-RING").toString().toUpperCase();
+      const playerLabel = playerName || "Player";
+      const nick = (nickname || "").trim();
+      const pigeonLabel = nick ? `${ringLabel} · ${nick}` : ringLabel;
 
       const bottomY = topHeightPx;
-      const fontSizeBottom = Math.min(
-        Math.round((2.2 / 25.4) * dpi),
-        Math.round(bottomHeightPx * 0.6),
-      );
-
-      let eventLabel = eventName || "Event";
-      let playerLabel = playerName || "Player";
-
-      let testSize = fontSizeBottom;
       const leftX = marginPx;
       const rightX = widthPx - marginPx;
       const centerY = bottomY + bottomHeightPx / 2;
-      const maxWidth = widthPx * 0.42;
+      const maxLeft = widthPx * 0.58;
+      const maxRight = widthPx * 0.38;
 
-      ctx.font = `${testSize}px sans-serif`;
-      while (testSize > 8 && ctx.measureText(eventLabel).width > maxWidth) {
-        testSize -= 1;
-        ctx.font = `${testSize}px sans-serif`;
+      let ringSize = Math.min(
+        Math.round((2.4 / 25.4) * dpi),
+        Math.round(bottomHeightPx * 0.7),
+      );
+      ctx.font = `bold ${ringSize}px sans-serif`;
+      while (ringSize > 7 && ctx.measureText(pigeonLabel).width > maxLeft) {
+        ringSize -= 1;
+        ctx.font = `bold ${ringSize}px sans-serif`;
       }
       ctx.textAlign = "left";
       ctx.textBaseline = "middle";
-      ctx.fillStyle = "#000000";
-      ctx.fillText(eventLabel, leftX, centerY);
+      ctx.fillStyle = "#0a3d30";
+      ctx.fillText(pigeonLabel, leftX, centerY);
 
-      testSize = fontSizeBottom;
-      ctx.font = `${testSize}px sans-serif`;
-      while (testSize > 8 && ctx.measureText(playerLabel).width > maxWidth) {
-        testSize -= 1;
-        ctx.font = `${testSize}px sans-serif`;
+      let playerSize = Math.min(
+        Math.round((1.8 / 25.4) * dpi),
+        Math.round(bottomHeightPx * 0.55),
+      );
+      ctx.font = `${playerSize}px sans-serif`;
+      while (playerSize > 6 && ctx.measureText(playerLabel).width > maxRight) {
+        playerSize -= 1;
+        ctx.font = `${playerSize}px sans-serif`;
       }
       ctx.textAlign = "right";
-      ctx.textBaseline = "middle";
-      ctx.fillStyle = "#000000";
+      ctx.fillStyle = "#333333";
       ctx.fillText(playerLabel, rightX, centerY);
 
       ctx.strokeStyle = "#000000";
       ctx.lineWidth = 1.0;
       ctx.strokeRect(0, 0, widthPx, heightPx);
 
-      ctx.strokeStyle = "#e0e0e0";
-      ctx.lineWidth = 0.5;
-      ctx.setLineDash([2, 3]);
+      ctx.strokeStyle = "#c9a84c";
+      ctx.lineWidth = 0.8;
+      ctx.setLineDash([]);
       ctx.strokeRect(
         marginPx,
         marginPx,
         scratchWidthPx - marginPx,
         topHeightPx - marginPx,
       );
-      ctx.setLineDash([]);
 
       return canvas;
     };
@@ -1189,6 +1184,8 @@ const app = {
             widthMm,
             heightMm,
             dpi,
+            s.ringNumber || "",
+            s.nickname || "",
           );
           canvasItems.push({ canvas, data: s });
         } catch (e) {
@@ -1211,7 +1208,7 @@ const app = {
 
         const img = document.createElement("img");
         img.src = dataUrl;
-        img.alt = `Sticker ${data.code}`;
+        img.alt = `Sticker ${data.code} · ${data.ringNumber || "NO-RING"}`;
         img.style.width = "100%";
         img.style.height = "auto";
         img.style.borderRadius = "3px";
@@ -1222,9 +1219,18 @@ const app = {
         playerDiv.textContent = data.playerName;
         wrapper.appendChild(playerDiv);
 
+        const ringDiv = document.createElement("div");
+        ringDiv.className = "sticker-ring";
+        ringDiv.style.cssText =
+          "font-weight:700;font-size:12px;color:#0a3d30;margin-top:2px;";
+        ringDiv.textContent = data.ringNumber
+          ? `Ring: ${data.ringNumber}${data.nickname ? ` (${data.nickname})` : ""}`
+          : "Ring: — missing —";
+        wrapper.appendChild(ringDiv);
+
         const codeDiv = document.createElement("div");
         codeDiv.className = "sticker-label";
-        codeDiv.textContent = data.code;
+        codeDiv.textContent = `Code: ${data.code}`;
         wrapper.appendChild(codeDiv);
 
         grid.appendChild(wrapper);
@@ -1279,6 +1285,8 @@ const app = {
               widthMm,
               heightMm,
               dpi,
+              s.ringNumber || "",
+              s.nickname || "",
             );
             const imgData = canvas.toDataURL("image/png");
             doc.addImage(imgData, "PNG", x, y, widthMm, heightMm);
@@ -1342,14 +1350,21 @@ const app = {
           return;
         }
 
-        const stickers = data.codes.map((c) => ({
-          eventName: data.eventName || "Event",
-          playerName: c.playerName || "Unknown Player",
-          code: c.code,
-          pigeonId: c.pigeonId,
-          ringNumber: c.ringNumber,
-          avatarId: c.avatarId || "",
-        }));
+        const stickers = data.codes
+          .map((c) => ({
+            eventName: data.eventName || "Event",
+            playerName: c.playerName || "Unknown Player",
+            code: c.code,
+            pigeonId: c.pigeonId,
+            ringNumber: c.ringNumber || "",
+            nickname: c.nickname || "",
+            avatarId: c.avatarId || "",
+          }))
+          .sort((a, b) => {
+            const p = (a.playerName || "").localeCompare(b.playerName || "");
+            if (p !== 0) return p;
+            return (a.ringNumber || "").localeCompare(b.ringNumber || "");
+          });
 
         state.stickers = stickers;
         state.eventId = eventCode;
@@ -2431,7 +2446,7 @@ const app = {
     if (!code) {
       this.showModal({
         title: "Missing Code",
-        message: "Please enter an event code.",
+        message: "Please enter or scan the pigeon sticker code.",
         icon: "❌",
         iconColor: "#c0392b",
       });
@@ -2474,9 +2489,19 @@ const app = {
           hour12: true,
         });
 
+        const pigeon = data.pigeon;
+        const pigeonLine = pigeon?.ringNumber
+          ? `🕊️ ${pigeon.ringNumber}${
+              pigeon.nickname ? ` (${pigeon.nickname})` : ""
+            }`
+          : "🕊️ Pigeon: (bound to sticker)";
+        const codeLine = data.stickerCode
+          ? `🏷️ Sticker: ${data.stickerCode}`
+          : "";
+
         this.showModal({
           title: "✅ Bird Clocked!",
-          message: `${formattedDate}  ${formattedTime}\n📋 ${eventName} (MPFRC)\n📏 Air Distance: ${data.distance.toFixed(4)} KM\n⚡ Speed: ${data.speed.toFixed(4)} m/min`,
+          message: `${formattedDate}  ${formattedTime}\n📋 ${eventName}\n${pigeonLine}\n${codeLine}\n📏 Air Distance: ${data.distance.toFixed(4)} KM\n⚡ Speed: ${data.speed.toFixed(4)} m/min`,
           icon: "✅",
           iconColor: "#27ae60",
           buttonText: "OK",

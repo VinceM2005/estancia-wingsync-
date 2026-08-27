@@ -1035,12 +1035,30 @@ app.post(
           return res.status(400).json({ error: "Registration is not locked." });
         }
         if (raceCode.pigeonId && !raceCode.pigeonId.startsWith("LEGACY_")) {
-          const pigeon = await Pigeon.findOne({
-            _id: raceCode.pigeonId,
-            ownerId: userId,
-            status: "Active",
-          }).session(session);
-          if (!pigeon) {
+          const pigeonIdStr = String(raceCode.pigeonId);
+          const regPigeonIds = (registration.pigeonIds || []).map((id) =>
+            String(id),
+          );
+          if (!regPigeonIds.includes(pigeonIdStr)) {
+            await RaceCode.updateOne(
+              { _id: raceCode._id },
+              { status: "unused", usedAt: null },
+              { session },
+            );
+            await session.abortTransaction();
+            session.endSession();
+            return res.status(400).json({
+              error:
+                "This sticker is not linked to a pigeon on your locked entry for this event.",
+            });
+          }
+          const pigeon = await Pigeon.findById(raceCode.pigeonId)
+            .session(session);
+          if (
+            !pigeon ||
+            pigeon.ownerId !== userId ||
+            pigeon.status !== "Active"
+          ) {
             await RaceCode.updateOne(
               { _id: raceCode._id },
               { status: "unused", usedAt: null },
@@ -1167,10 +1185,23 @@ app.post(
         { session },
       );
 
+      // Load the exact pigeon bound to this sticker code (fair / unique pairing)
+      let clockedPigeon = null;
+      if (raceCode.pigeonId && !String(raceCode.pigeonId).startsWith("LEGACY_")) {
+        clockedPigeon = await Pigeon.findById(raceCode.pigeonId)
+          .select("ringNumber nickname avatarId")
+          .session(session)
+          .lean();
+      }
+
       await Log.create(
         [
           {
-            message: `${userId} clocked in with code ${eventCode}. Distance: ${distanceKm.toFixed(
+            message: `${userId} clocked in with code ${eventCode}${
+              clockedPigeon?.ringNumber
+                ? ` for pigeon ${clockedPigeon.ringNumber}`
+                : ""
+            }. Distance: ${distanceKm.toFixed(
               4,
             )}km, Speed: ${speedMPM.toFixed(4)} m/min`,
           },
@@ -1187,6 +1218,15 @@ app.post(
         distance: distanceKm,
         speed: speedMPM,
         eventName: event.name,
+        stickerCode: eventCode,
+        pigeon: clockedPigeon
+          ? {
+              id: clockedPigeon._id,
+              ringNumber: clockedPigeon.ringNumber,
+              nickname: clockedPigeon.nickname || "",
+              avatarId: clockedPigeon.avatarId || "",
+            }
+          : null,
       });
     } catch (error) {
       await session.abortTransaction();
@@ -2239,6 +2279,7 @@ app.get("/api/admin/events/:eventId/codes", requireAdmin, async (req, res) => {
       return res.status(404).json({ error: "Event not found." });
     }
 
+    // RaceCode.pigeonId is stored as String; Pigeon._id is ObjectId — cast for join
     const raceCodes = await RaceCode.aggregate([
       { $match: { eventId } },
       {
@@ -2251,9 +2292,21 @@ app.get("/api/admin/events/:eventId/codes", requireAdmin, async (req, res) => {
       },
       { $unwind: { path: "$user", preserveNullAndEmptyArrays: true } },
       {
+        $addFields: {
+          pigeonObjectId: {
+            $convert: {
+              input: "$pigeonId",
+              to: "objectId",
+              onError: null,
+              onNull: null,
+            },
+          },
+        },
+      },
+      {
         $lookup: {
           from: "pigeons",
-          localField: "pigeonId",
+          localField: "pigeonObjectId",
           foreignField: "_id",
           as: "pigeon",
         },
@@ -2265,13 +2318,16 @@ app.get("/api/admin/events/:eventId/codes", requireAdmin, async (req, res) => {
           status: 1,
           usedAt: 1,
           generatedAt: 1,
+          registrationId: 1,
           playerName: { $ifNull: ["$user.name", "Unknown"] },
-          playerId: { $ifNull: ["$user.id", null] },
-          pigeonId: { $ifNull: ["$pigeon._id", null] },
+          playerId: { $ifNull: ["$user.id", "$userId"] },
+          pigeonId: { $ifNull: ["$pigeonId", null] },
           ringNumber: { $ifNull: ["$pigeon.ringNumber", null] },
+          nickname: { $ifNull: ["$pigeon.nickname", ""] },
           avatarId: { $ifNull: ["$pigeon.avatarId", ""] },
         },
       },
+      { $sort: { playerName: 1, ringNumber: 1, code: 1 } },
     ]);
 
     res.json({ success: true, codes: raceCodes, eventName: event.name });
