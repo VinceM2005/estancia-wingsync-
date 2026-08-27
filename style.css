@@ -85,7 +85,7 @@ body,
 #sidebar,
 .card,
 .modal-content,
-header,
+#main-content > header,
 .login-box,
 .btn,
 .form-control,
@@ -435,8 +435,8 @@ body {
   overflow: hidden;
 }
 
-/* ===== HEADER ===== */
-header {
+/* ===== HEADER (app chrome only — do not style nested/certificate headers) ===== */
+#main-content > header {
   height: var(--header-height);
   background: var(--header-bg);
   padding: 0 24px;
@@ -826,7 +826,7 @@ tr:hover td {
   .menu-toggle {
     display: block;
   }
-  header {
+  #main-content > header {
     padding: 0 16px;
   }
   .content-area {
@@ -1295,7 +1295,7 @@ tr:hover td {
     margin: 0 !important;
     padding: 0 !important;
   }
-  header {
+  #main-content > header {
     display: none !important;
   }
   .content-area {
@@ -2080,14 +2080,27 @@ tr:hover td {
   transform: scale(-1);
 }
 
-/* ----- HEADER ----- */
+/* ----- HEADER (div only — never use <header>; app `header` styles break it) ----- */
 .cert-header {
+  display: block !important;
   text-align: center;
   flex: 0 0 auto;
-  padding-top: 0;
+  height: auto !important;
+  min-height: 0 !important;
+  max-height: none !important;
+  background: transparent !important;
+  background-color: transparent !important;
+  border: none !important;
+  border-bottom: none !important;
+  padding: 0 !important;
+  margin: 0 !important;
+  gap: 0 !important;
+  align-items: unset !important;
   position: relative;
   z-index: 1;
   isolation: isolate;
+  overflow: visible;
+  color: inherit;
 }
 
 .cert-logo-wrap {
@@ -2373,7 +2386,7 @@ tr:hover td {
   align-items: center;
   gap: 12px;
   padding-bottom: 2px;
-  padding-right: 8%;
+  padding-right: 56px;
   justify-self: end;
 }
 .cert-sig {

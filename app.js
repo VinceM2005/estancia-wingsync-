@@ -4886,7 +4886,7 @@ const app = {
             <div class="cert-corner cert-corner-bl">${cornerSvg}</div>
             <div class="cert-corner cert-corner-br">${cornerSvg}</div>
 
-            <header class="cert-header">
+            <div class="cert-header">
               <div class="cert-logo-wrap">${logoSvg}</div>
               <div class="cert-brand">WINGSYNC</div>
               <div class="cert-powered">POWERED BY WINGSYNC</div>
@@ -4894,7 +4894,7 @@ const app = {
               <div class="cert-mrpc">MRPC</div>
               <h1 class="cert-title">CERTIFICATE</h1>
               <div class="cert-title-flourish">${flourishSvg}</div>
-            </header>
+            </div>
 
             <div class="cert-main">
               <div class="cert-avatar-col">
@@ -4919,7 +4919,7 @@ const app = {
               </div>
             </div>
 
-            <footer class="cert-footer">
+            <div class="cert-footer">
               <div class="cert-signed">
                 <div class="cert-signed-date">${esc(formattedDate)}</div>
                 <div class="cert-signed-label">Signed on,</div>
@@ -4939,7 +4939,7 @@ const app = {
                   <span class="cert-sig-title">Club President</span>
                 </div>
               </div>
-            </footer>
+            </div>
 
             <div class="cert-qr" id="cert-qr-container"></div>
           </div>
@@ -5018,7 +5018,7 @@ const app = {
 
     const origin = window.location.origin;
     const basePath = window.location.pathname.replace(/\/[^/]*$/, "/");
-    const cssHref = `${origin}${basePath}style.css?v=7`;
+    const cssHref = `${origin}${basePath}style.css?v=8`;
     const fontHref =
       "https://fonts.googleapis.com/css2?family=Cinzel:wght@400;600;700&family=Great+Vibes&family=Libre+Baskerville:ital,wght@0,400;0,700;1,400&display=swap";
     const faHref =
