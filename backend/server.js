@@ -1273,9 +1273,21 @@ app.get("/api/results/:eventCode/pigeons", async (req, res) => {
     const pigeonResults = await Result.aggregate([
       { $match: { eventId: event.code, pigeonId: { $ne: null } } },
       {
+        $addFields: {
+          pigeonObjectId: {
+            $convert: {
+              input: "$pigeonId",
+              to: "objectId",
+              onError: null,
+              onNull: null,
+            },
+          },
+        },
+      },
+      {
         $lookup: {
           from: "pigeons",
-          localField: "pigeonId",
+          localField: "pigeonObjectId",
           foreignField: "_id",
           as: "pigeon",
         },

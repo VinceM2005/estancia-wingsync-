@@ -1,4 +1,4 @@
-const CACHE_NAME = "wingsync-v85"; // Increment on every deployment
+const CACHE_NAME = "wingsync-v86"; // Increment on every deployment
 const urlsToCache = ["/index.html", "/app.js", "/style.css", "/manifest.json", "/wingsync-logo.png"];
 
 self.addEventListener("install", (event) => {
