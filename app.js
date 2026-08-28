@@ -5802,7 +5802,182 @@ const app = {
     }
     document.getElementById("modal-event-details").classList.add("show");
   },
+
+  // ===== Admin table pagination (Manage Players / Manage Events) =====
+  TABLE_PAGE_SIZE: 10,
+  playersPage: 1,
+  eventsPage: 1,
+
+  _renderTablePagination({
+    containerId,
+    currentPage,
+    totalItems,
+    pageSize,
+    onPageChange,
+    itemLabel = "items",
+  }) {
+    const container = document.getElementById(containerId);
+    if (!container) return;
+
+    if (!totalItems) {
+      container.innerHTML = "";
+      container.classList.remove("table-pagination--visible");
+      return;
+    }
+
+    const totalPages = Math.ceil(totalItems / pageSize);
+    const safePage = Math.min(Math.max(currentPage, 1), totalPages);
+    const start = (safePage - 1) * pageSize + 1;
+    const end = Math.min(safePage * pageSize, totalItems);
+
+    container.classList.add("table-pagination--visible");
+
+    if (totalPages <= 1) {
+      container.innerHTML = `<p class="table-pagination-info">Showing all <strong>${totalItems}</strong> ${itemLabel}</p>`;
+      return;
+    }
+
+    const pageButtons = [];
+    for (let p = 1; p <= totalPages; p += 1) {
+      const isEdge = p === 1 || p === totalPages;
+      const isNear = Math.abs(p - safePage) <= 1;
+      if (isEdge || isNear || totalPages <= 7) {
+        pageButtons.push(p);
+      } else if (pageButtons[pageButtons.length - 1] !== "…") {
+        pageButtons.push("…");
+      }
+    }
+
+    const pagesHtml = pageButtons
+      .map((p) => {
+        if (p === "…") {
+          return `<span class="table-pagination-ellipsis">…</span>`;
+        }
+        const active = p === safePage ? " table-pagination-page--active" : "";
+        return `<button type="button" class="table-pagination-page${active}" data-page="${p}" aria-label="Page ${p}" aria-current="${p === safePage ? "page" : "false"}">${p}</button>`;
+      })
+      .join("");
+
+    container.innerHTML = `
+      <p class="table-pagination-info">Showing <strong>${start}–${end}</strong> of <strong>${totalItems}</strong> ${itemLabel}</p>
+      <nav class="table-pagination-controls" aria-label="Pagination">
+        <button type="button" class="table-pagination-nav" data-page="prev" ${safePage <= 1 ? "disabled" : ""} aria-label="Previous page">
+          <i class="fas fa-chevron-left" aria-hidden="true"></i>
+        </button>
+        <div class="table-pagination-pages">${pagesHtml}</div>
+        <button type="button" class="table-pagination-nav" data-page="next" ${safePage >= totalPages ? "disabled" : ""} aria-label="Next page">
+          <i class="fas fa-chevron-right" aria-hidden="true"></i>
+        </button>
+      </nav>
+    `;
+
+    container.onclick = (e) => {
+      const btn = e.target.closest("[data-page]");
+      if (!btn || btn.disabled) return;
+      const target = btn.dataset.page;
+      if (target === "prev" && safePage > 1) onPageChange(safePage - 1);
+      else if (target === "next" && safePage < totalPages)
+        onPageChange(safePage + 1);
+      else if (/^\d+$/.test(target)) onPageChange(parseInt(target, 10));
+    };
+  },
+
+  _syncPlayersPagination() {
+    const tbody = document.querySelector("#players-table tbody");
+    const table = document.getElementById("players-table");
+    if (!tbody || !table) return;
+
+    const rows = Array.from(tbody.querySelectorAll("tr"));
+    const total = rows.length;
+    const pageSize = this.TABLE_PAGE_SIZE;
+    const totalPages = Math.max(1, Math.ceil(total / pageSize));
+
+    if (this.playersPage > totalPages) this.playersPage = totalPages;
+    if (this.playersPage < 1) this.playersPage = 1;
+
+    const start = (this.playersPage - 1) * pageSize;
+    const end = start + pageSize;
+
+    table.classList.add("table-pagination-fade");
+    requestAnimationFrame(() => {
+      rows.forEach((row, i) => {
+        const visible = i >= start && i < end;
+        row.hidden = !visible;
+      });
+      requestAnimationFrame(() => table.classList.remove("table-pagination-fade"));
+    });
+
+    this._renderTablePagination({
+      containerId: "players-pagination",
+      currentPage: this.playersPage,
+      totalItems: total,
+      pageSize,
+      itemLabel: total === 1 ? "player" : "players",
+      onPageChange: (page) => {
+        this.playersPage = page;
+        this._syncPlayersPagination();
+        document
+          .getElementById("players-pagination")
+          ?.scrollIntoView({ behavior: "smooth", block: "nearest" });
+      },
+    });
+  },
+
+  _syncEventsPagination() {
+    const tbody = document.querySelector("#admin-events-table tbody");
+    const table = document.getElementById("admin-events-table");
+    if (!tbody || !table) return;
+
+    const rows = Array.from(tbody.querySelectorAll("tr"));
+    const total = rows.length;
+    const pageSize = this.TABLE_PAGE_SIZE;
+    const totalPages = Math.max(1, Math.ceil(total / pageSize));
+
+    if (this.eventsPage > totalPages) this.eventsPage = totalPages;
+    if (this.eventsPage < 1) this.eventsPage = 1;
+
+    const start = (this.eventsPage - 1) * pageSize;
+    const end = start + pageSize;
+
+    table.classList.add("table-pagination-fade");
+    requestAnimationFrame(() => {
+      rows.forEach((row, i) => {
+        const visible = i >= start && i < end;
+        row.hidden = !visible;
+      });
+      requestAnimationFrame(() => table.classList.remove("table-pagination-fade"));
+    });
+
+    this._renderTablePagination({
+      containerId: "events-pagination",
+      currentPage: this.eventsPage,
+      totalItems: total,
+      pageSize,
+      itemLabel: total === 1 ? "event" : "events",
+      onPageChange: (page) => {
+        this.eventsPage = page;
+        this._syncEventsPagination();
+        document
+          .getElementById("events-pagination")
+          ?.scrollIntoView({ behavior: "smooth", block: "nearest" });
+      },
+    });
+  },
 };
+
+// Wrap admin table filters with pagination (existing filter logic unchanged)
+(function initAdminTablePagination() {
+  const attach = (filterName, pageKey, syncName) => {
+    const original = app[filterName].bind(app);
+    app[filterName] = function (...args) {
+      app[pageKey] = 1;
+      original(...args);
+      app[syncName]();
+    };
+  };
+  attach("filterPlayers", "playersPage", "_syncPlayersPagination");
+  attach("filterEvents", "eventsPage", "_syncEventsPagination");
+})();
 
 // ===== Service Worker =====
 if ("serviceWorker" in navigator) {

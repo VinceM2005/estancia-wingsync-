@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Wingsync - Pigeon Clocking System</title>
     <link rel="manifest" href="manifest.json" />
-    <link rel="stylesheet" href="style.css?v=11" />
+    <link rel="stylesheet" href="style.css?v=12" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="mobile-web-app-capable" content="yes" />
     <meta
@@ -44,7 +44,7 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
 
-    <link rel="stylesheet" href="style.css?v=11" />
+    <link rel="stylesheet" href="style.css?v=12" />
     <style>
       /* ===== ADDITIONAL STYLES FOR UI COMPONENTS ===== */
       .pigeons-grid {
@@ -1740,6 +1740,11 @@
                 </thead>
                 <tbody></tbody>
               </table>
+              <div
+                id="players-pagination"
+                class="table-pagination"
+                aria-label="Players table pagination"
+              ></div>
             </div>
           </div>
 
@@ -1780,6 +1785,11 @@
                 </thead>
                 <tbody></tbody>
               </table>
+              <div
+                id="events-pagination"
+                class="table-pagination"
+                aria-label="Events table pagination"
+              ></div>
             </div>
           </div>
 

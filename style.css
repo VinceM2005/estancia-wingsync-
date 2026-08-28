@@ -3316,3 +3316,115 @@ tr:hover td {
     justify-content: space-between;
   }
 }
+
+/* ===== Admin table pagination ===== */
+.table-pagination {
+  display: none;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  margin-top: 20px;
+  padding-top: 16px;
+  border-top: 1px solid var(--border);
+}
+
+.table-pagination--visible {
+  display: flex;
+}
+
+.table-pagination-info {
+  margin: 0;
+  font-size: 13px;
+  color: var(--text-muted);
+}
+
+.table-pagination-info strong {
+  color: var(--text);
+  font-weight: 600;
+}
+
+.table-pagination-controls {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  justify-content: center;
+}
+
+.table-pagination-pages {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.table-pagination-nav,
+.table-pagination-page {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 36px;
+  height: 36px;
+  padding: 0 10px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg);
+  color: var(--text);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease, transform 0.1s ease;
+}
+
+.table-pagination-nav:hover:not(:disabled),
+.table-pagination-page:hover:not(.table-pagination-page--active) {
+  border-color: var(--primary);
+  color: var(--primary);
+}
+
+.table-pagination-nav:active:not(:disabled),
+.table-pagination-page:active:not(.table-pagination-page--active) {
+  transform: scale(0.97);
+}
+
+.table-pagination-nav:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.table-pagination-page--active {
+  background: var(--primary);
+  border-color: var(--primary);
+  color: #fff;
+  cursor: default;
+}
+
+.table-pagination-ellipsis {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 28px;
+  height: 36px;
+  color: var(--text-muted);
+  font-size: 14px;
+  user-select: none;
+}
+
+#players-table.table-pagination-fade tbody,
+#admin-events-table.table-pagination-fade tbody {
+  opacity: 0.55;
+  transition: opacity 0.15s ease;
+}
+
+#players-table tbody,
+#admin-events-table tbody {
+  transition: opacity 0.15s ease;
+}
+
+@media (max-width: 480px) {
+  .table-pagination-nav,
+  .table-pagination-page {
+    min-width: 32px;
+    height: 32px;
+    font-size: 12px;
+  }
+}
