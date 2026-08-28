@@ -1,10 +1,10 @@
-const CACHE_NAME = "wingsync-v89"; // Increment on every deployment
+const CACHE_NAME = "wingsync-v90"; // Increment on every deployment
 const urlsToCache = ["/index.html", "/app.js", "/style.css", "/manifest.json", "/wingsync-logo.png"];
 
 self.addEventListener("install", (event) => {
   event.waitUntil(
     caches.open(CACHE_NAME).then((cache) =>
-      Promise.allSettled(
+      Promise.allSettled( 
         urlsToCache.map((url) =>
           cache.add(url).catch((err) => {
             console.warn(`Failed to cache ${url}:`, err);

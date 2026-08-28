@@ -1950,11 +1950,7 @@ app.post(
 
 app.put(
   "/api/events/:eventId/register",
-  [
-    body("pigeonIds")
-      .isArray({ min: 1 })
-      .withMessage("At least one pigeon must be selected."),
-  ],
+  [body("pigeonIds").isArray().withMessage("pigeonIds must be an array.")],
   async (req, res) => {
     try {
       const errors = validationResult(req);
@@ -1972,7 +1968,38 @@ app.put(
       });
       if (!registration) {
         return res.status(404).json({
-          error: "No draft or confirmed registration found for this event.",
+          error: "No registration found for this event.",
+        });
+      }
+
+      const event = await Event.findOne({ code: eventId });
+      if (!event) {
+        return res.status(404).json({ error: "Event not found." });
+      }
+      if (event.state !== "Registration Open") {
+        return res.status(400).json({
+          error: "Registration is closed. Entries can no longer be changed.",
+        });
+      }
+      if (
+        event.registrationDeadline &&
+        new Date() > new Date(event.registrationDeadline)
+      ) {
+        return res.status(400).json({
+          error: "Registration deadline has passed.",
+        });
+      }
+
+      // Empty selection = withdraw entry (remove registration)
+      if (!pigeonIds || pigeonIds.length === 0) {
+        await EventRegistration.findOneAndDelete({ _id: registration._id });
+        await Log.create({
+          message: `Player ${playerId} removed all pigeons and withdrew from event ${eventId}.`,
+        });
+        return res.json({
+          success: true,
+          withdrawn: true,
+          message: "Registration removed.",
         });
       }
 
@@ -2017,21 +2044,29 @@ app.delete("/api/events/:eventId/register", async (req, res) => {
     }
     if (event.state !== "Registration Open") {
       return res.status(400).json({
-        error: "Cannot withdraw registration; event is no longer open.",
+        error: "Registration is closed. Entries can no longer be removed.",
+      });
+    }
+    if (
+      event.registrationDeadline &&
+      new Date() > new Date(event.registrationDeadline)
+    ) {
+      return res.status(400).json({
+        error: "Registration deadline has passed.",
       });
     }
     const registration = await EventRegistration.findOneAndDelete({
       eventId,
       playerId,
-      status: "draft",
+      status: { $in: ["draft", "confirmed"] },
     });
     if (!registration) {
-      return res.status(404).json({ error: "No draft registration found." });
+      return res.status(404).json({ error: "No registration found to remove." });
     }
     await Log.create({
       message: `Player ${playerId} withdrew registration for event ${eventId}.`,
     });
-    res.json({ success: true, message: "Registration withdrawn." });
+    res.json({ success: true, message: "Registration removed." });
   } catch (error) {
     console.error("Error withdrawing registration:", error);
     res.status(500).json({ error: "Failed to withdraw registration." });

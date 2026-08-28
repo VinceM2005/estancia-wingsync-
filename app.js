@@ -4331,19 +4331,34 @@ const app = {
           container.innerHTML = `<p>No open events for registration at the moment.</p>`;
           return;
         }
-        let html = `<h3>Open Events</h3>`;
-        events.forEach((e) => {
-          html += `
+        return Promise.all(
+          events.map((e) =>
+            fetchWithAuth(`${API_URL}/events/${e.code}/registrations/my`)
+              .then((r) => r.json())
+              .then((data) => ({ event: e, registration: data.registration }))
+              .catch(() => ({ event: e, registration: null })),
+          ),
+        ).then((rows) => {
+          let html = `<h3>Open Events</h3>`;
+          rows.forEach(({ event: e, registration }) => {
+            const hasEntry = !!registration;
+            const joinLabel = hasEntry ? "Manage Entry" : "Join Race";
+            const joinClass = hasEntry ? "btn-primary" : "btn-success";
+            const entryBadge = hasEntry
+              ? `<span class="entry-registered-badge">${registration.pigeonIds?.length || 0} entered</span>`
+              : "";
+            html += `
             <div class="entry-item">
-              <div><strong>${e.name}</strong> (${e.code})<br><small>Release: ${new Date(e.releaseTime).toLocaleString()}</small></div>
+              <div><strong>${e.name}</strong> (${e.code}) ${entryBadge}<br><small>Release: ${new Date(e.releaseTime).toLocaleString()}</small></div>
               <div>
-                <button class="btn btn-sm btn-success" onclick="app.openRegisterModalNew('${e.code}')">Join Race</button>
+                <button class="btn btn-sm ${joinClass}" onclick="app.openRegisterModalNew('${e.code}')">${joinLabel}</button>
                 <button class="btn btn-sm btn-secondary" onclick="app.checkMyRegistration('${e.code}')">My Entry</button>
               </div>
             </div>
           `;
+          });
+          container.innerHTML = html;
         });
-        container.innerHTML = html;
       })
       .catch((err) => {
         document.getElementById("entries-container").innerHTML =
@@ -4440,13 +4455,82 @@ const app = {
       });
   },
 
+  _updateRegistrationSelectionSummary() {
+    const checked = document.querySelectorAll(
+      "#pigeon-select-list .pigeon-checkbox:checked",
+    );
+    const summary = document.getElementById("reg-selection-summary");
+    if (summary) {
+      const n = checked.length;
+      summary.textContent =
+        n === 1 ? "1 pigeon selected" : `${n} pigeons selected`;
+    }
+    const notice = document.getElementById("reg-inline-notice");
+    if (notice) notice.classList.add("hidden");
+  },
+
+  _setRegistrationModalState(event, existingReg) {
+    const hasEntry = !!existingReg;
+    const codeEl = document.getElementById("reg-event-code");
+    if (codeEl) codeEl.dataset.hasEntry = hasEntry ? "1" : "0";
+
+    const titleEl = document.getElementById("reg-modal-title");
+    if (titleEl) {
+      titleEl.textContent = hasEntry ? "Manage Entry" : "Register for Event";
+    }
+
+    const saveLabel = document.getElementById("reg-save-label");
+    if (saveLabel) {
+      saveLabel.textContent = hasEntry ? "Update Entry" : "Save Entry";
+    }
+
+    const withdrawBtn = document.getElementById("reg-withdraw-btn");
+    if (withdrawBtn) withdrawBtn.classList.toggle("hidden", !hasEntry);
+
+    const statusEl = document.getElementById("reg-entry-status");
+    if (statusEl) {
+      if (hasEntry) {
+        const status = (existingReg.status || "draft").toLowerCase();
+        const count = existingReg.pigeonIds?.length || 0;
+        statusEl.classList.remove("hidden");
+        statusEl.innerHTML = `<span class="register-status-badge register-status-badge--${this._escapeCertHtml(status.replace(/\s+/g, "-"))}">${this._escapeCertHtml(status.charAt(0).toUpperCase() + status.slice(1))}</span> Current entry · ${count} pigeon${count === 1 ? "" : "s"}`;
+      } else {
+        statusEl.classList.add("hidden");
+        statusEl.innerHTML = "";
+      }
+    }
+
+    const meta = document.getElementById("reg-event-meta");
+    if (meta && event) {
+      const parts = [];
+      if (event.releaseTime) {
+        parts.push(
+          `Release: ${new Date(event.releaseTime).toLocaleString()}`,
+        );
+      }
+      if (event.registrationDeadline) {
+        parts.push(
+          `Closes: ${new Date(event.registrationDeadline).toLocaleString()}`,
+        );
+      }
+      meta.textContent = parts.join(" · ");
+    }
+
+    const notice = document.getElementById("reg-inline-notice");
+    if (notice) {
+      notice.classList.add("hidden");
+      notice.textContent = "";
+    }
+  },
+
   openRegisterModalNew(eventCode) {
     const joinBtn = document.querySelector(
-      `#entries-container .btn-success[onclick*="${eventCode}"]`,
+      `#entries-container .btn-sm[onclick*="${eventCode}"]`,
     );
+    const joinBtnLabel = joinBtn ? joinBtn.textContent : "";
     if (joinBtn) {
       joinBtn.disabled = true;
-      joinBtn.textContent = "⏳ Registering...";
+      joinBtn.textContent = "Loading...";
     }
 
     Promise.all([
@@ -4459,36 +4543,78 @@ const app = {
       .then(([events, pigeons, existingReg]) => {
         const event = events.find((e) => e.code === eventCode);
         if (!event) throw new Error("Event not found");
+
+        if (event.state !== "Registration Open") {
+          this.showModal({
+            title: "Registration Closed",
+            message:
+              "This event is no longer accepting entries. You cannot register, edit, or remove an entry.",
+            icon: "🔒",
+            iconColor: "#e67e22",
+          });
+          return;
+        }
+        if (
+          event.registrationDeadline &&
+          new Date() > new Date(event.registrationDeadline)
+        ) {
+          this.showModal({
+            title: "Deadline Passed",
+            message:
+              "The registration deadline has passed. Entries can no longer be changed.",
+            icon: "⏰",
+            iconColor: "#e67e22",
+          });
+          return;
+        }
+
         document.getElementById("reg-event-code").value = eventCode;
         document.getElementById("reg-event-name").textContent = event.name;
+        this._setRegistrationModalState(event, existingReg.registration);
 
         const container = document.getElementById("pigeon-select-list");
         const activePigeons = pigeons.filter((p) => p.status === "Active");
         if (activePigeons.length === 0) {
-          container.innerHTML = `<p>You have no active pigeons. Please add one first.</p>`;
+          container.innerHTML = `<div class="register-pigeon-empty">You have no active pigeons. Add one in My Pigeons first.</div>`;
+          document.getElementById("reg-save-btn").disabled = true;
+          document.getElementById("modal-register-event").classList.add("show");
           return;
         }
+
+        document.getElementById("reg-save-btn").disabled = false;
         const selectedIds = existingReg.registration
-          ? existingReg.registration.pigeonIds.map((p) => p._id || p)
+          ? existingReg.registration.pigeonIds.map((p) => String(p._id || p))
           : [];
+        const selectedSet = new Set(selectedIds);
         let html = "";
         activePigeons.forEach((p) => {
-          const checked = selectedIds.includes(p._id) ? "checked" : "";
+          const checked = selectedSet.has(String(p._id)) ? "checked" : "";
           const avatarId = p.avatarId || "";
           const avatarHTML = avatarId
-            ? getPigeonAvatarSVG(avatarId, 24)
-            : getDefaultPigeonSVG(24);
+            ? getPigeonAvatarSVG(avatarId, 36)
+            : getDefaultPigeonSVG(36);
+          const ring = this._escapeCertHtml(p.ringNumber || "Unknown");
+          const nick = this._escapeCertHtml(p.nickname || "No nickname");
+          const color = this._escapeCertHtml(p.color || "N/A");
           html += `
-            <div style="margin:6px 0; display:flex; align-items:center; gap:8px;">
-              <span style="width:28px;height:28px;display:inline-block;border-radius:50%;overflow:hidden;flex-shrink:0;">${avatarHTML}</span>
-              <label style="flex:1;">
-                <input type="checkbox" value="${p._id}" ${checked} class="pigeon-checkbox" />
-                ${p.ringNumber} - ${p.nickname || "No nickname"} (${p.color || "N/A"})
-              </label>
-            </div>
+            <label class="register-pigeon-item">
+              <input type="checkbox" value="${p._id}" ${checked} class="pigeon-checkbox register-pigeon-checkbox" />
+              <span class="register-pigeon-avatar">${avatarHTML}</span>
+              <span class="register-pigeon-info">
+                <span class="register-pigeon-ring">${ring}</span>
+                <span class="register-pigeon-meta">${nick} · ${color}</span>
+              </span>
+              <span class="register-pigeon-check" aria-hidden="true"><i class="fas fa-check"></i></span>
+            </label>
           `;
         });
         container.innerHTML = html;
+        container.querySelectorAll(".pigeon-checkbox").forEach((cb) => {
+          cb.addEventListener("change", () =>
+            this._updateRegistrationSelectionSummary(),
+          );
+        });
+        this._updateRegistrationSelectionSummary();
         document.getElementById("modal-register-event").classList.add("show");
       })
       .catch((err) => {
@@ -4502,54 +4628,68 @@ const app = {
       .finally(() => {
         if (joinBtn) {
           joinBtn.disabled = false;
-          joinBtn.textContent = "Join Race";
+          joinBtn.textContent = joinBtnLabel || "Join Race";
         }
       });
   },
 
   confirmRegistration() {
-    const eventCode = document.getElementById("reg-event-code").value;
+    const codeEl = document.getElementById("reg-event-code");
+    const eventCode = codeEl.value;
+    const hasEntry = codeEl.dataset.hasEntry === "1";
     const checkboxes = document.querySelectorAll(
       "#pigeon-select-list .pigeon-checkbox:checked",
     );
     const pigeonIds = Array.from(checkboxes).map((cb) => cb.value);
-    if (pigeonIds.length === 0) {
-      this.showModal({
-        title: "Error",
-        message: "Please select at least one pigeon.",
-        icon: "❌",
-        iconColor: "#c0392b",
-      });
+    const notice = document.getElementById("reg-inline-notice");
+
+    if (pigeonIds.length === 0 && !hasEntry) {
+      if (notice) {
+        notice.textContent =
+          "Select at least one pigeon to register for this event.";
+        notice.classList.remove("hidden");
+      }
       return;
     }
+    if (notice) notice.classList.add("hidden");
 
-    const confirmBtn = document.querySelector(
-      "#modal-register-event .btn-success",
-    );
-    if (confirmBtn) {
-      confirmBtn.disabled = true;
-      confirmBtn.textContent = "⏳ Saving...";
-    }
+    const saveBtn = document.getElementById("reg-save-btn");
+    const saveLabel = document.getElementById("reg-save-label");
+    const originalLabel = saveLabel ? saveLabel.textContent : "Save Entry";
+    if (saveBtn) saveBtn.disabled = true;
+    if (saveLabel) saveLabel.textContent = "Saving...";
 
-    fetchWithAuth(`${API_URL}/events/${eventCode}/registrations/my`)
-      .then((res) => res.json())
-      .then((data) => {
-        const existing = data.registration;
-        const url = `${API_URL}/events/${eventCode}/register`;
-        const method = existing ? "PUT" : "POST";
-        return fetchWithAuth(url, {
-          method,
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ pigeonIds }),
-        });
-      })
+    const isWithdraw = pigeonIds.length === 0 && hasEntry;
+    const request =
+      isWithdraw || hasEntry
+        ? fetchWithAuth(`${API_URL}/events/${eventCode}/register`, {
+            method: "PUT",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ pigeonIds }),
+          })
+        : fetchWithAuth(`${API_URL}/events/${eventCode}/register`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ pigeonIds }),
+          });
+
+    request
       .then((res) => res.json())
       .then((data) => {
         if (data.success) {
           this.closeModal("modal-register-event");
+          const withdrawn = isWithdraw || data.withdrawn;
           this.showModal({
-            title: "✅ Registration Saved",
-            message: "Your entry has been recorded.",
+            title: withdrawn
+              ? "Entry Removed"
+              : hasEntry
+                ? "Entry Updated"
+                : "Registration Saved",
+            message:
+              data.message ||
+              (withdrawn
+                ? "Your registration has been removed."
+                : "Your entry has been recorded."),
             icon: "✅",
             iconColor: "#27ae60",
           });
@@ -4572,23 +4712,25 @@ const app = {
         });
       })
       .finally(() => {
-        if (confirmBtn) {
-          confirmBtn.disabled = false;
-          confirmBtn.textContent = "Confirm Registration";
-        }
+        if (saveBtn) saveBtn.disabled = false;
+        if (saveLabel) saveLabel.textContent = originalLabel;
       });
   },
 
   withdrawRegistration() {
-    const eventCode = document.getElementById("edit-reg-event-code").value;
-    if (!confirm("Withdraw your registration for this event?")) return;
+    const eventCode = document.getElementById("reg-event-code").value;
+    if (
+      !confirm(
+        "Remove your entire entry for this event? This cannot be undone after registration closes.",
+      )
+    ) {
+      return;
+    }
 
-    const withdrawBtn = document.querySelector(
-      "#modal-edit-registration .btn-danger",
-    );
+    const withdrawBtn = document.getElementById("reg-withdraw-btn");
     if (withdrawBtn) {
       withdrawBtn.disabled = true;
-      withdrawBtn.textContent = "⏳ Withdrawing...";
+      withdrawBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Removing...';
     }
 
     fetchWithAuth(`${API_URL}/events/${eventCode}/register`, {
@@ -4597,10 +4739,10 @@ const app = {
       .then((res) => res.json())
       .then((data) => {
         if (data.success) {
-          this.closeModal("modal-edit-registration");
+          this.closeModal("modal-register-event");
           this.showModal({
-            title: "✅ Withdrawn",
-            message: "Your registration has been removed.",
+            title: "Entry Removed",
+            message: data.message || "Your registration has been removed.",
             icon: "✅",
             iconColor: "#27ae60",
           });
@@ -4608,126 +4750,13 @@ const app = {
         } else {
           this.showModal({
             title: "Error",
-            message: data.error || "Failed to withdraw.",
+            message: data.error || "Failed to remove entry.",
             icon: "❌",
             iconColor: "#c0392b",
           });
         }
       })
-      .finally(() => {
-        if (withdrawBtn) {
-          withdrawBtn.disabled = false;
-          withdrawBtn.textContent = "Withdraw Entire Registration";
-        }
-      });
-  },
-
-  openEditRegistration(eventCode) {
-    Promise.all([
-      fetchWithAuth(`${API_URL}/pigeons`).then((r) => r.json()),
-      fetchWithAuth(`${API_URL}/events/${eventCode}/registrations/my`).then(
-        (r) => r.json(),
-      ),
-    ])
-      .then(([pigeons, regData]) => {
-        const reg = regData.registration;
-        if (!reg) {
-          this.showModal({
-            title: "Error",
-            message: "No registration found.",
-            icon: "❌",
-            iconColor: "#c0392b",
-          });
-          return;
-        }
-        document.getElementById("edit-reg-event-code").value = eventCode;
-        document.getElementById("edit-reg-event-name").textContent =
-          reg.eventId;
-        const container = document.getElementById("edit-pigeon-select-list");
-        const activePigeons = pigeons.filter((p) => p.status === "Active");
-        const selectedIds = reg.pigeonIds.map((p) => p._id || p);
-        let html = "";
-        activePigeons.forEach((p) => {
-          const checked = selectedIds.includes(p._id) ? "checked" : "";
-          const avatarId = p.avatarId || "";
-          const avatarHTML = avatarId
-            ? getPigeonAvatarSVG(avatarId, 24)
-            : getDefaultPigeonSVG(24);
-          html += `
-            <div style="margin:6px 0; display:flex; align-items:center; gap:8px;">
-              <span style="width:28px;height:28px;display:inline-block;border-radius:50%;overflow:hidden;flex-shrink:0;">${avatarHTML}</span>
-              <label style="flex:1;">
-                <input type="checkbox" value="${p._id}" ${checked} class="edit-pigeon-checkbox" />
-                ${p.ringNumber} - ${p.nickname || "No nickname"} (${p.color || "N/A"})
-              </label>
-            </div>
-          `;
-        });
-        container.innerHTML = html;
-        document
-          .getElementById("modal-edit-registration")
-          .classList.add("show");
-      })
-      .catch((err) => {
-        this.showModal({
-          title: "Error",
-          message: "Failed to load registration data.",
-          icon: "❌",
-          iconColor: "#c0392b",
-        });
-      });
-  },
-
-  confirmEditRegistration() {
-    const eventCode = document.getElementById("edit-reg-event-code").value;
-    const checkboxes = document.querySelectorAll(
-      "#edit-pigeon-select-list .edit-pigeon-checkbox:checked",
-    );
-    const pigeonIds = Array.from(checkboxes).map((cb) => cb.value);
-    if (pigeonIds.length === 0) {
-      this.showModal({
-        title: "Error",
-        message: "Please select at least one pigeon.",
-        icon: "❌",
-        iconColor: "#c0392b",
-      });
-      return;
-    }
-
-    const updateBtn = document.querySelector(
-      "#modal-edit-registration .btn-success",
-    );
-    if (updateBtn) {
-      updateBtn.disabled = true;
-      updateBtn.textContent = "⏳ Updating...";
-    }
-
-    fetchWithAuth(`${API_URL}/events/${eventCode}/register`, {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ pigeonIds }),
-    })
-      .then((res) => res.json())
-      .then((data) => {
-        if (data.success) {
-          this.closeModal("modal-edit-registration");
-          this.showModal({
-            title: "✅ Updated",
-            message: "Registration updated.",
-            icon: "✅",
-            iconColor: "#27ae60",
-          });
-          this.loadOpenEvents();
-        } else {
-          this.showModal({
-            title: "Error",
-            message: data.error || "Failed to update.",
-            icon: "❌",
-            iconColor: "#c0392b",
-          });
-        }
-      })
-      .catch((err) => {
+      .catch(() => {
         this.showModal({
           title: "Error",
           message: "Connection error.",
@@ -4736,11 +4765,20 @@ const app = {
         });
       })
       .finally(() => {
-        if (updateBtn) {
-          updateBtn.disabled = false;
-          updateBtn.textContent = "Update Registration";
+        if (withdrawBtn) {
+          withdrawBtn.disabled = false;
+          withdrawBtn.innerHTML =
+            '<i class="fas fa-trash-alt"></i> Remove Entry';
         }
       });
+  },
+
+  openEditRegistration(eventCode) {
+    this.openRegisterModalNew(eventCode);
+  },
+
+  confirmEditRegistration() {
+    this.confirmRegistration();
   },
 
   // ============================================================

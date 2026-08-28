@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Wingsync - Pigeon Clocking System</title>
     <link rel="manifest" href="manifest.json" />
-    <link rel="stylesheet" href="style.css?v=9" />
+    <link rel="stylesheet" href="style.css?v=10" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="mobile-web-app-capable" content="yes" />
     <meta
@@ -44,7 +44,7 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
 
-    <link rel="stylesheet" href="style.css?v=9" />
+    <link rel="stylesheet" href="style.css?v=10" />
     <style>
       /* ===== ADDITIONAL STYLES FOR UI COMPONENTS ===== */
       .pigeons-grid {
@@ -2394,11 +2394,11 @@
         </button>
       </div>
     </div>
-    <!-- Register for Event Modal (Player self-registration) -->
+    <!-- Register / Manage Event Entry Modal (Player) -->
     <div id="modal-register-event" class="modal-overlay">
-      <div class="modal-content" style="max-width: 600px">
+      <div class="modal-content register-modal-content">
         <div class="modal-header">
-          <h3><i class="fas fa-calendar-plus"></i> Register for Event</h3>
+          <h3><i class="fas fa-calendar-plus"></i> <span id="reg-modal-title">Register for Event</span></h3>
           <button
             class="close-modal"
             onclick="app.closeModal('modal-register-event')"
@@ -2407,26 +2407,52 @@
           </button>
         </div>
         <input type="hidden" id="reg-event-code" />
-        <p>
-          Select the pigeons you want to enter for
-          <strong id="reg-event-name"></strong>.
-        </p>
-        <div
-          id="pigeon-select-list"
-          style="max-height: 300px; overflow-y: auto; margin-bottom: 16px"
-        ></div>
-        <button
-          class="btn btn-success"
-          style="width: 100%"
-          onclick="app.confirmRegistration()"
-        >
-          <i class="fas fa-check"></i> Confirm Registration
-        </button>
+        <div class="register-modal-body">
+          <div class="register-event-banner">
+            <div class="register-event-label">Event</div>
+            <div class="register-event-name" id="reg-event-name"></div>
+            <div class="register-event-meta" id="reg-event-meta"></div>
+          </div>
+          <div id="reg-entry-status" class="register-entry-status hidden"></div>
+          <p class="register-modal-hint">
+            Select the pigeons you want to enter. You can update your selection anytime before registration closes.
+          </p>
+          <div id="reg-selection-summary" class="register-selection-summary">
+            0 pigeons selected
+          </div>
+          <div id="reg-inline-notice" class="register-inline-notice hidden"></div>
+          <div id="pigeon-select-list" class="register-pigeon-list"></div>
+        </div>
+        <div class="register-modal-actions">
+          <button
+            type="button"
+            id="reg-save-btn"
+            class="btn btn-success"
+            onclick="app.confirmRegistration()"
+          >
+            <i class="fas fa-check"></i> <span id="reg-save-label">Save Entry</span>
+          </button>
+          <button
+            type="button"
+            id="reg-withdraw-btn"
+            class="btn btn-danger register-withdraw-btn hidden"
+            onclick="app.withdrawRegistration()"
+          >
+            <i class="fas fa-trash-alt"></i> Remove Entry
+          </button>
+          <button
+            type="button"
+            class="btn btn-secondary"
+            onclick="app.closeModal('modal-register-event')"
+          >
+            Cancel
+          </button>
+        </div>
       </div>
     </div>
 
-    <!-- Edit Registration Modal -->
-    <div id="modal-edit-registration" class="modal-overlay">
+    <!-- Legacy edit modal (kept for compatibility; use register modal instead) -->
+    <div id="modal-edit-registration" class="modal-overlay hidden" style="display: none !important" aria-hidden="true">
       <div class="modal-content" style="max-width: 600px">
         <div class="modal-header">
           <h3><i class="fas fa-edit"></i> Edit Registration</h3>
