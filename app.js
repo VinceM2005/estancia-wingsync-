@@ -4294,22 +4294,149 @@ const app = {
         const avatarHTML = avatarId
           ? getPigeonAvatarSVG(avatarId, 48)
           : getDefaultPigeonSVG(48);
-        let msg = `📊 ${stats.ringNumber} (${stats.nickname || "No nickname"})\n`;
-        msg += `Races: ${stats.totalRaces} | Wins: ${stats.wins} | Podiums: ${stats.podiums}\n`;
-        msg += `Best Speed: ${stats.bestSpeed.toFixed(2)} m/min | Avg: ${stats.averageSpeed.toFixed(2)} m/min\n`;
-        msg += `Recent History:\n`;
-        stats.raceHistory.slice(0, 5).forEach((r) => {
-          msg += `  ${r.eventName}: Rank ${r.rank}, Speed ${r.speed.toFixed(2)} m/min\n`;
-        });
-        const fullMsg = `<div style="display:flex;align-items:center;gap:12px;margin-bottom:12px;">
-          <span style="width:56px;height:56px;display:inline-block;border-radius:50%;overflow:hidden;border:2px solid var(--primary);flex-shrink:0;">${avatarHTML}</span>
-          <div><strong>${stats.ringNumber}</strong><br><span style="color:var(--text-light);">${stats.nickname || "No nickname"}</span></div>
-        </div><pre style="white-space:pre-wrap;font-family:inherit;margin:0;font-size:14px;line-height:1.6;">${msg}</pre>`;
+
+        const ring = this._escapeCertHtml(stats.ringNumber || "Unknown ring");
+        const nick = (stats.nickname || "").trim();
+        const nickLine = nick
+          ? `<div class="pigeon-stats-nick">${this._escapeCertHtml(nick)}</div>`
+          : `<div class="pigeon-stats-nick pigeon-stats-nick--empty">No nickname</div>`;
+
+        const metaParts = [];
+        if (stats.color) metaParts.push(this._escapeCertHtml(stats.color));
+        if (stats.gender) metaParts.push(this._escapeCertHtml(stats.gender));
+        if (stats.birthYear) metaParts.push(String(stats.birthYear));
+        const metaLine =
+          metaParts.length > 0
+            ? `<div class="pigeon-stats-meta">${metaParts.join(" · ")}</div>`
+            : "";
+
+        const totalRaces = stats.totalRaces ?? 0;
+        const wins = stats.wins ?? 0;
+        const podiums = stats.podiums ?? 0;
+        const bestSpeed = Number(stats.bestSpeed) || 0;
+        const avgSpeed = Number(stats.averageSpeed) || 0;
+
+        const history = (stats.raceHistory || []).slice(0, 5);
+        const historyHtml =
+          history.length > 0
+            ? history
+                .map((r) => {
+                  const eventName = this._escapeCertHtml(
+                    r.eventName || "Unknown Event",
+                  );
+                  const rank = r.rank;
+                  let rankClass = "pigeon-stats-rank";
+                  let rankText = rank ? `#${rank}` : "—";
+                  if (rank === 1) rankClass += " pigeon-stats-rank--gold";
+                  else if (rank === 2) rankClass += " pigeon-stats-rank--silver";
+                  else if (rank === 3) rankClass += " pigeon-stats-rank--bronze";
+
+                  const speed = Number(r.speed) || 0;
+                  const dateStr = r.date
+                    ? new Date(r.date).toLocaleDateString("en-PH", {
+                        month: "short",
+                        day: "numeric",
+                        year: "numeric",
+                      })
+                    : "";
+
+                  return `<li class="pigeon-stats-history-item">
+                    <div class="pigeon-stats-history-main">
+                      <span class="pigeon-stats-history-event">${eventName}</span>
+                      ${dateStr ? `<span class="pigeon-stats-history-date">${this._escapeCertHtml(dateStr)}</span>` : ""}
+                    </div>
+                    <div class="pigeon-stats-history-stats">
+                      <span class="${rankClass}">${this._escapeCertHtml(rankText)}</span>
+                      <span class="pigeon-stats-speed">${speed.toFixed(2)} m/min</span>
+                    </div>
+                  </li>`;
+                })
+                .join("")
+            : `<li class="pigeon-stats-history-empty">No race history yet. Enter an event to start building stats.</li>`;
+
+        const certs = stats.certificates || [];
+        const certsHtml =
+          certs.length > 0
+            ? `<div class="pigeon-stats-section">
+                <div class="pigeon-stats-section-title">Certificates</div>
+                <ul class="pigeon-stats-cert-list">
+                  ${certs
+                    .slice(0, 3)
+                    .map((c) => {
+                      const eventName = this._escapeCertHtml(
+                        c.eventName || "Unknown",
+                      );
+                      const rank = c.rank ? `#${c.rank}` : "—";
+                      return `<li class="pigeon-stats-cert-item">
+                        <i class="fas fa-certificate" aria-hidden="true"></i>
+                        <span>${eventName}</span>
+                        <span class="pigeon-stats-cert-rank">${this._escapeCertHtml(rank)}</span>
+                      </li>`;
+                    })
+                    .join("")}
+                </ul>
+              </div>`
+            : "";
+
+        const html = `
+          <div class="pigeon-stats-modal">
+            <div class="pigeon-stats-header">
+              <span class="pigeon-stats-avatar">${avatarHTML}</span>
+              <div class="pigeon-stats-identity">
+                <div class="pigeon-stats-ring">${ring}</div>
+                ${nickLine}
+                ${metaLine}
+              </div>
+            </div>
+
+            <div class="pigeon-stats-grid">
+              <div class="pigeon-stats-card">
+                <span class="pigeon-stats-card-value">${totalRaces}</span>
+                <span class="pigeon-stats-card-label">Races</span>
+              </div>
+              <div class="pigeon-stats-card pigeon-stats-card--highlight">
+                <span class="pigeon-stats-card-value">${wins}</span>
+                <span class="pigeon-stats-card-label">Wins</span>
+              </div>
+              <div class="pigeon-stats-card">
+                <span class="pigeon-stats-card-value">${podiums}</span>
+                <span class="pigeon-stats-card-label">Podiums</span>
+              </div>
+            </div>
+
+            <div class="pigeon-stats-speed-row">
+              <div class="pigeon-stats-speed-item">
+                <span class="pigeon-stats-speed-icon" aria-hidden="true"><i class="fas fa-bolt"></i></span>
+                <div class="pigeon-stats-speed-info">
+                  <span class="pigeon-stats-speed-label">Best speed</span>
+                  <span class="pigeon-stats-speed-value">${bestSpeed.toFixed(2)} <small>m/min</small></span>
+                </div>
+              </div>
+              <div class="pigeon-stats-speed-item">
+                <span class="pigeon-stats-speed-icon" aria-hidden="true"><i class="fas fa-chart-line"></i></span>
+                <div class="pigeon-stats-speed-info">
+                  <span class="pigeon-stats-speed-label">Average</span>
+                  <span class="pigeon-stats-speed-value">${avgSpeed.toFixed(2)} <small>m/min</small></span>
+                </div>
+              </div>
+            </div>
+
+            <div class="pigeon-stats-section">
+              <div class="pigeon-stats-section-title">Recent races</div>
+              <ul class="pigeon-stats-history">${historyHtml}</ul>
+            </div>
+
+            ${certsHtml}
+          </div>
+        `;
+
         this.showModal({
           title: "Pigeon Career Stats",
-          message: fullMsg,
+          message: html,
           icon: "📊",
           iconColor: "#2a7a62",
+          htmlMessage: true,
+          maxWidth: 500,
         });
       })
       .catch((err) => {

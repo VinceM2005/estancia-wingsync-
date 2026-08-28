@@ -2962,3 +2962,357 @@ tr:hover td {
     padding-right: 16px;
   }
 }
+
+/* ===== Pigeon Career Stats Modal (custom-modal detail layout) ===== */
+.pigeon-stats-modal {
+  text-align: left;
+  color: #334155;
+}
+
+.pigeon-stats-header {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 14px 16px;
+  margin-bottom: 16px;
+  background: #f0f7f4;
+  border: 1px solid #c8e6d9;
+  border-radius: 12px;
+}
+
+.pigeon-stats-avatar {
+  flex-shrink: 0;
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
+  overflow: hidden;
+  border: 2px solid #2a7a62;
+  background: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.pigeon-stats-avatar svg,
+.pigeon-stats-avatar img {
+  width: 100% !important;
+  height: 100% !important;
+  object-fit: cover;
+}
+
+.pigeon-stats-identity {
+  flex: 1;
+  min-width: 0;
+}
+
+.pigeon-stats-ring {
+  font-family: ui-monospace, "Cascadia Code", "Consolas", monospace;
+  font-size: 15px;
+  font-weight: 700;
+  color: #0f5132;
+  letter-spacing: 0.02em;
+  word-break: break-all;
+}
+
+.pigeon-stats-nick {
+  margin-top: 2px;
+  font-size: 14px;
+  font-weight: 600;
+  color: #1e293b;
+}
+
+.pigeon-stats-nick--empty {
+  font-weight: 500;
+  color: #94a3b8;
+  font-style: italic;
+}
+
+.pigeon-stats-meta {
+  margin-top: 4px;
+  font-size: 12px;
+  color: #64748b;
+}
+
+.pigeon-stats-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 10px;
+  margin-bottom: 14px;
+}
+
+.pigeon-stats-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  padding: 14px 8px;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  text-align: center;
+}
+
+.pigeon-stats-card--highlight {
+  background: #ecfdf5;
+  border-color: #a7f3d0;
+}
+
+.pigeon-stats-card-value {
+  font-size: 22px;
+  font-weight: 800;
+  color: #2a7a62;
+  line-height: 1;
+}
+
+.pigeon-stats-card--highlight .pigeon-stats-card-value {
+  color: #047857;
+}
+
+.pigeon-stats-card-label {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: #64748b;
+}
+
+.pigeon-stats-speed-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  margin-bottom: 16px;
+}
+
+.pigeon-stats-speed-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 14px;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+}
+
+.pigeon-stats-speed-icon {
+  flex-shrink: 0;
+  width: 34px;
+  height: 34px;
+  border-radius: 10px;
+  background: rgba(42, 122, 98, 0.12);
+  color: #2a7a62;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 14px;
+}
+
+.pigeon-stats-speed-info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.pigeon-stats-speed-label {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: #64748b;
+}
+
+.pigeon-stats-speed-value {
+  font-size: 15px;
+  font-weight: 700;
+  color: #1e293b;
+  white-space: nowrap;
+}
+
+.pigeon-stats-speed-value small {
+  font-size: 11px;
+  font-weight: 600;
+  color: #64748b;
+}
+
+.pigeon-stats-section {
+  margin-bottom: 4px;
+}
+
+.pigeon-stats-section-title {
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: #64748b;
+  margin-bottom: 10px;
+}
+
+.pigeon-stats-history {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.pigeon-stats-history-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 12px;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+}
+
+.pigeon-stats-history-main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.pigeon-stats-history-event {
+  font-size: 13px;
+  font-weight: 600;
+  color: #1e293b;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.pigeon-stats-history-date {
+  font-size: 11px;
+  color: #94a3b8;
+}
+
+.pigeon-stats-history-stats {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.pigeon-stats-rank {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 32px;
+  padding: 3px 8px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 700;
+  background: #f1f5f9;
+  color: #475569;
+  border: 1px solid #cbd5e1;
+}
+
+.pigeon-stats-rank--gold {
+  background: #fef9c3;
+  color: #854d0e;
+  border-color: #fde047;
+}
+
+.pigeon-stats-rank--silver {
+  background: #f1f5f9;
+  color: #475569;
+  border-color: #94a3b8;
+}
+
+.pigeon-stats-rank--bronze {
+  background: #ffedd5;
+  color: #9a3412;
+  border-color: #fdba74;
+}
+
+.pigeon-stats-speed {
+  font-size: 12px;
+  font-weight: 600;
+  color: #2a7a62;
+  white-space: nowrap;
+}
+
+.pigeon-stats-history-empty {
+  padding: 16px;
+  text-align: center;
+  font-size: 13px;
+  color: #94a3b8;
+  background: #f8fafc;
+  border: 1px dashed #cbd5e1;
+  border-radius: 10px;
+  list-style: none;
+}
+
+.pigeon-stats-cert-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.pigeon-stats-cert-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  font-size: 13px;
+  color: #334155;
+  background: #fffbeb;
+  border: 1px solid #fde68a;
+  border-radius: 8px;
+}
+
+.pigeon-stats-cert-item i {
+  color: #d97706;
+  font-size: 14px;
+}
+
+.pigeon-stats-cert-item span:first-of-type {
+  flex: 1;
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.pigeon-stats-cert-rank {
+  font-size: 11px;
+  font-weight: 700;
+  color: #92400e;
+  flex-shrink: 0;
+}
+
+@media (max-width: 420px) {
+  .pigeon-stats-grid {
+    grid-template-columns: repeat(3, 1fr);
+    gap: 8px;
+  }
+
+  .pigeon-stats-card {
+    padding: 10px 4px;
+  }
+
+  .pigeon-stats-card-value {
+    font-size: 18px;
+  }
+
+  .pigeon-stats-speed-row {
+    grid-template-columns: 1fr;
+  }
+
+  .pigeon-stats-history-item {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .pigeon-stats-history-stats {
+    width: 100%;
+    justify-content: space-between;
+  }
+}
