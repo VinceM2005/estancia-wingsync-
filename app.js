@@ -3566,9 +3566,376 @@ const app = {
       delBtn.onclick = () => app.deleteEvent(e.code);
       tdActions.appendChild(delBtn);
 
+      const exportBtn = document.createElement("button");
+      exportBtn.className = "btn btn-sm btn-secondary admin-export-pdf-btn";
+      exportBtn.innerHTML = '<i class="fas fa-file-pdf"></i> Export PDF';
+      exportBtn.onclick = () => app.exportEventResultsPDF(e.code, exportBtn);
+      tdActions.appendChild(exportBtn);
+
       tr.appendChild(tdActions);
       tbody.appendChild(tr);
     });
+  },
+
+  async _loadPdfLogoDataUrl() {
+    const candidates = ["logo.png", "./logo.png"];
+    for (const path of candidates) {
+      try {
+        const resp = await fetch(path);
+        if (!resp.ok) continue;
+        const blob = await resp.blob();
+        return await new Promise((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onload = () => resolve(reader.result);
+          reader.onerror = reject;
+          reader.readAsDataURL(blob);
+        });
+      } catch {
+        /* try next path */
+      }
+    }
+    return null;
+  },
+
+  _pdfTruncateText(doc, text, maxWidth) {
+    const value = String(text ?? "—");
+    if (doc.getTextWidth(value) <= maxWidth) return value;
+    let trimmed = value;
+    while (trimmed.length > 1 && doc.getTextWidth(`${trimmed}…`) > maxWidth) {
+      trimmed = trimmed.slice(0, -1);
+    }
+    return `${trimmed}…`;
+  },
+
+  async exportEventResultsPDF(eventCode, triggerBtn = null) {
+    if (!window.jspdf) {
+      this.showModal({
+        title: "PDF Unavailable",
+        message: "PDF library is not loaded. Please refresh the page.",
+        icon: "❌",
+        iconColor: "#c0392b",
+      });
+      return;
+    }
+
+    let event =
+      this.eventLookup?.[eventCode] ||
+      (this.allEvents || []).find((e) => e.code === eventCode) ||
+      (this._eventsWithSummary || []).find((e) => e.code === eventCode);
+
+    if (!event) {
+      try {
+        const res = await fetchWithAuth(`${API_URL}/events/all`);
+        if (res.ok) {
+          const events = await res.json();
+          event = (events || []).find((e) => e.code === eventCode);
+        }
+      } catch {
+        /* handled below */
+      }
+    }
+
+    if (!event) {
+      this.showModal({
+        title: "Event Not Found",
+        message: "Could not load event details for export.",
+        icon: "❌",
+        iconColor: "#c0392b",
+      });
+      return;
+    }
+
+    const exportBtn =
+      triggerBtn ||
+      document.querySelector(
+        `#admin-events-table button.admin-export-pdf-btn`,
+      );
+    const prevBtnHtml = exportBtn ? exportBtn.innerHTML : "";
+    if (exportBtn) {
+      exportBtn.disabled = true;
+      exportBtn.innerHTML =
+        '<i class="fas fa-spinner fa-spin"></i> Exporting...';
+    }
+
+    try {
+      const res = await fetchWithAuth(
+        `${API_URL}/results/${eventCode}/pigeons`,
+      );
+      if (!res.ok) throw new Error("Failed to fetch event results");
+      const results = await res.json();
+      if (!Array.isArray(results) || results.length === 0) {
+        this.showModal({
+          title: "No Results",
+          message:
+            "This event has no clocked results yet. Export is available once birds are clocked in.",
+          icon: "ℹ️",
+          iconColor: "#e67e22",
+        });
+        return;
+      }
+
+      await this._generateEventResultsPDF(event, results);
+      this.showModal({
+        title: "PDF Downloaded",
+        message: `Event results for "${event.name}" have been exported.`,
+        icon: "✅",
+        iconColor: "#27ae60",
+      });
+    } catch (err) {
+      console.error("Export PDF error:", err);
+      this.showModal({
+        title: "Export Failed",
+        message: err.message || "Could not generate the PDF.",
+        icon: "❌",
+        iconColor: "#c0392b",
+      });
+    } finally {
+      if (exportBtn) {
+        exportBtn.disabled = false;
+        exportBtn.innerHTML = prevBtnHtml;
+      }
+    }
+  },
+
+  async _generateEventResultsPDF(event, results) {
+    const { jsPDF } = window.jspdf;
+    const doc = new jsPDF({ orientation: "landscape", unit: "mm", format: "a4" });
+    const pageW = doc.internal.pageSize.getWidth();
+    const pageH = doc.internal.pageSize.getHeight();
+    const margin = 10;
+    const footerY = pageH - 8;
+    const logoData = await this._loadPdfLogoDataUrl();
+
+    const cols = [
+      { key: "rank", label: "Rank", w: 14, align: "center" },
+      { key: "player", label: "Player Name", w: 42 },
+      { key: "pigeon", label: "Pigeon Name", w: 36 },
+      { key: "ring", label: "Ring Number", w: 38 },
+      { key: "dist", label: "Air Dist (km)", w: 24, align: "right" },
+      { key: "arrival", label: "Arrival", w: 30, align: "center" },
+      { key: "flight", label: "Flight Hrs", w: 24, align: "center" },
+      { key: "speed", label: "Speed (m/min)", w: 28, align: "right" },
+    ];
+
+    const tableWidth = cols.reduce((sum, c) => sum + c.w, 0);
+    const tableX = margin + (pageW - margin * 2 - tableWidth) / 2;
+    const rowH = 7.5;
+    const headerBandH = 8;
+
+    const releaseStr = event.releaseTime
+      ? new Date(event.releaseTime).toLocaleString("en-PH", {
+          year: "numeric",
+          month: "short",
+          day: "numeric",
+          hour: "numeric",
+          minute: "2-digit",
+        })
+      : "—";
+    const releasePoint = `${Number(event.lat).toFixed(6)}, ${Number(event.lng).toFixed(6)}`;
+    const generatedStr = new Date().toLocaleString("en-PH", {
+      year: "numeric",
+      month: "short",
+      day: "numeric",
+      hour: "numeric",
+      minute: "2-digit",
+    });
+
+    const drawPageHeader = () => {
+      let y = margin;
+
+      if (logoData) {
+        doc.addImage(logoData, "PNG", margin, y, 24, 24);
+      }
+
+      const headerTextX = logoData ? margin + 28 : margin;
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(18);
+      doc.setTextColor(15, 49, 38);
+      doc.text("EVENT RESULTS", headerTextX, y + 9);
+
+      doc.setFontSize(10);
+      doc.setTextColor(42, 122, 98);
+      doc.text("MALINAO RACING PIGEON CLUB", headerTextX, y + 15);
+
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(8);
+      doc.setTextColor(120, 120, 120);
+      doc.text("— MRPC —", headerTextX, y + 19);
+
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(12);
+      doc.setTextColor(30, 41, 59);
+      doc.text(event.name || "Unknown Event", pageW - margin, y + 8, {
+        align: "right",
+      });
+
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(9);
+      doc.setTextColor(80, 90, 100);
+      doc.text(`Event ID: ${event.code}`, pageW - margin, y + 14, {
+        align: "right",
+      });
+
+      if (event.state || event.status) {
+        doc.text(
+          `Status: ${event.state || event.status}`,
+          pageW - margin,
+          y + 19,
+          { align: "right" },
+        );
+      }
+
+      y += 28;
+      doc.setDrawColor(42, 122, 98);
+      doc.setLineWidth(0.6);
+      doc.line(margin, y, pageW - margin, y);
+      y += 5;
+
+      doc.setFontSize(8.5);
+      doc.setTextColor(60, 70, 80);
+      doc.text(`Release: ${releaseStr}`, margin, y);
+      doc.text(`Release Point: ${releasePoint}`, margin + 88, y);
+      doc.text(`Birds Clocked: ${results.length}`, margin + 188, y);
+      y += 4.5;
+      doc.text(`Exported: ${generatedStr}`, margin, y);
+
+      y += 5;
+      doc.setDrawColor(200, 210, 220);
+      doc.setLineWidth(0.3);
+      doc.line(margin, y, pageW - margin, y);
+      return y + 3;
+    };
+
+    const drawTableHead = (startY) => {
+      doc.setFillColor(42, 122, 98);
+      doc.rect(tableX, startY, tableWidth, headerBandH, "F");
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(7.5);
+      doc.setTextColor(255, 255, 255);
+
+      let x = tableX;
+      cols.forEach((col) => {
+        const tx =
+          col.align === "right"
+            ? x + col.w - 2
+            : col.align === "center"
+              ? x + col.w / 2
+              : x + 2;
+        doc.text(col.label, tx, startY + 5.3, {
+          align: col.align || "left",
+        });
+        x += col.w;
+      });
+      return startY + headerBandH;
+    };
+
+    const drawRow = (row, startY, indexOnPage) => {
+      if (indexOnPage % 2 === 0) {
+        doc.setFillColor(248, 250, 252);
+        doc.rect(tableX, startY, tableWidth, rowH, "F");
+      }
+
+      const rank = row.rank ?? indexOnPage + 1;
+      const player = row.ownerName || row.userName || "—";
+      const pigeon = (row.nickname || "").trim() || "—";
+      const ring = row.ringNumber || row.pigeonId?.ringNumber || "—";
+      const dist = `${toNumber(row.distanceKm).toFixed(2)}`;
+      const arrival = row.arrivalTime
+        ? new Date(row.arrivalTime).toLocaleString("en-PH", {
+            month: "short",
+            day: "numeric",
+            hour: "numeric",
+            minute: "2-digit",
+            second: "2-digit",
+          })
+        : "—";
+      const flight = formatFlightHours(toNumber(row.flightTimeHours));
+      const speed = toNumber(row.speedMPM).toFixed(4);
+
+      const values = [String(rank), player, pigeon, ring, dist, arrival, flight, speed];
+
+      doc.setFont("helvetica", rank <= 3 ? "bold" : "normal");
+      doc.setFontSize(7.5);
+
+      if (rank === 1) doc.setTextColor(180, 130, 0);
+      else if (rank === 2) doc.setTextColor(90, 100, 110);
+      else if (rank === 3) doc.setTextColor(160, 90, 40);
+      else doc.setTextColor(40, 50, 60);
+
+      let x = tableX;
+      values.forEach((val, i) => {
+        const col = cols[i];
+        const pad = 2;
+        const maxW = col.w - pad * 2;
+        doc.setFont("helvetica", i === 0 && rank <= 3 ? "bold" : "normal");
+        const text = this._pdfTruncateText(doc, val, maxW);
+        const tx =
+          col.align === "right"
+            ? x + col.w - pad
+            : col.align === "center"
+              ? x + col.w / 2
+              : x + pad;
+        if (i > 0) doc.setTextColor(40, 50, 60);
+        doc.text(text, tx, startY + 5.2, { align: col.align || "left" });
+        x += col.w;
+      });
+
+      doc.setDrawColor(226, 232, 240);
+      doc.setLineWidth(0.2);
+      doc.line(tableX, startY + rowH, tableX + tableWidth, startY + rowH);
+      return startY + rowH;
+    };
+
+    const drawFooter = (pageNum, totalPages) => {
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(7.5);
+      doc.setTextColor(130, 140, 150);
+      doc.text(
+        "Malinao Racing Pigeon Club · WingSync Event Results",
+        pageW / 2,
+        footerY,
+        { align: "center" },
+      );
+      doc.text(`Page ${pageNum} of ${totalPages}`, pageW - margin, footerY, {
+        align: "right",
+      });
+    };
+
+    const sorted = [...results].sort(
+      (a, b) => toNumber(a.rank || 9999) - toNumber(b.rank || 9999) || toNumber(b.speedMPM) - toNumber(a.speedMPM),
+    );
+
+    let pageNum = 1;
+    let y = drawPageHeader();
+    y = drawTableHead(y);
+    let rowsOnPage = 0;
+    const maxY = footerY - 6;
+
+    sorted.forEach((row, idx) => {
+      if (y + rowH > maxY) {
+        drawFooter(pageNum, 0);
+        doc.addPage();
+        pageNum += 1;
+        y = drawPageHeader();
+        y = drawTableHead(y);
+        rowsOnPage = 0;
+      }
+      y = drawRow(row, y, rowsOnPage);
+      rowsOnPage += 1;
+    });
+
+    const totalPages = pageNum;
+    for (let p = 1; p <= totalPages; p += 1) {
+      doc.setPage(p);
+      drawFooter(p, totalPages);
+    }
+
+    const safeName = (event.name || event.code || "event")
+      .replace(/[^\w\s-]/g, "")
+      .trim()
+      .replace(/\s+/g, "_")
+      .slice(0, 40);
+    doc.save(`MRPC_EventResults_${safeName}_${event.code}.pdf`);
   },
 
   openManageRegistrationModal(eventCode) {

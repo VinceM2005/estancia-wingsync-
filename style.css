@@ -1123,6 +1123,19 @@ tr:hover td {
   color: var(--primary);
 }
 
+#admin-events-table td:last-child {
+  white-space: normal;
+  vertical-align: middle;
+}
+
+#admin-events-table td:last-child .btn {
+  margin: 2px 4px 2px 0;
+}
+
+.admin-export-pdf-btn {
+  white-space: nowrap;
+}
+
 /* ===== STICKER GENERATOR STYLES ===== */
 .sticker-generator-container {
   padding: 20px 0;
