@@ -121,25 +121,28 @@ body {
   background-size: cover;
 }
 .login-box {
-  background: rgba(255, 255, 255, 0.3);
-  backdrop-filter: blur(24px);
-  -webkit-backdrop-filter: blur(24px);
+  background: rgba(255, 255, 255, 0.12);
+  backdrop-filter: blur(28px) saturate(1.2);
+  -webkit-backdrop-filter: blur(28px) saturate(1.2);
   padding: 40px 36px;
   border-radius: var(--radius);
   box-shadow:
-    0 12px 40px rgba(0, 0, 0, 0.08),
-    var(--shadow);
+    0 12px 40px rgba(0, 0, 0, 0.06),
+    inset 0 1px 0 rgba(255, 255, 255, 0.35);
   width: 100%;
   max-width: 400px;
   text-align: center;
-  border: 1px solid rgba(255, 255, 255, 0.2);
+  border: 1px solid rgba(255, 255, 255, 0.28);
 }
 
 [data-theme="dark"] .login-box {
-  background: rgba(20, 30, 50, 0.5);
-  backdrop-filter: blur(24px);
-  -webkit-backdrop-filter: blur(24px);
-  border: 1px solid rgba(255, 255, 255, 0.05);
+  background: rgba(15, 23, 42, 0.22);
+  backdrop-filter: blur(28px) saturate(1.15);
+  -webkit-backdrop-filter: blur(28px) saturate(1.15);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  box-shadow:
+    0 12px 40px rgba(0, 0, 0, 0.25),
+    inset 0 1px 0 rgba(255, 255, 255, 0.06);
 }
 
 .login-box h2 {
@@ -174,12 +177,17 @@ body {
 .login-box .form-control {
   width: 100%;
   padding: 12px 14px;
-  border: 1px solid var(--input-border);
+  border: 1px solid rgba(255, 255, 255, 0.35);
   border-radius: 8px;
   font-size: 15px;
   transition: 0.2s;
-  background: var(--input-bg);
+  background: rgba(255, 255, 255, 0.35);
   color: var(--text);
+}
+
+[data-theme="dark"] .login-box .form-control {
+  background: rgba(255, 255, 255, 0.06);
+  border-color: rgba(255, 255, 255, 0.12);
 }
 
 .login-box .form-control:focus {
