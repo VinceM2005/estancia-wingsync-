@@ -5963,6 +5963,199 @@ const app = {
       },
     });
   },
+
+  // ===== Event Review search (replaces dropdown UI; loadAdminReview unchanged) =====
+  _reviewEventsList: [],
+  _reviewSearchDebounce: null,
+  _reviewSearchInitialized: false,
+  _reviewSearchActiveIndex: -1,
+
+  initReviewEventSearchUI() {
+    if (this._reviewSearchInitialized) return;
+    const input = document.getElementById("review-event-search-input");
+    const results = document.getElementById("review-event-search-results");
+    const clearBtn = document.getElementById("review-event-search-clear");
+    const wrap = document.getElementById("review-event-search-wrap");
+    if (!input || !results || !wrap) return;
+
+    this._reviewSearchInitialized = true;
+
+    input.addEventListener("input", () => {
+      clearTimeout(this._reviewSearchDebounce);
+      this._reviewSearchDebounce = setTimeout(() => {
+        this._renderReviewEventSearchResults(input.value);
+      }, 180);
+      if (clearBtn) {
+        clearBtn.classList.toggle("hidden", !input.value.trim());
+      }
+    });
+
+    input.addEventListener("focus", () => {
+      this._renderReviewEventSearchResults(input.value);
+    });
+
+    input.addEventListener("keydown", (e) => {
+      const items = results.querySelectorAll(".review-event-search-item");
+      if (!items.length) return;
+
+      if (e.key === "ArrowDown") {
+        e.preventDefault();
+        this._reviewSearchActiveIndex = Math.min(
+          this._reviewSearchActiveIndex + 1,
+          items.length - 1,
+        );
+        this._highlightReviewSearchItem(items);
+      } else if (e.key === "ArrowUp") {
+        e.preventDefault();
+        this._reviewSearchActiveIndex = Math.max(
+          this._reviewSearchActiveIndex - 1,
+          0,
+        );
+        this._highlightReviewSearchItem(items);
+      } else if (e.key === "Enter") {
+        e.preventDefault();
+        const idx =
+          this._reviewSearchActiveIndex >= 0
+            ? this._reviewSearchActiveIndex
+            : 0;
+        const item = items[idx];
+        if (item) this.selectReviewEvent(item.dataset.code);
+      } else if (e.key === "Escape") {
+        this._hideReviewEventSearchResults();
+        input.blur();
+      }
+    });
+
+    if (clearBtn) {
+      clearBtn.addEventListener("click", () => {
+        this.clearReviewEventSearch();
+      });
+    }
+
+    results.addEventListener("click", (e) => {
+      const item = e.target.closest(".review-event-search-item");
+      if (!item) return;
+      this.selectReviewEvent(item.dataset.code);
+    });
+
+    document.addEventListener("click", (e) => {
+      if (!wrap.contains(e.target)) this._hideReviewEventSearchResults();
+    });
+  },
+
+  _highlightReviewSearchItem(items) {
+    items.forEach((el, i) => {
+      el.classList.toggle(
+        "review-event-search-item--active",
+        i === this._reviewSearchActiveIndex,
+      );
+    });
+    items[this._reviewSearchActiveIndex]?.scrollIntoView({
+      block: "nearest",
+    });
+  },
+
+  _hideReviewEventSearchResults() {
+    const results = document.getElementById("review-event-search-results");
+    const input = document.getElementById("review-event-search-input");
+    if (results) {
+      results.classList.add("hidden");
+      results.innerHTML = "";
+    }
+    if (input) input.setAttribute("aria-expanded", "false");
+    this._reviewSearchActiveIndex = -1;
+  },
+
+  _getReviewEventLabel(code) {
+    const list = this._reviewEventsList.length
+      ? this._reviewEventsList
+      : this.allEvents || [];
+    const event = list.find((e) => e.code === code);
+    return event ? `${event.name} (${event.code})` : code;
+  },
+
+  _syncReviewSearchDisplay() {
+    const hidden = document.getElementById("review-event-select");
+    const input = document.getElementById("review-event-search-input");
+    const clearBtn = document.getElementById("review-event-search-clear");
+    if (!hidden || !input) return;
+
+    const code = hidden.value;
+    if (code) {
+      input.value = this._getReviewEventLabel(code);
+      if (clearBtn) clearBtn.classList.remove("hidden");
+    }
+  },
+
+  _renderReviewEventSearchResults(query) {
+    const results = document.getElementById("review-event-search-results");
+    const input = document.getElementById("review-event-search-input");
+    if (!results || !input) return;
+
+    const list = this._reviewEventsList.length
+      ? this._reviewEventsList
+      : this.allEvents || [];
+    const q = (query || "").toLowerCase().trim();
+    const filtered = q
+      ? list.filter(
+          (e) =>
+            e.name.toLowerCase().includes(q) ||
+            e.code.toLowerCase().includes(q),
+        )
+      : list;
+
+    const slice = filtered.slice(0, 12);
+    this._reviewSearchActiveIndex = slice.length ? 0 : -1;
+
+    if (slice.length === 0) {
+      results.innerHTML = `<li class="review-event-search-empty" role="presentation">No events match your search.</li>`;
+    } else {
+      results.innerHTML = slice
+        .map((e, i) => {
+          const name = this._escapeCertHtml(e.name);
+          const code = this._escapeCertHtml(e.code);
+          const active =
+            i === 0 ? " review-event-search-item--active" : "";
+          return `<li class="review-event-search-item${active}" role="option" data-code="${code}" tabindex="-1">
+            <span class="review-event-search-name">${name}</span>
+            <span class="review-event-search-code">${code}</span>
+          </li>`;
+        })
+        .join("");
+    }
+
+    results.classList.remove("hidden");
+    input.setAttribute("aria-expanded", "true");
+  },
+
+  selectReviewEvent(code) {
+    const hidden = document.getElementById("review-event-select");
+    const input = document.getElementById("review-event-search-input");
+    const clearBtn = document.getElementById("review-event-search-clear");
+    if (!hidden || !code) return;
+
+    hidden.value = code;
+    if (input) input.value = this._getReviewEventLabel(code);
+    if (clearBtn) clearBtn.classList.remove("hidden");
+    this._hideReviewEventSearchResults();
+    this.loadAdminReview();
+  },
+
+  clearReviewEventSearch() {
+    const hidden = document.getElementById("review-event-select");
+    const input = document.getElementById("review-event-search-input");
+    const clearBtn = document.getElementById("review-event-search-clear");
+    const container = document.getElementById("review-results");
+
+    if (hidden) hidden.value = "";
+    if (input) input.value = "";
+    if (clearBtn) clearBtn.classList.add("hidden");
+    this._hideReviewEventSearchResults();
+    if (container) {
+      container.innerHTML =
+        "<p>Select an event to review registrations.</p>";
+    }
+  },
 };
 
 // Wrap admin table filters with pagination (existing filter logic unchanged)
@@ -5977,6 +6170,29 @@ const app = {
   };
   attach("filterPlayers", "playersPage", "_syncPlayersPagination");
   attach("filterEvents", "eventsPage", "_syncEventsPagination");
+})();
+
+// Event Review: search UI wraps dropdown population (loadAdminReview unchanged)
+(function initReviewEventSearch() {
+  app.populateReviewSelector = function (events) {
+    app._reviewEventsList = events || app.allEvents || [];
+    app.initReviewEventSearchUI();
+    app._syncReviewSearchDisplay();
+  };
+
+  const origLoadAdminReview = app.loadAdminReview.bind(app);
+  app.loadAdminReview = async function (...args) {
+    app._syncReviewSearchDisplay();
+    return origLoadAdminReview(...args);
+  };
+
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", () =>
+      app.initReviewEventSearchUI(),
+    );
+  } else {
+    app.initReviewEventSearchUI();
+  }
 })();
 
 // ===== Service Worker =====

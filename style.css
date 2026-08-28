@@ -3428,3 +3428,143 @@ tr:hover td {
     font-size: 12px;
   }
 }
+
+/* ===== Event Review event search ===== */
+.review-event-search-wrap {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+}
+
+.review-event-search-field {
+  position: relative;
+  display: flex;
+  align-items: center;
+  width: 100%;
+}
+
+.review-event-search-icon {
+  position: absolute;
+  left: 14px;
+  color: var(--text-muted);
+  font-size: 14px;
+  pointer-events: none;
+  z-index: 1;
+}
+
+.review-event-search-input {
+  width: 100%;
+  padding: 11px 44px 11px 40px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--bg);
+  color: var(--text);
+  font-size: 14px;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.review-event-search-input:focus {
+  outline: none;
+  border-color: var(--primary);
+  box-shadow: 0 0 0 3px rgba(42, 122, 98, 0.15);
+}
+
+.review-event-search-input::placeholder {
+  color: var(--text-muted);
+}
+
+.review-event-search-clear {
+  position: absolute;
+  right: 8px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+
+.review-event-search-clear:hover {
+  background: var(--border);
+  color: var(--text);
+}
+
+.review-event-search-results {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  right: 0;
+  z-index: 100;
+  list-style: none;
+  margin: 0;
+  padding: 6px;
+  max-height: 280px;
+  overflow-y: auto;
+  background: var(--modal-bg);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.18);
+  animation: reviewSearchDropIn 0.18s ease;
+}
+
+@keyframes reviewSearchDropIn {
+  from {
+    opacity: 0;
+    transform: translateY(-6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.review-event-search-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 12px;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: background 0.12s ease;
+}
+
+.review-event-search-item:hover,
+.review-event-search-item--active {
+  background: rgba(42, 122, 98, 0.1);
+}
+
+.review-event-search-name {
+  flex: 1;
+  min-width: 0;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.review-event-search-code {
+  flex-shrink: 0;
+  font-family: ui-monospace, "Cascadia Code", "Consolas", monospace;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--primary);
+  background: rgba(42, 122, 98, 0.1);
+  padding: 3px 8px;
+  border-radius: 6px;
+}
+
+.review-event-search-empty {
+  padding: 14px 12px;
+  text-align: center;
+  font-size: 13px;
+  color: var(--text-muted);
+}

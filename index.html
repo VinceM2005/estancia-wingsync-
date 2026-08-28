@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Wingsync - Pigeon Clocking System</title>
     <link rel="manifest" href="manifest.json" />
-    <link rel="stylesheet" href="style.css?v=12" />
+    <link rel="stylesheet" href="style.css?v=13" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="mobile-web-app-capable" content="yes" />
     <meta
@@ -44,7 +44,7 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
 
-    <link rel="stylesheet" href="style.css?v=12" />
+    <link rel="stylesheet" href="style.css?v=13" />
     <style>
       /* ===== ADDITIONAL STYLES FOR UI COMPONENTS ===== */
       .pigeons-grid {
@@ -1799,14 +1799,37 @@
               <h2>
                 <i class="fas fa-clipboard-list"></i> Event Registration Review
               </h2>
-              <div class="admin-search-bar">
-                <select
-                  id="review-event-select"
-                  class="form-control"
-                  onchange="app.loadAdminReview()"
-                >
-                  <option value="">-- Select Event --</option>
-                </select>
+              <div class="admin-search-bar review-event-search-wrap" id="review-event-search-wrap">
+                <input type="hidden" id="review-event-select" value="" />
+                <div class="review-event-search-field">
+                  <i class="fas fa-search review-event-search-icon" aria-hidden="true"></i>
+                  <input
+                    type="text"
+                    id="review-event-search-input"
+                    class="review-event-search-input"
+                    placeholder="Search events by name or code..."
+                    autocomplete="off"
+                    spellcheck="false"
+                    aria-label="Search events for registration review"
+                    aria-autocomplete="list"
+                    aria-controls="review-event-search-results"
+                    aria-expanded="false"
+                  />
+                  <button
+                    type="button"
+                    id="review-event-search-clear"
+                    class="review-event-search-clear hidden"
+                    aria-label="Clear selected event"
+                  >
+                    <i class="fas fa-times" aria-hidden="true"></i>
+                  </button>
+                </div>
+                <ul
+                  id="review-event-search-results"
+                  class="review-event-search-results hidden"
+                  role="listbox"
+                  aria-label="Matching events"
+                ></ul>
               </div>
               <div id="review-results">
                 <p>Select an event to review registrations.</p>
