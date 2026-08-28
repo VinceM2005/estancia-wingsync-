@@ -5530,13 +5530,10 @@ const app = {
             <div class="cert-main">
               <div class="cert-avatar-col">
                 <div class="cert-avatar-wrap">
+                  <div class="cert-avatar-outer-ring" aria-hidden="true"></div>
                   <div class="cert-laurel">${laurelSvg}</div>
                   <div class="cert-avatar-ring">${avatarHTML}</div>
                   <div class="cert-badge">${badgeSvg}</div>
-                </div>
-                <div class="cert-signed">
-                  <div class="cert-signed-date">${esc(formattedDate)}</div>
-                  <div class="cert-signed-label">Signed on,</div>
                 </div>
               </div>
               <div class="cert-text">
@@ -5555,9 +5552,15 @@ const app = {
             </div>
 
             <div class="cert-footer">
+              <div class="cert-signed">
+                <div class="cert-signed-date">${esc(formattedDate)}</div>
+                <div class="cert-signed-label">Signed on,</div>
+              </div>
               <div class="cert-ornament">
                 ${ornamentSvg}
-                <div class="cert-trophy"><i class="fas fa-trophy"></i></div>
+                <div class="cert-trophy" aria-hidden="true">
+                  <i class="fas fa-trophy"></i>
+                </div>
                 ${ornamentSvg}
               </div>
               <div class="cert-sigs">
@@ -5655,7 +5658,7 @@ const app = {
 
     const origin = window.location.origin;
     const basePath = window.location.pathname.replace(/\/[^/]*$/, "/");
-    const cssHref = `${origin}${basePath}style.css?v=16`;
+    const cssHref = `${origin}${basePath}style.css?v=17`;
     const fontHref =
       "https://fonts.googleapis.com/css2?family=Cinzel:wght@400;600;700&family=Great+Vibes&family=Libre+Baskerville:ital,wght@0,400;0,700;1,400&display=swap";
     const faHref =
