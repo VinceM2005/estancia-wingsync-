@@ -2178,8 +2178,17 @@ app.get(
         requestedStatuses.length ? requestedStatuses : null,
       );
 
+      let certificatesGenerated = !!event.certificatesGenerated;
+      if (!certificatesGenerated) {
+        certificatesGenerated = !!(await Certificate.exists({ eventId }));
+      }
+
       res.json({
-        event: { name: event.name, state: event.state },
+        event: {
+          name: event.name,
+          state: event.state,
+          certificatesGenerated,
+        },
         registrations: validation,
       });
     } catch (error) {
