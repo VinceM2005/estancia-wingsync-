@@ -1851,6 +1851,8 @@ const app = {
       buttonText = "OK",
       onClose = null,
       showButton = true,
+      htmlMessage = false,
+      maxWidth = 440,
     } = options;
 
     const modal = document.createElement("div");
@@ -1876,7 +1878,7 @@ const app = {
         background: #ffffff;
         border-radius: 16px;
         padding: 32px 40px;
-        max-width: 440px;
+        max-width: ${maxWidth}px;
         width: 100%;
         box-shadow: 0 20px 60px rgba(0,0,0,0.3);
         text-align: center;
@@ -1923,13 +1925,14 @@ const app = {
           border-radius: 4px;
         "></div>
 
-        <div style="
+        <div class="custom-modal-message${htmlMessage ? " custom-modal-message--html" : ""}" style="
           font-size: 15px;
           color: #5b6f82;
           line-height: 1.6;
           margin-bottom: ${showButton ? "20px" : "0"};
-          white-space: pre-wrap;
+          white-space: ${htmlMessage ? "normal" : "pre-wrap"};
           word-break: break-word;
+          text-align: ${htmlMessage ? "left" : "center"};
         ">${message}</div>
 
         ${
@@ -4362,27 +4365,77 @@ const app = {
           });
           return;
         }
-        let pigeonList = reg.pigeonIds
-          .map((p) => {
-            const avatarId = p.avatarId || "";
-            const avatarHTML = avatarId
-              ? getPigeonAvatarSVG(avatarId, 24)
-              : getDefaultPigeonSVG(24);
-            return `<span style="display:inline-flex;align-items:center;gap:4px;margin:2px 4px;background:var(--bg);padding:2px 8px 2px 4px;border-radius:12px;border:1px solid var(--border);">
-            <span style="width:20px;height:20px;display:inline-block;border-radius:50%;overflow:hidden;">${avatarHTML}</span>
-            ${p.ringNumber || p.nickname || "Unknown"}
-          </span>`;
-          })
-          .join(" ");
-        let msg = `Your registration for ${reg.eventId}:\n`;
-        msg += `Status: ${reg.status}\n`;
-        msg += `Pigeons: ${pigeonList}\n`;
-        msg += `Registered: ${new Date(reg.registrationDate).toLocaleString()}`;
+
+        const status = (reg.status || "draft").toLowerCase();
+        const statusLabel =
+          status.charAt(0).toUpperCase() + status.slice(1).replace("_", " ");
+        const statusClass = `entry-status entry-status--${status.replace(/\s+/g, "-")}`;
+
+        const pigeons = reg.pigeonIds || [];
+        const pigeonItems =
+          pigeons.length > 0
+            ? pigeons
+                .map((p) => {
+                  const avatarId = p.avatarId || "";
+                  const avatarHTML = avatarId
+                    ? getPigeonAvatarSVG(avatarId, 36)
+                    : getDefaultPigeonSVG(36);
+                  const ring = this._escapeCertHtml(
+                    p.ringNumber || "Unknown ring",
+                  );
+                  const nick = (p.nickname || "").trim();
+                  const sub = nick
+                    ? `<span class="entry-pigeon-nick">${this._escapeCertHtml(nick)}</span>`
+                    : "";
+                  return `<li class="entry-pigeon-item">
+                  <span class="entry-pigeon-avatar">${avatarHTML}</span>
+                  <span class="entry-pigeon-info">
+                    <span class="entry-pigeon-ring">${ring}</span>
+                    ${sub}
+                  </span>
+                </li>`;
+                })
+                .join("")
+            : `<li class="entry-pigeon-empty">No pigeons on this entry.</li>`;
+
+        const registeredAt = reg.registrationDate
+          ? new Date(reg.registrationDate).toLocaleString("en-PH", {
+              year: "numeric",
+              month: "long",
+              day: "numeric",
+              hour: "numeric",
+              minute: "2-digit",
+            })
+          : "—";
+
+        const eventLabel = this._escapeCertHtml(reg.eventId || eventCode);
+
+        const html = `
+          <div class="entry-detail-modal">
+            <p class="entry-detail-lead">Your registration for</p>
+            <div class="entry-detail-event">${eventLabel}</div>
+            <div class="entry-detail-row">
+              <span class="entry-detail-label">Status</span>
+              <span class="${statusClass}">${this._escapeCertHtml(statusLabel)}</span>
+            </div>
+            <div class="entry-detail-section">
+              <div class="entry-detail-label entry-detail-label--section">Registered pigeons</div>
+              <ul class="entry-pigeon-list">${pigeonItems}</ul>
+            </div>
+            <div class="entry-detail-footer">
+              <i class="fas fa-clock" aria-hidden="true"></i>
+              <span>Registered ${this._escapeCertHtml(registeredAt)}</span>
+            </div>
+          </div>
+        `;
+
         this.showModal({
           title: "My Entry",
-          message: msg,
+          message: html,
           icon: "📋",
           iconColor: "#2a7a62",
+          htmlMessage: true,
+          maxWidth: 480,
         });
       });
   },
