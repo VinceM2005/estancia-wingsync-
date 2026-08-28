@@ -5370,6 +5370,37 @@ const app = {
       .replace(/"/g, "&quot;");
   },
 
+  _processCertLogoImg: function (img) {
+    if (!img || img.dataset.processed === "1") return;
+    try {
+      const w = img.naturalWidth || 240;
+      const h = img.naturalHeight || 140;
+      const canvas = document.createElement("canvas");
+      canvas.width = w;
+      canvas.height = h;
+      const ctx = canvas.getContext("2d");
+      if (!ctx) return;
+      ctx.drawImage(img, 0, 0, w, h);
+      const imageData = ctx.getImageData(0, 0, w, h);
+      const pixels = imageData.data;
+      for (let i = 0; i < pixels.length; i += 4) {
+        const r = pixels[i];
+        const g = pixels[i + 1];
+        const b = pixels[i + 2];
+        if (r < 42 && g < 42 && b < 42) {
+          pixels[i + 3] = 0;
+        }
+      }
+      ctx.putImageData(imageData, 0, 0);
+      img.src = canvas.toDataURL("image/png");
+      img.style.mixBlendMode = "normal";
+      img.dataset.processed = "1";
+      img.classList.add("cert-logo-img--processed");
+    } catch (err) {
+      console.warn("Certificate logo processing skipped:", err);
+    }
+  },
+
   _renderCertificateDetail: function (cert) {
     const container = document.getElementById("certificate-detail");
     const { label: rankLabel, rankClass } = this._getCertificateRankMeta(
@@ -5412,23 +5443,6 @@ const app = {
 
     const baseUrl = window.location.origin;
     const verifyUrl = `${baseUrl}/verify/${cert.qrHash || ""}`;
-
-    // Inline teal wings – avoids black PNG bar over the header
-    const logoSvg = `
-      <svg viewBox="0 0 120 70" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
-        <defs>
-          <linearGradient id="certWingGrad" x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0%" stop-color="#3ec4b0"/>
-            <stop offset="55%" stop-color="#1a8a78"/>
-            <stop offset="100%" stop-color="#0d5c4f"/>
-          </linearGradient>
-        </defs>
-        <path d="M58 62 C40 48 18 40 6 22 C22 28 36 34 48 48 C52 54 55 58 58 62Z" fill="url(#certWingGrad)"/>
-        <path d="M62 62 C80 48 102 40 114 22 C98 28 84 34 72 48 C68 54 65 58 62 62Z" fill="url(#certWingGrad)"/>
-        <path d="M58 62 C48 44 34 30 22 14 C36 26 46 38 54 52 C56 56 57 59 58 62Z" fill="#2aa890" opacity="0.85"/>
-        <path d="M62 62 C72 44 86 30 98 14 C84 26 74 38 66 52 C64 56 63 59 62 62Z" fill="#2aa890" opacity="0.85"/>
-        <path d="M60 64 L56 52 L60 54 L64 52 Z" fill="#c9a84c"/>
-      </svg>`;
 
     const cornerSvg = `
       <svg viewBox="0 0 80 80" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
@@ -5497,11 +5511,19 @@ const app = {
             <div class="cert-corner cert-corner-br">${cornerSvg}</div>
 
             <div class="cert-header">
-              <div class="cert-logo-wrap">${logoSvg}</div>
+              <div class="cert-logo-wrap">
+                <img
+                  src="wingsync-logo.png"
+                  alt="WingSync"
+                  class="cert-logo-img"
+                  crossorigin="anonymous"
+                  decoding="async"
+                />
+              </div>
               <div class="cert-brand">WINGSYNC</div>
               <div class="cert-powered">POWERED BY WINGSYNC</div>
               <div class="cert-club">MALINAO RACING PIGEON CLUB</div>
-              <div class="cert-mrpc">MRPC</div>
+              <div class="cert-mrpc"><span>— MRPC —</span></div>
               <h1 class="cert-title">CERTIFICATE</h1>
               <div class="cert-title-flourish">${flourishSvg}</div>
             </div>
@@ -5513,6 +5535,10 @@ const app = {
                   <div class="cert-avatar-ring">${avatarHTML}</div>
                   <div class="cert-badge">${badgeSvg}</div>
                 </div>
+                <div class="cert-signed">
+                  <div class="cert-signed-date">${esc(formattedDate)}</div>
+                  <div class="cert-signed-label">Signed on,</div>
+                </div>
               </div>
               <div class="cert-text">
                 <p class="cert-intro">This is to certify that</p>
@@ -5521,7 +5547,7 @@ const app = {
                   has flown from <span class="cert-value">${esc(eventName)}</span>
                   a distance of <span class="cert-value">${esc(distance)} km</span>
                   on <span class="cert-value">${esc(releaseDateStr)}</span>,
-                  recording of a velocity of <span class="cert-value">${esc(speed)} m/min</span>
+                  recording a velocity of <span class="cert-value">${esc(speed)} m/min</span>
                   and thereby won
                 </p>
                 <p class="cert-rank rank-${rankClass}">— ${esc(rankLabel)} —</p>
@@ -5530,10 +5556,6 @@ const app = {
             </div>
 
             <div class="cert-footer">
-              <div class="cert-signed">
-                <div class="cert-signed-date">${esc(formattedDate)}</div>
-                <div class="cert-signed-label">Signed on,</div>
-              </div>
               <div class="cert-ornament">
                 ${ornamentSvg}
                 <div class="cert-trophy"><i class="fas fa-trophy"></i></div>
@@ -5558,6 +5580,12 @@ const app = {
     `;
 
     this._generateQRCodeForCert(verifyUrl);
+
+    const logoImg = container.querySelector(".cert-logo-img");
+    if (logoImg) {
+      if (logoImg.complete) this._processCertLogoImg(logoImg);
+      else logoImg.onload = () => this._processCertLogoImg(logoImg);
+    }
 
     const actionsDiv = document.createElement("div");
     actionsDiv.className = "certificate-actions";
@@ -5628,7 +5656,7 @@ const app = {
 
     const origin = window.location.origin;
     const basePath = window.location.pathname.replace(/\/[^/]*$/, "/");
-    const cssHref = `${origin}${basePath}style.css?v=8`;
+    const cssHref = `${origin}${basePath}style.css?v=15`;
     const fontHref =
       "https://fonts.googleapis.com/css2?family=Cinzel:wght@400;600;700&family=Great+Vibes&family=Libre+Baskerville:ital,wght@0,400;0,700;1,400&display=swap";
     const faHref =

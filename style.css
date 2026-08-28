@@ -2039,7 +2039,7 @@ tr:hover td {
   position: relative;
   width: 100%;
   aspect-ratio: 1.5 / 1;
-  background: var(--cert-cream);
+  background: linear-gradient(165deg, #f8f4ea 0%, #f4efe3 42%, #ebe4d4 100%);
   box-shadow: 0 8px 28px rgba(0, 0, 0, 0.18);
   overflow: hidden;
 }
@@ -2117,18 +2117,29 @@ tr:hover td {
 }
 
 .cert-logo-wrap {
-  width: clamp(40px, 5.8vw, 58px);
-  height: clamp(28px, 4vw, 40px);
-  margin: 0 auto 1px;
+  width: clamp(56px, 8vw, 78px);
+  height: clamp(40px, 5.5vw, 54px);
+  margin: 0 auto 2px;
   display: flex;
   align-items: center;
   justify-content: center;
+  background: transparent;
 }
 
-.cert-logo-wrap svg {
+.cert-logo-img {
+  display: block;
   width: 100%;
   height: 100%;
-  display: block;
+  object-fit: contain;
+  object-position: center;
+  /* Removes black background from wingsync-logo.png on cream parchment */
+  mix-blend-mode: screen;
+  filter: contrast(1.12) saturate(1.2);
+}
+
+.cert-logo-img--processed {
+  mix-blend-mode: normal !important;
+  filter: none;
 }
 
 .cert-brand {
@@ -2153,9 +2164,9 @@ tr:hover td {
 .cert-club {
   font-family: "Cinzel", "Times New Roman", serif;
   font-weight: 700;
-  font-size: clamp(12px, 1.55vw, 20px);
-  color: var(--cert-green);
-  letter-spacing: 0.08em;
+  font-size: clamp(13px, 1.65vw, 21px);
+  color: #111111;
+  letter-spacing: 0.06em;
   line-height: 1.15;
   margin: 0;
 }
@@ -2164,20 +2175,26 @@ tr:hover td {
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 12px;
-  margin: 4px 0 3px;
+  gap: 10px;
+  margin: 5px 0 4px;
   font-family: "Cinzel", "Times New Roman", serif;
   font-weight: 600;
   font-size: clamp(9px, 0.95vw, 12px);
   color: var(--cert-gold);
-  letter-spacing: 0.28em;
+  letter-spacing: 0.22em;
 }
+
+.cert-mrpc span {
+  white-space: nowrap;
+}
+
 .cert-mrpc::before,
 .cert-mrpc::after {
   content: "";
-  width: clamp(40px, 9%, 80px);
+  width: clamp(36px, 8%, 72px);
   height: 1px;
   background: var(--cert-gold);
+  opacity: 0.9;
 }
 
 .cert-title {
@@ -2209,11 +2226,26 @@ tr:hover td {
 .cert-main {
   flex: 1 1 auto;
   display: grid;
-  grid-template-columns: minmax(140px, 0.32fr) 0.68fr;
-  gap: 0.5% 2%;
+  grid-template-columns: minmax(148px, 0.34fr) 0.66fr;
+  gap: 0.5% 2.5%;
   align-items: center;
   min-height: 0;
-  padding: 1% 1.5% 0;
+  padding: 1.2% 1.5% 0;
+}
+
+.cert-avatar-col {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: clamp(6px, 1.2vw, 14px);
+  align-self: center;
+}
+
+.cert-avatar-col .cert-signed {
+  margin-left: 0;
+  max-width: 150px;
+  width: 72%;
 }
 
 .cert-avatar-wrap {
@@ -2322,7 +2354,7 @@ tr:hover td {
   font-family: "Cinzel", "Times New Roman", serif;
   font-weight: 700;
   font-size: clamp(17px, 2.35vw, 30px);
-  color: var(--cert-gold) !important;
+  color: #9a7b32 !important;
   letter-spacing: 0.1em;
   line-height: 1.15;
 }
@@ -2337,18 +2369,16 @@ tr:hover td {
 .cert-footer {
   flex: 0 0 auto;
   display: grid;
-  grid-template-columns: 1fr 1.1fr 1fr;
+  grid-template-columns: 1fr 1fr;
   align-items: end;
   gap: 8px;
-  padding-top: 1%;
+  padding-top: 0.5%;
   margin-top: auto;
 }
 
 .cert-signed {
   text-align: center;
   max-width: 170px;
-  justify-self: start;
-  margin-left: 8%;
 }
 .cert-signed-date {
   font-family: "Libre Baskerville", Georgia, serif;
@@ -2373,6 +2403,7 @@ tr:hover td {
   gap: 8px;
   color: var(--cert-gold);
   padding-bottom: 6px;
+  justify-self: center;
 }
 .cert-ornament .orn-side {
   width: 56px;
@@ -2453,11 +2484,16 @@ tr:hover td {
 [data-theme="dark"] .cert-frame {
   background: var(--cert-cream);
 }
-[data-theme="dark"] .cert-club,
+[data-theme="dark"] .cert-club {
+  color: #111111;
+}
 [data-theme="dark"] .cert-title,
 [data-theme="dark"] .cert-name,
 [data-theme="dark"] .cert-body .cert-value {
   color: var(--cert-green);
+}
+[data-theme="dark"] .cert-rank {
+  color: #9a7b32 !important;
 }
 [data-theme="dark"] .cert-intro,
 [data-theme="dark"] .cert-body,
