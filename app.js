@@ -5410,8 +5410,8 @@ const app = {
 
     const avatarId = cert.pigeonId?.avatarId || "";
     const avatarHTML = avatarId
-      ? getPigeonAvatarSVG(avatarId, 180)
-      : getDefaultPigeonSVG(180);
+      ? getPigeonAvatarSVG(avatarId, 220)
+      : getDefaultPigeonSVG(220);
 
     const issueDate = new Date(cert.issueDate);
     const formattedDate = issueDate.toLocaleDateString("en-PH", {
@@ -5520,7 +5520,6 @@ const app = {
                   decoding="async"
                 />
               </div>
-              <div class="cert-brand">WINGSYNC</div>
               <div class="cert-powered">POWERED BY WINGSYNC</div>
               <div class="cert-club">MALINAO RACING PIGEON CLUB</div>
               <div class="cert-mrpc"><span>— MRPC —</span></div>
@@ -5656,7 +5655,7 @@ const app = {
 
     const origin = window.location.origin;
     const basePath = window.location.pathname.replace(/\/[^/]*$/, "/");
-    const cssHref = `${origin}${basePath}style.css?v=15`;
+    const cssHref = `${origin}${basePath}style.css?v=16`;
     const fontHref =
       "https://fonts.googleapis.com/css2?family=Cinzel:wght@400;600;700&family=Great+Vibes&family=Libre+Baskerville:ital,wght@0,400;0,700;1,400&display=swap";
     const faHref =

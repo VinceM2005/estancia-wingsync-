@@ -2142,22 +2142,12 @@ tr:hover td {
   filter: none;
 }
 
-.cert-brand {
-  font-family: "Cinzel", "Times New Roman", serif;
-  font-weight: 700;
-  font-size: clamp(9px, 1.05vw, 12px);
-  letter-spacing: 0.32em;
-  color: #111;
-  line-height: 1.05;
-  margin: 0;
-}
-
 .cert-powered {
   font-family: "Libre Baskerville", Georgia, serif;
-  font-size: clamp(6px, 0.65vw, 8px);
-  letter-spacing: 0.2em;
+  font-size: clamp(7px, 0.72vw, 9px);
+  letter-spacing: 0.22em;
   color: #5a6560;
-  margin: 1px 0 6px;
+  margin: 2px 0 8px;
   text-transform: uppercase;
 }
 
@@ -2226,11 +2216,11 @@ tr:hover td {
 .cert-main {
   flex: 1 1 auto;
   display: grid;
-  grid-template-columns: minmax(148px, 0.34fr) 0.66fr;
-  gap: 0.5% 2.5%;
+  grid-template-columns: minmax(172px, 0.38fr) 0.62fr;
+  gap: 0.5% 2%;
   align-items: center;
   min-height: 0;
-  padding: 1.2% 1.5% 0;
+  padding: 1.4% 1.2% 0;
 }
 
 .cert-avatar-col {
@@ -2250,8 +2240,8 @@ tr:hover td {
 
 .cert-avatar-wrap {
   position: relative;
-  width: 90%;
-  max-width: 200px;
+  width: 96%;
+  max-width: 248px;
   margin: 0 auto;
   aspect-ratio: 1;
 }
@@ -2316,31 +2306,31 @@ tr:hover td {
 }
 
 .cert-intro {
-  margin: 0 0 6px;
-  font-size: clamp(11px, 1.1vw, 14px);
+  margin: 0 0 8px;
+  font-size: clamp(13px, 1.4vw, 18px);
   font-style: italic;
   color: var(--cert-ink);
 }
 
 .cert-name {
-  margin: 0 auto 8px;
-  max-width: 94%;
+  margin: 0 auto 10px;
+  max-width: 96%;
   font-family: "Cinzel", "Times New Roman", serif;
   font-weight: 700;
-  font-size: clamp(15px, 2.05vw, 26px);
+  font-size: clamp(19px, 2.55vw, 34px);
   color: var(--cert-green);
   letter-spacing: 0.04em;
   line-height: 1.2;
   border-bottom: 1px solid rgba(90, 90, 90, 0.3);
-  padding-bottom: 5px;
+  padding-bottom: 6px;
   word-break: break-word;
 }
 
 .cert-body {
-  margin: 0 auto 8px;
-  max-width: 96%;
-  font-size: clamp(10px, 1vw, 13px);
-  line-height: 1.5;
+  margin: 0 auto 10px;
+  max-width: 98%;
+  font-size: clamp(12px, 1.28vw, 17px);
+  line-height: 1.55;
   color: var(--cert-ink);
 }
 
@@ -2350,10 +2340,10 @@ tr:hover td {
 }
 
 .cert-rank {
-  margin: 10px 0 6px;
+  margin: 12px 0 8px;
   font-family: "Cinzel", "Times New Roman", serif;
   font-weight: 700;
-  font-size: clamp(17px, 2.35vw, 30px);
+  font-size: clamp(21px, 2.85vw, 38px);
   color: #9a7b32 !important;
   letter-spacing: 0.1em;
   line-height: 1.15;
@@ -2361,7 +2351,7 @@ tr:hover td {
 
 .cert-closing {
   margin: 0;
-  font-size: clamp(10px, 1vw, 13px);
+  font-size: clamp(12px, 1.22vw, 16px);
   color: var(--cert-ink);
 }
 
@@ -2501,9 +2491,6 @@ tr:hover td {
 [data-theme="dark"] .cert-signed-date,
 [data-theme="dark"] .cert-sig-name {
   color: var(--cert-ink);
-}
-[data-theme="dark"] .cert-brand {
-  color: #111;
 }
 
 @media (max-width: 768px) {
