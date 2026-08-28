@@ -103,11 +103,14 @@ async function ensureIndexes() {
       console.log("✅ Null pigeonId migration complete.");
     }
 
-    // Drop old EventRegistration index if it exists
+    // Drop legacy EventRegistration indexes if they exist
     await EventRegistration.collection
       .dropIndex("eventId_1_playerId_1_pigeonIds_1")
       .catch(() => {});
-    // Create new unique index on (eventId, playerId)
+    await EventRegistration.collection
+      .dropIndex("eventId_1_playerId_1")
+      .catch(() => {});
+    // Create unique index on (eventId, playerId)
     await EventRegistration.collection.createIndex(
       { eventId: 1, playerId: 1 },
       { unique: true },
@@ -268,7 +271,6 @@ const PigeonSchema = new mongoose.Schema({
   },
   createdAt: { type: Date, default: Date.now },
 });
-PigeonSchema.index({ ringNumber: 1 }, { unique: true });
 PigeonSchema.index({ ownerId: 1, status: 1 });
 
 const EventRegistrationSchema = new mongoose.Schema(
@@ -286,7 +288,7 @@ const EventRegistrationSchema = new mongoose.Schema(
   },
   { versionKey: false },
 );
-EventRegistrationSchema.index({ eventId: 1, playerId: 1 });
+EventRegistrationSchema.index({ eventId: 1, playerId: 1 }, { unique: true });
 
 const CertificateSchema = new mongoose.Schema({
   certificateNumber: { type: String, required: true, unique: true },
@@ -300,7 +302,6 @@ const CertificateSchema = new mongoose.Schema({
   qrHash: { type: String, required: true, unique: true },
 });
 CertificateSchema.index({ playerId: 1, eventId: 1 });
-CertificateSchema.index({ qrHash: 1 });
 
 const User = mongoose.model("User", UserSchema);
 const Event = mongoose.model("Event", EventSchema);
