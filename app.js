@@ -5592,27 +5592,21 @@ const app = {
     const actionsDiv = document.createElement("div");
     actionsDiv.className = "certificate-actions";
 
-    const printBtn = document.createElement("button");
-    printBtn.className = "btn btn-primary";
-    printBtn.innerHTML = '<i class="fas fa-print"></i> Print';
-    printBtn.onclick = () => this.printCertificate();
-    actionsDiv.appendChild(printBtn);
-
-    const pdfBtn = document.createElement("button");
-    pdfBtn.className = "btn btn-success";
-    pdfBtn.innerHTML = '<i class="fas fa-file-pdf"></i> Download PDF';
-    pdfBtn.onclick = () => this.downloadCertificatePDF();
-    actionsDiv.appendChild(pdfBtn);
-
     if (this.currentUser?.role === "admin") {
-      const reprintBtn = document.createElement("button");
-      reprintBtn.className = "btn btn-secondary";
-      reprintBtn.innerHTML = '<i class="fas fa-print"></i> Reprint for Admin';
-      reprintBtn.onclick = () => this.printCertificate();
-      actionsDiv.appendChild(reprintBtn);
-    }
+      const printBtn = document.createElement("button");
+      printBtn.className = "btn btn-primary";
+      printBtn.innerHTML = '<i class="fas fa-print"></i> Print';
+      printBtn.onclick = () => this.printCertificate();
+      actionsDiv.appendChild(printBtn);
 
-    container.appendChild(actionsDiv);
+      const pdfBtn = document.createElement("button");
+      pdfBtn.className = "btn btn-success";
+      pdfBtn.innerHTML = '<i class="fas fa-file-pdf"></i> Download PDF';
+      pdfBtn.onclick = () => this.downloadCertificatePDF();
+      actionsDiv.appendChild(pdfBtn);
+
+      container.appendChild(actionsDiv);
+    }
   },
 
   _generateQRCodeForCert: function (text) {
