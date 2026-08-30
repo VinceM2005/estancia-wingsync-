@@ -533,7 +533,7 @@ const app = {
 
     this.initStickerGenerator();
     window.addEventListener("resize", () => {
-      if (window.innerWidth > 768) this.closeSidebar();
+      if (window.innerWidth > 1024) this.closeSidebar();
     });
   },
 
@@ -634,47 +634,33 @@ const app = {
 
     const scannerModal = document.createElement("div");
     scannerModal.id = "qr-scanner-modal";
-    scannerModal.style.cssText = `
-      position: fixed;
-      top: 0;
-      left: 0;
-      width: 100%;
-      height: 100%;
-      background: rgba(0,0,0,0.85);
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      justify-content: center;
-      z-index: 10000;
-      padding: 20px;
-    `;
     scannerModal.innerHTML = `
-      <div style="background: #fff; border-radius: 16px; padding: 20px; max-width: 500px; width: 100%; max-height: 90vh; overflow-y: auto;">
-        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
+      <div class="qr-scanner-sheet">
+        <div class="qr-scanner-toolbar">
           <h3 style="margin:0;"><i class="fas fa-qrcode"></i> Scan QR Code</h3>
-          <button id="qr-close-btn" style="background:none; border:none; font-size:28px; cursor:pointer; color:#666;">&times;</button>
+          <button type="button" id="qr-close-btn" class="qr-scanner-close" aria-label="Close">&times;</button>
         </div>
-        <div style="position: relative; width: 100%;">
-          <div id="qr-reader" style="width:100%;"></div>
-          <div id="qr-frame" style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); width: 280px; height: 280px; border: 3px solid #00ff00; border-radius: 16px; pointer-events: none; box-shadow: 0 0 25px rgba(0,255,0,0.35); z-index: 10; transition: border-color 0.3s ease, box-shadow 0.3s ease;">
+        <div class="qr-scanner-stage">
+          <div id="qr-reader"></div>
+          <div id="qr-frame">
             <span class="corner-bracket bl"></span>
             <span class="corner-bracket tr"></span>
           </div>
         </div>
-        <div id="qr-reader-results" style="margin-top: 12px; font-size: 14px; color: #333; text-align:center; min-height: 24px;"></div>
+        <div id="qr-reader-results"></div>
 
-        <div style="display: flex; align-items: center; gap: 8px; margin-top: 8px; flex-wrap: wrap;">
-          <label style="font-size:13px; font-weight:600; color:#333;">Zoom:</label>
-          <input type="range" id="zoom-slider" min="0.5" max="5.0" step="0.1" value="1.0" style="flex:1; min-width:100px;">
-          <span id="zoom-value" style="font-size:13px; font-weight:600; min-width:40px; text-align:center;">1.0×</span>
-          <button id="reset-zoom-btn" class="btn btn-sm btn-secondary" style="padding:4px 12px; font-size:12px;">⟲ Reset</button>
+        <div class="qr-scanner-zoom">
+          <label>Zoom</label>
+          <input type="range" id="zoom-slider" min="0.5" max="5.0" step="0.1" value="1.0">
+          <span id="zoom-value">1.0×</span>
+          <button type="button" id="reset-zoom-btn" class="btn btn-sm btn-secondary">Reset</button>
         </div>
 
-        <button id="flashlight-btn" class="btn btn-secondary" style="margin-top:8px; width:100%; justify-content:center;">
+        <button type="button" id="flashlight-btn" class="btn btn-secondary qr-scanner-fullbtn">
           <i class="fas fa-lightbulb"></i> <span id="flash-status">Toggle Flash</span>
         </button>
 
-        <button class="btn btn-secondary" style="margin-top:8px; width:100%;" id="qr-cancel-btn">Cancel</button>
+        <button type="button" class="btn btn-secondary qr-scanner-fullbtn" id="qr-cancel-btn">Cancel</button>
       </div>
     `;
     document.body.appendChild(scannerModal);
@@ -709,9 +695,13 @@ const app = {
       return;
     }
 
+    const scanBox = Math.max(
+      180,
+      Math.min(280, Math.floor(window.innerWidth * 0.62)),
+    );
     const config = {
       fps: 20,
-      qrbox: { width: 280, height: 280 },
+      qrbox: { width: scanBox, height: scanBox },
       aspectRatio: undefined,
       experimentalFeatures: { useBarCodeDetectorIfSupported: true },
     };
