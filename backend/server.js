@@ -3061,12 +3061,17 @@ app.get("/api/users/player/:id/stats", authenticateToken, async (req, res) => {
     if (!user) return res.status(404).json({ error: "Player not found" });
 
     const results = await Result.find({ userId: id });
+    const racesJoined = await EventRegistration.countDocuments({
+      playerId: id,
+      status: { $in: ["confirmed", "locked"] },
+    });
     if (results.length === 0) {
       return res.json({
         userId: id,
         userName: user.name,
         totalPigeons: 0,
         eventsParticipated: 0,
+        racesJoined,
         wins: 0,
         podiums: 0,
         averageSpeed: 0,
@@ -3125,7 +3130,6 @@ app.get("/api/users/player/:id/stats", authenticateToken, async (req, res) => {
     }
     const winRate =
       eventsParticipated > 0 ? (wins / eventsParticipated) * 100 : 0;
-    const championTitles = await getChampionTitles(id);
     const totalCertificates = await Certificate.countDocuments({
       playerId: id,
     });
@@ -3137,12 +3141,12 @@ app.get("/api/users/player/:id/stats", authenticateToken, async (req, res) => {
       userName: user.name,
       totalPigeons,
       eventsParticipated,
+      racesJoined,
       wins,
       podiums,
       averageSpeed: parseFloat(averageSpeed.toFixed(4)),
       bestSpeed: parseFloat(bestSpeed.toFixed(4)),
       winRate: parseFloat(winRate.toFixed(1)),
-      championTitles,
       totalCertificates,
       fastestArrival,
       seasonRanking,

@@ -2683,8 +2683,8 @@ const app = {
           stats.bestSpeed.toFixed(2);
         document.getElementById("stats-win-rate").textContent =
           stats.winRate.toFixed(1) + "%";
-        const champEl = document.getElementById("stats-champion-titles");
-        if (champEl) champEl.textContent = stats.championTitles || 0;
+        const joinedEl = document.getElementById("stats-races-joined");
+        if (joinedEl) joinedEl.textContent = stats.racesJoined || 0;
         const certEl = document.getElementById("stats-total-certificates");
         if (certEl) certEl.textContent = stats.totalCertificates || 0;
         if (stats.seasonRanking && stats.seasonRanking.rank) {
