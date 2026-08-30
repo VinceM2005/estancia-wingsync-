@@ -2700,11 +2700,10 @@ const app = {
           }
           if (rankEl) {
             rankEl.innerHTML = `
-              <div class="stat-metric-icon stat-metric-icon-accent"><i class="fas fa-trophy"></i></div>
               <div class="stat-metric-content">
                 <span class="stat-metric-label">Current Season Rank</span>
                 <span class="stat-metric-value stat-metric-value-accent">#${stats.seasonRanking.rank}</span>
-                <span class="stat-metric-unit">(${stats.seasonRanking.totalPoints} pts)</span>
+                <span class="stat-metric-unit">${stats.seasonRanking.totalPoints} pts</span>
               </div>
             `;
           }

@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Wingsync - Pigeon Clocking System</title>
     <link rel="manifest" href="manifest.json" />
-    <link rel="stylesheet" href="style.css?v=22" />
+    <link rel="stylesheet" href="style.css?v=23" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="mobile-web-app-capable" content="yes" />
     <meta
@@ -44,7 +44,7 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
 
-    <link rel="stylesheet" href="style.css?v=22" />
+    <link rel="stylesheet" href="style.css?v=23" />
     <style>
       /* ===== ADDITIONAL STYLES FOR UI COMPONENTS ===== */
       .pigeons-grid {
@@ -864,23 +864,19 @@
 
           <!-- ===== PROFILE ===== -->
           <div id="view-profile" class="view-section hidden">
-            <div class="card" style="max-width: 600px; margin: auto">
-              <div
-                style="
-                  text-align: center;
-                  font-size: 64px;
-                  color: var(--text-light);
-                "
-              >
-                <i class="fas fa-user-circle"></i>
+            <div class="card profile-page-card">
+              <div class="profile-identity">
+                <div class="profile-identity-avatar">
+                  <i class="fas fa-user"></i>
+                </div>
+                <h2 id="prof-name">Name</h2>
+                <p class="profile-identity-id">
+                  User ID: <span id="prof-id"></span>
+                </p>
               </div>
-              <h2 id="prof-name" style="text-align: center">Name</h2>
-              <p style="text-align: center; color: #666; margin-bottom: 20px">
-                User ID: <span id="prof-id" style="font-weight: bold"></span>
-              </p>
 
               <!-- Contact Information – Player only -->
-              <div class="player-only hidden">
+              <div class="player-only hidden profile-loft-fields">
                 <div class="form-group">
                   <label><i class="fas fa-phone"></i> Contact</label>
                   <input
@@ -917,35 +913,36 @@
               <!-- Performance Summary (Player only) -->
               <div
                 id="player-stats-container"
-                class="card stats-card hidden player-only"
+                class="player-perf hidden player-only"
               >
-                <div class="stats-card-header">
-                  <div class="stats-card-title-wrapper">
-                    <span class="stats-card-icon">⏱️</span>
-                    <h3 class="stats-card-title">Performance Summary</h3>
+                <div class="player-perf-header">
+                  <div>
+                    <p class="player-perf-kicker">Player Stats</p>
+                    <h3 class="player-perf-title">Performance Summary</h3>
                   </div>
-                  <span class="stats-card-badge">Lifetime</span>
+                  <span class="player-perf-badge">Lifetime</span>
                 </div>
-                <div class="stats-grid">
-                  <!-- Birds Clocked -->
-                  <div class="stat-metric">
-                    <div class="stat-metric-icon">
-                      <svg
-                        width="20"
-                        height="20"
-                        viewBox="0 0 24 24"
-                        fill="none"
-                        stroke="currentColor"
-                        stroke-width="1.8"
-                      >
-                        <path d="M16 7h.01" />
-                        <path
-                          d="M3.4 18H12a8 8 0 0 0 8-8V7a4 4 0 0 0-7.28-2.3L2 20"
-                        />
-                        <path d="M20 7v3a8 8 0 0 1-8 8H3.4" />
-                        <path d="M6 15v1" />
-                      </svg>
+
+                <div class="player-perf-hero">
+                  <div class="player-perf-hero-stat">
+                    <div class="player-perf-hero-value" id="stats-events">0</div>
+                    <div class="player-perf-hero-label">Races</div>
+                  </div>
+                  <div class="player-perf-hero-stat">
+                    <div class="player-perf-hero-value" id="stats-wins">0</div>
+                    <div class="player-perf-hero-label">Wins</div>
+                  </div>
+                  <div class="player-perf-hero-stat">
+                    <div class="player-perf-hero-value" id="stats-win-rate">
+                      0.0%
                     </div>
+                    <div class="player-perf-hero-label">Win Rate</div>
+                  </div>
+                </div>
+
+                <p class="player-perf-section-label">Totals</p>
+                <div class="stats-grid player-perf-grid">
+                  <div class="stat-metric">
                     <div class="stat-metric-content">
                       <span class="stat-metric-label">Birds Clocked</span>
                       <span class="stat-metric-value" id="stats-total-pigeons"
@@ -953,69 +950,7 @@
                       >
                     </div>
                   </div>
-                  <!-- Races Entered -->
                   <div class="stat-metric">
-                    <div class="stat-metric-icon">
-                      <svg
-                        width="20"
-                        height="20"
-                        viewBox="0 0 24 24"
-                        fill="none"
-                        stroke="currentColor"
-                        stroke-width="1.8"
-                      >
-                        <path
-                          d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"
-                        />
-                        <line x1="4" y1="22" x2="4" y2="15" />
-                      </svg>
-                    </div>
-                    <div class="stat-metric-content">
-                      <span class="stat-metric-label">Races Entered</span>
-                      <span class="stat-metric-value" id="stats-events">0</span>
-                    </div>
-                  </div>
-                  <!-- Race Wins -->
-                  <div class="stat-metric stat-metric-highlight">
-                    <div class="stat-metric-icon stat-metric-icon-gold">
-                      <svg
-                        width="22"
-                        height="22"
-                        viewBox="0 0 24 24"
-                        fill="none"
-                        stroke="currentColor"
-                        stroke-width="1.8"
-                      >
-                        <path
-                          d="M12 2L15.09 8.26L22 9.27L17 14.14L18.18 21.02L12 17.77L5.82 21.02L7 14.14L2 9.27L8.91 8.26L12 2Z"
-                        />
-                      </svg>
-                    </div>
-                    <div class="stat-metric-content">
-                      <span class="stat-metric-label">Race Wins</span>
-                      <span
-                        class="stat-metric-value stat-metric-value-gold"
-                        id="stats-wins"
-                        >0</span
-                      >
-                    </div>
-                  </div>
-                  <!-- Podium Finishes -->
-                  <div class="stat-metric">
-                    <div class="stat-metric-icon">
-                      <svg
-                        width="20"
-                        height="20"
-                        viewBox="0 0 24 24"
-                        fill="none"
-                        stroke="currentColor"
-                        stroke-width="1.8"
-                      >
-                        <circle cx="12" cy="8" r="3" />
-                        <path d="M12 11v8" />
-                        <path d="M5 22h14" />
-                      </svg>
-                    </div>
                     <div class="stat-metric-content">
                       <span class="stat-metric-label">Podium Finishes</span>
                       <span class="stat-metric-value" id="stats-podiums"
@@ -1023,23 +958,7 @@
                       >
                     </div>
                   </div>
-                  <!-- Average Speed -->
                   <div class="stat-metric">
-                    <div class="stat-metric-icon">
-                      <svg
-                        width="20"
-                        height="20"
-                        viewBox="0 0 24 24"
-                        fill="none"
-                        stroke="currentColor"
-                        stroke-width="1.8"
-                      >
-                        <path
-                          d="M12 22c5.523 0 10-4.477 10-10S17.523 2 12 2 2 6.477 2 12s4.477 10 10 10z"
-                        />
-                        <path d="M12 6v6l4 2" />
-                      </svg>
-                    </div>
                     <div class="stat-metric-content">
                       <span class="stat-metric-label">Average Speed</span>
                       <span class="stat-metric-value" id="stats-avg-speed"
@@ -1048,22 +967,7 @@
                       <span class="stat-metric-unit">m/min</span>
                     </div>
                   </div>
-                  <!-- Top Speed -->
                   <div class="stat-metric stat-metric-highlight">
-                    <div class="stat-metric-icon stat-metric-icon-accent">
-                      <svg
-                        width="22"
-                        height="22"
-                        viewBox="0 0 24 24"
-                        fill="none"
-                        stroke="currentColor"
-                        stroke-width="1.8"
-                      >
-                        <polygon
-                          points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"
-                        />
-                      </svg>
-                    </div>
                     <div class="stat-metric-content">
                       <span class="stat-metric-label">Top Speed</span>
                       <span
@@ -1074,48 +978,7 @@
                       <span class="stat-metric-unit">m/min</span>
                     </div>
                   </div>
-                  <!-- Win Rate -->
-                  <div
-                    class="stat-metric stat-metric-highlight stat-metric-full"
-                  >
-                    <div class="stat-metric-icon stat-metric-icon-accent">
-                      <svg
-                        width="22"
-                        height="22"
-                        viewBox="0 0 24 24"
-                        fill="none"
-                        stroke="currentColor"
-                        stroke-width="1.8"
-                      >
-                        <polyline points="23 6 13.5 15.5 8.5 10.5 1 18" />
-                        <polyline points="17 6 23 6 23 12" />
-                      </svg>
-                    </div>
-                    <div class="stat-metric-content">
-                      <span class="stat-metric-label">Win Rate</span>
-                      <span
-                        class="stat-metric-value stat-metric-value-accent"
-                        id="stats-win-rate"
-                        >0.0%</span
-                      >
-                    </div>
-                  </div>
-                  <!-- NEW extended stats -->
                   <div class="stat-metric">
-                    <div class="stat-metric-icon">
-                      <svg
-                        width="20"
-                        height="20"
-                        viewBox="0 0 24 24"
-                        fill="none"
-                        stroke="currentColor"
-                        stroke-width="1.8"
-                      >
-                        <circle cx="12" cy="12" r="10" />
-                        <path d="M12 8v8" />
-                        <path d="M8 12h8" />
-                      </svg>
-                    </div>
                     <div class="stat-metric-content">
                       <span class="stat-metric-label">Champion Titles</span>
                       <span class="stat-metric-value" id="stats-champion-titles"
@@ -1124,20 +987,6 @@
                     </div>
                   </div>
                   <div class="stat-metric">
-                    <div class="stat-metric-icon">
-                      <svg
-                        width="20"
-                        height="20"
-                        viewBox="0 0 24 24"
-                        fill="none"
-                        stroke="currentColor"
-                        stroke-width="1.8"
-                      >
-                        <path
-                          d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"
-                        />
-                      </svg>
-                    </div>
                     <div class="stat-metric-content">
                       <span class="stat-metric-label">Certificates</span>
                       <span
