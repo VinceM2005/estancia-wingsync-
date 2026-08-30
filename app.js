@@ -532,13 +532,16 @@ const app = {
     }
 
     this.initStickerGenerator();
+    window.addEventListener("resize", () => {
+      if (window.innerWidth > 768) this.closeSidebar();
+    });
   },
 
   showVerificationView: async function (hash) {
     document.getElementById("login-screen").classList.add("hidden");
     document.getElementById("app-screen").classList.remove("hidden");
-    document.getElementById("header-user").innerText =
-      "Certificate Verification";
+    document.getElementById("header-user").innerHTML =
+      `<i class="fas fa-user-circle"></i><span>Certificate Verification</span>`;
 
     document
       .querySelectorAll(".sidebar-menu li")
@@ -2207,6 +2210,7 @@ const app = {
   },
 
   logout() {
+    this.closeSidebar();
     this.stopAutoRefresh();
     if (this.clockIntervalId) {
       clearInterval(this.clockIntervalId);
@@ -2239,8 +2243,8 @@ const app = {
   showApp() {
     document.getElementById("login-screen").classList.add("hidden");
     document.getElementById("app-screen").classList.remove("hidden");
-    document.getElementById("header-user").innerText =
-      `Hello, ${this.currentUser.name}`;
+    document.getElementById("header-user").innerHTML =
+      `<i class="fas fa-user-circle"></i><span>${escapeHtml(this.currentUser.name)}</span>`;
 
     const adminEls = document.querySelectorAll(".admin-only");
     const playerEls = document.querySelectorAll(".player-only");
@@ -2370,7 +2374,7 @@ const app = {
       .forEach((el) => el.classList.remove("active"));
     document.getElementById(`view-${view}`).classList.remove("hidden");
     document.getElementById(`nav-${view}`).classList.add("active");
-    document.getElementById("sidebar").classList.remove("open");
+    this.closeSidebar();
 
     if (view === "dashboard") this.renderDashboard();
     if (view === "admin-players") this.renderPlayers();
@@ -2453,8 +2457,22 @@ const app = {
     }
   },
 
+  closeSidebar() {
+    const sidebar = document.getElementById("sidebar");
+    const backdrop = document.getElementById("sidebar-backdrop");
+    if (sidebar) sidebar.classList.remove("open");
+    if (backdrop) backdrop.classList.remove("show");
+    document.body.classList.remove("sidebar-open");
+  },
+
   toggleSidebar() {
-    document.getElementById("sidebar").classList.toggle("open");
+    const sidebar = document.getElementById("sidebar");
+    if (!sidebar) return;
+    const open = !sidebar.classList.contains("open");
+    sidebar.classList.toggle("open", open);
+    const backdrop = document.getElementById("sidebar-backdrop");
+    if (backdrop) backdrop.classList.toggle("show", open);
+    document.body.classList.toggle("sidebar-open", open);
   },
 
   toggleTheme() {
@@ -6233,19 +6251,19 @@ const app = {
         const issueDate = new Date(c.issueDate).toLocaleDateString();
 
         html += `<tr>
-          <td><strong>${c.certificateNumber}</strong></td>
-          <td>${c.playerId?.name || "Unknown"}</td>
-          <td>
-            <div style="display:flex;align-items:center;gap:6px;">
+          <td data-label="Certificate">${c.certificateNumber}</td>
+          <td data-label="Player">${c.playerId?.name || "Unknown"}</td>
+          <td data-label="Pigeon">
+            <div style="display:flex;align-items:center;gap:6px;justify-content:flex-end;">
               <span style="width:28px;height:28px;display:inline-block;border-radius:50%;overflow:hidden;flex-shrink:0;">${avatarHTML}</span>
               ${c.pigeonId?.ringNumber || "—"}
             </div>
           </td>
-          <td>${c.eventId?.name || "Unknown"}</td>
-          <td>${rankEmoji} ${rankLabel}</td>
-          <td>${formatSpeedMpm(c.speed)}</td>
-          <td>${issueDate}</td>
-          <td>
+          <td data-label="Event">${c.eventId?.name || "Unknown"}</td>
+          <td data-label="Rank">${rankEmoji} ${rankLabel}</td>
+          <td data-label="Speed">${formatSpeedMpm(c.speed)}</td>
+          <td data-label="Issued">${issueDate}</td>
+          <td data-label="Actions">
             <button class="btn btn-sm btn-primary" onclick="app.viewAdminCertificate('${c._id}')"><i class="fas fa-eye"></i></button>
             <button class="btn btn-sm btn-secondary" onclick="app.reprintCertificate('${c._id}')"><i class="fas fa-print"></i></button>
             <button class="btn btn-sm btn-success" onclick="app.downloadAdminCertificate('${c._id}')"><i class="fas fa-file-pdf"></i></button>

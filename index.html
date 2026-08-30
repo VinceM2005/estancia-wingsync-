@@ -2,10 +2,14 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1, viewport-fit=cover"
+    />
     <title>Wingsync - Pigeon Clocking System</title>
     <link rel="manifest" href="manifest.json" />
-    <link rel="stylesheet" href="style.css?v=25" />
+    <link rel="stylesheet" href="style.css?v=26" />
+    <meta name="theme-color" content="#2a7a62" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="mobile-web-app-capable" content="yes" />
     <meta
@@ -42,12 +46,12 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
 
-    <link rel="stylesheet" href="style.css?v=25" />
+    <link rel="stylesheet" href="style.css?v=26" />
     <style>
       /* ===== ADDITIONAL STYLES FOR UI COMPONENTS ===== */
       .pigeons-grid {
         display: grid;
-        grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+        grid-template-columns: repeat(auto-fill, minmax(min(100%, 180px), 1fr));
         gap: 16px;
       }
       .pigeon-card {
@@ -760,6 +764,11 @@
           <i class="fas fa-sign-out-alt"></i> Log Out
         </div>
       </aside>
+      <div
+        id="sidebar-backdrop"
+        class="sidebar-backdrop"
+        onclick="app.closeSidebar()"
+      ></div>
 
       <!-- Main Content -->
       <main id="main-content">
@@ -778,7 +787,8 @@
             </button>
             <span id="server-clock">--:--:--</span>
             <div id="header-user">
-              <i class="fas fa-user-circle"></i> Welcome, User
+              <i class="fas fa-user-circle"></i>
+              <span>Welcome</span>
             </div>
           </div>
         </header>
