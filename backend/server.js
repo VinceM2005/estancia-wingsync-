@@ -7,10 +7,12 @@ const bcrypt = require("bcrypt");
 const jwt = require("jsonwebtoken");
 const { body, validationResult, matchedData } = require("express-validator");
 const rateLimit = require("express-rate-limit");
+const { ipKeyGenerator } = rateLimit;
 const helmet = require("helmet");
 const crypto = require("crypto");
 
 const app = express();
+app.set("trust proxy", 1);
 
 // ===== CORS =====
 const allowedOrigins = process.env.FRONTEND_URL
@@ -34,6 +36,19 @@ app.use(
 app.use(helmet());
 app.use(express.json({ limit: "10mb" }));
 
+app.use((req, res, next) => {
+  const started = Date.now();
+  res.on("finish", () => {
+    const ms = Date.now() - started;
+    if (ms >= 1000) {
+      console.warn(
+        `Slow request ${req.method} ${req.originalUrl} ${ms}ms status=${res.statusCode}`,
+      );
+    }
+  });
+  next();
+});
+
 app.use("/api", (req, res, next) => {
   res.setHeader("Cache-Control", "no-cache, no-store, must-revalidate");
   res.setHeader("Pragma", "no-cache");
@@ -41,36 +56,64 @@ app.use("/api", (req, res, next) => {
   next();
 });
 
-// ===== RATE LIMITING =====
+// ===== RATE LIMITING (user ID when logged in, IP otherwise) =====
+function rateLimitKey(req) {
+  const authHeader = req.headers.authorization;
+  if (authHeader && authHeader.startsWith("Bearer ")) {
+    try {
+      const decoded = jwt.decode(authHeader.slice(7));
+      if (decoded && decoded.id) return `user:${decoded.id}`;
+    } catch (_) {
+      /* fall through to IP */
+    }
+  }
+  return `ip:${ipKeyGenerator(req.ip || req.socket?.remoteAddress || "unknown")}`;
+}
+
 const globalLimiter = rateLimit({
   windowMs: 60 * 1000,
-  max: 200,
-  message: "Too many requests from this IP, please try again later.",
+  max: 120,
+  keyGenerator: rateLimitKey,
+  message: "Too many requests, please try again later.",
   standardHeaders: true,
   legacyHeaders: false,
+  skip: (req) => {
+    const p = req.path || "";
+    return p === "/health" || p === "/api/health" || p.endsWith("/health");
+  },
 });
 app.use(globalLimiter);
 
 const loginLimiter = rateLimit({
   windowMs: 60 * 1000,
-  max: 10,
+  max: 8,
+  keyGenerator: (req) => {
+    const account = String(req.body?.id || "").trim().toLowerCase();
+    if (account) return `login:${account}`;
+    return `login-ip:${ipKeyGenerator(req.ip || "unknown")}`;
+  },
   message: "Too many login attempts, please try again later.",
 });
 
 const registrationLimiter = rateLimit({
   windowMs: 60 * 1000,
   max: 20,
+  keyGenerator: rateLimitKey,
   message: "Too many registration attempts, please try again later.",
 });
 const clockinLimiter = rateLimit({
   windowMs: 60 * 1000,
   max: 30,
+  keyGenerator: rateLimitKey,
   message: "Too many clock‑in attempts, please try again later.",
 });
 
-// ===== CONNECT TO MONGODB =====
+// ===== CONNECT TO MONGODB (one shared pool) =====
 mongoose
   .connect(process.env.MONGO_URI, {
+    maxPoolSize: 50,
+    minPoolSize: 5,
+    maxIdleTimeMS: 30000,
     serverSelectionTimeoutMS: 5000,
     socketTimeoutMS: 45000,
     family: 4,
@@ -194,6 +237,8 @@ const EventSchema = new mongoose.Schema({
   registrationDeadline: { type: Date, required: true },
   certificatesGenerated: { type: Boolean, default: false },
 });
+EventSchema.index({ state: 1, releaseTime: -1 });
+EventSchema.index({ state: 1, registrationDeadline: 1 });
 
 const RaceCodeSchema = new mongoose.Schema({
   eventId: { type: String, required: true, index: true },
@@ -315,6 +360,178 @@ const EventRegistration = mongoose.model(
   EventRegistrationSchema,
 );
 const Certificate = mongoose.model("Certificate", CertificateSchema);
+
+// ============================================================
+//  SHORT-LIVED MEMORY CACHE (shared by all requests)
+// ============================================================
+const memCache = new Map();
+const inflightCache = new Map();
+
+function cacheGet(key) {
+  const entry = memCache.get(key);
+  if (!entry) return undefined;
+  if (Date.now() > entry.exp) {
+    memCache.delete(key);
+    return undefined;
+  }
+  return entry.val;
+}
+
+function cacheSet(key, val, ttlMs) {
+  memCache.set(key, { val, exp: Date.now() + ttlMs });
+}
+
+function cacheDelete(key) {
+  memCache.delete(key);
+}
+
+function invalidateLiveCaches(eventCode) {
+  cacheDelete("dashboard");
+  cacheDelete("events:active");
+  cacheDelete("events:open");
+  cacheDelete("events:all");
+  cacheDelete("events:summary");
+  if (eventCode) {
+    cacheDelete(`event:${eventCode}`);
+    cacheDelete(`results:${eventCode}`);
+    cacheDelete(`resultsPigeons:${eventCode}`);
+  }
+}
+
+async function cacheWrap(key, ttlMs, fn) {
+  const hit = cacheGet(key);
+  if (hit !== undefined) return hit;
+  if (inflightCache.has(key)) return inflightCache.get(key);
+  const pending = Promise.resolve()
+    .then(fn)
+    .then((val) => {
+      cacheSet(key, val, ttlMs);
+      inflightCache.delete(key);
+      return val;
+    })
+    .catch((err) => {
+      inflightCache.delete(key);
+      throw err;
+    });
+  inflightCache.set(key, pending);
+  return pending;
+}
+
+const DASHBOARD_TTL_MS = 8000;
+const EVENTS_TTL_MS = 12000;
+const RESULTS_TTL_MS = 5000;
+
+async function getActiveEvents() {
+  return cacheWrap("events:active", EVENTS_TTL_MS, () =>
+    Event.find({
+      state: { $nin: ["Draft", "Result Verification"] },
+    })
+      .sort({ releaseTime: -1 })
+      .lean(),
+  );
+}
+
+async function getOpenEvents() {
+  return cacheWrap("events:open", EVENTS_TTL_MS, async () => {
+    const now = new Date();
+    return Event.find({
+      state: "Registration Open",
+      $or: [
+        { registrationDeadline: { $exists: false } },
+        { registrationDeadline: { $gt: now } },
+      ],
+    })
+      .sort({ releaseTime: 1 })
+      .lean();
+  });
+}
+
+async function getAllEvents() {
+  return cacheWrap("events:all", EVENTS_TTL_MS, () =>
+    Event.find().sort({ releaseTime: -1 }).lean(),
+  );
+}
+
+async function getEventByCode(code) {
+  return cacheWrap(`event:${code}`, EVENTS_TTL_MS, () =>
+    Event.findOne({ code }).lean(),
+  );
+}
+
+async function getRegistrationsSummary() {
+  return cacheWrap("events:summary", DASHBOARD_TTL_MS, async () => {
+    const [raceCodeSummary, eventRegSummary] = await Promise.all([
+      RaceCode.aggregate([
+        {
+          $group: {
+            _id: "$eventId",
+            playerCount: { $addToSet: "$userId" },
+            pigeonIds: { $addToSet: "$pigeonId" },
+          },
+        },
+        {
+          $project: {
+            eventId: "$_id",
+            _id: 0,
+            playerCount: { $size: "$playerCount" },
+            pigeonCount: { $size: "$pigeonIds" },
+          },
+        },
+      ]),
+      EventRegistration.aggregate([
+        {
+          $unwind: {
+            path: "$pigeonIds",
+            preserveNullAndEmptyArrays: true,
+          },
+        },
+        {
+          $group: {
+            _id: "$eventId",
+            playerIds: { $addToSet: "$playerId" },
+            pigeonIds: { $addToSet: "$pigeonIds" },
+          },
+        },
+        {
+          $project: {
+            eventId: "$_id",
+            _id: 0,
+            playerCount: { $size: "$playerIds" },
+            pigeonCount: { $size: "$pigeonIds" },
+          },
+        },
+      ]),
+    ]);
+
+    const allEventIds = new Set([
+      ...raceCodeSummary.map((r) => r.eventId),
+      ...eventRegSummary.map((r) => r.eventId),
+    ]);
+
+    const result = [];
+    for (const eventId of allEventIds) {
+      const race = raceCodeSummary.find((r) => r.eventId === eventId);
+      const reg = eventRegSummary.find((r) => r.eventId === eventId);
+      result.push({
+        eventId,
+        playerCount: race ? race.playerCount : reg ? reg.playerCount : 0,
+        pigeonCount: race ? race.pigeonCount : reg ? reg.pigeonCount : 0,
+      });
+    }
+    return result;
+  });
+}
+
+async function getDashboardPayload() {
+  return cacheWrap("dashboard", DASHBOARD_TTL_MS, async () => {
+    const [activeEvents, openEvents, summary] = await Promise.all([
+      getActiveEvents(),
+      getOpenEvents(),
+      getRegistrationsSummary(),
+    ]);
+    return { activeEvents, openEvents, summary };
+  });
+}
 
 // ============================================================
 //  HELPERS
@@ -489,6 +706,7 @@ async function generateStickersForEvent(eventId) {
 
       await session.commitTransaction();
       session.endSession();
+      invalidateLiveCaches(eventId);
       return { generated: generatedCodes.length, codes: generatedCodes };
     } catch (error) {
       await session.abortTransaction();
@@ -549,32 +767,8 @@ async function computeTargetState(event, now) {
   return STATE_ORDER[finalIndex];
 }
 
-// ===== CACHED TIME WITH EXTERNAL SYNC =====
-let cachedServerTime = null;
-let timeCacheTimestamp = 0;
-
+// ===== SERVER TIME (official clock-in / state time) =====
 async function getCurrentTime() {
-  const now = Date.now();
-  if (cachedServerTime && now - timeCacheTimestamp < 60000) {
-    return new Date(cachedServerTime + (now - timeCacheTimestamp));
-  }
-  const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), 5000);
-  try {
-    const response = await fetch(
-      "https://worldtimeapi.org/api/timezone/Asia/Manila",
-      { signal: controller.signal },
-    );
-    clearTimeout(timeoutId);
-    if (response.ok) {
-      const data = await response.json();
-      cachedServerTime = new Date(data.dateTime).getTime();
-      timeCacheTimestamp = now;
-      return new Date(cachedServerTime + (now - timeCacheTimestamp));
-    }
-  } catch (e) {
-    // ignore timeout or network errors
-  }
   return new Date();
 }
 
@@ -586,9 +780,6 @@ async function updateAllEventStates() {
     let updatedCount = 0;
     for (const event of events) {
       const targetState = await computeTargetState(event, now);
-      console.log(
-        `📌 Event ${event.code} (${event.name}): current=${event.state}, target=${targetState}, release=${event.releaseTime.toISOString()}`,
-      );
       if (targetState !== event.state) {
         const currentIdx = getStateIndex(event.state);
         const targetIdx = getStateIndex(targetState);
@@ -621,6 +812,7 @@ async function updateAllEventStates() {
     }
     if (updatedCount > 0) {
       console.log(`🔄 Auto‑state updater: ${updatedCount} event(s) changed.`);
+      invalidateLiveCaches();
     }
   } catch (err) {
     console.error("❌ Error in automatic state updater:", err);
@@ -807,26 +999,22 @@ app.post("/api/login", loginLimiter, validateLogin, async (req, res) => {
   }
 });
 
-let timeApiFailed = false;
+app.get("/api/health", (req, res) => {
+  res.json({
+    ok: true,
+    db: mongoose.connection.readyState === 1,
+    time: new Date().toISOString(),
+  });
+});
+app.get("/health", (req, res) => {
+  res.json({
+    ok: true,
+    db: mongoose.connection.readyState === 1,
+    time: new Date().toISOString(),
+  });
+});
+
 app.get("/api/time", async (req, res) => {
-  res.setHeader("Cache-Control", "no-cache, no-store, must-revalidate");
-  res.setHeader("Pragma", "no-cache");
-  res.setHeader("Expires", "0");
-  try {
-    const response = await fetch(
-      "https://worldtimeapi.org/api/timezone/Asia/Manila",
-    );
-    if (response.ok) {
-      const data = await response.json();
-      timeApiFailed = false;
-      return res.json({ time: data.dateTime });
-    }
-  } catch (error) {
-    if (!timeApiFailed) {
-      console.warn("⚠️ External time API failed, falling back to server time.");
-      timeApiFailed = true;
-    }
-  }
   res.json({ time: new Date().toISOString() });
 });
 
@@ -835,12 +1023,19 @@ app.get("/api/time", async (req, res) => {
 // ============================================================
 app.use("/api", authenticateToken);
 
-// ----- Existing routes -----
+app.get("/api/dashboard", async (req, res) => {
+  try {
+    const payload = await getDashboardPayload();
+    res.json(payload);
+  } catch (error) {
+    console.error("Dashboard error:", error);
+    res.status(500).json({ error: "An internal error occurred." });
+  }
+});
+
 app.get("/api/events/active", async (req, res) => {
   try {
-    const events = await Event.find({
-      state: { $nin: ["Draft", "Result Verification"] },
-    }).sort({ releaseTime: -1 });
+    const events = await getActiveEvents();
     res.json(events);
   } catch (error) {
     console.error("Active events error:", error);
@@ -850,7 +1045,7 @@ app.get("/api/events/active", async (req, res) => {
 
 app.get("/api/events/all", async (req, res) => {
   try {
-    const events = await Event.find().sort({ releaseTime: -1 });
+    const events = await getAllEvents();
     res.json(events);
   } catch (error) {
     console.error("All events error:", error);
@@ -860,62 +1055,7 @@ app.get("/api/events/all", async (req, res) => {
 
 app.get("/api/events/registrations-summary", async (req, res) => {
   try {
-    const raceCodeSummary = await RaceCode.aggregate([
-      {
-        $group: {
-          _id: "$eventId",
-          playerCount: { $addToSet: "$userId" },
-          pigeonIds: { $addToSet: "$pigeonId" },
-        },
-      },
-      {
-        $project: {
-          eventId: "$_id",
-          playerCount: { $size: "$playerCount" },
-          pigeonCount: { $size: "$pigeonIds" },
-        },
-      },
-    ]);
-
-    const eventRegSummary = await EventRegistration.aggregate([
-      {
-        $group: {
-          _id: "$eventId",
-          playerIds: { $addToSet: "$playerId" },
-        },
-      },
-      {
-        $project: {
-          eventId: "$_id",
-          playerCount: { $size: "$playerIds" },
-        },
-      },
-    ]);
-
-    const allEventIds = new Set([
-      ...raceCodeSummary.map((r) => r.eventId),
-      ...eventRegSummary.map((r) => r.eventId),
-    ]);
-
-    const result = [];
-    for (const eventId of allEventIds) {
-      const race = raceCodeSummary.find((r) => r.eventId === eventId);
-      const reg = eventRegSummary.find((r) => r.eventId === eventId);
-
-      const playerCount = race ? race.playerCount : reg ? reg.playerCount : 0;
-      let pigeonCount = race ? race.pigeonCount : 0;
-      if (!race && reg) {
-        const regDocs = await EventRegistration.find({ eventId });
-        const allPigeonIds = regDocs.reduce((acc, doc) => {
-          doc.pigeonIds.forEach((pid) => acc.add(pid.toString()));
-          return acc;
-        }, new Set());
-        pigeonCount = allPigeonIds.size;
-      }
-
-      result.push({ eventId, playerCount, pigeonCount });
-    }
-
+    const result = await getRegistrationsSummary();
     res.json(result);
   } catch (error) {
     console.error("Registrations summary error:", error);
@@ -1212,6 +1352,7 @@ app.post(
 
       await session.commitTransaction();
       session.endSession();
+      invalidateLiveCaches(event.code);
 
       res.json({
         success: true,
@@ -1251,12 +1392,15 @@ app.post(
 // ============================================================
 app.get("/api/results/:eventCode", async (req, res) => {
   try {
-    const event = await Event.findOne({ code: req.params.eventCode });
-    if (!event) return res.json([]);
-    const results = await Result.find({ eventId: event.code })
-      .sort({ speedMPM: -1 })
-      .populate("pigeonId", "ringNumber nickname color gender avatarId")
-      .lean();
+    const eventCode = req.params.eventCode;
+    const results = await cacheWrap(`results:${eventCode}`, RESULTS_TTL_MS, async () => {
+      const event = await getEventByCode(eventCode);
+      if (!event) return [];
+      return Result.find({ eventId: event.code })
+        .sort({ speedMPM: -1 })
+        .populate("pigeonId", "ringNumber nickname color gender avatarId")
+        .lean();
+    });
     res.json(results);
   } catch (error) {
     console.error("Results error:", error);
@@ -1267,61 +1411,68 @@ app.get("/api/results/:eventCode", async (req, res) => {
 app.get("/api/results/:eventCode/pigeons", async (req, res) => {
   try {
     const { eventCode } = req.params;
-    const event = await Event.findOne({ code: eventCode });
-    if (!event) {
-      return res.status(404).json({ error: "Event not found." });
-    }
-    const pigeonResults = await Result.aggregate([
-      { $match: { eventId: event.code, pigeonId: { $ne: null } } },
-      {
-        $addFields: {
-          pigeonObjectId: {
-            $convert: {
-              input: "$pigeonId",
-              to: "objectId",
-              onError: null,
-              onNull: null,
+    const ranked = await cacheWrap(
+      `resultsPigeons:${eventCode}`,
+      RESULTS_TTL_MS,
+      async () => {
+        const event = await getEventByCode(eventCode);
+        if (!event) return null;
+        const pigeonResults = await Result.aggregate([
+          { $match: { eventId: event.code, pigeonId: { $ne: null } } },
+          {
+            $addFields: {
+              pigeonObjectId: {
+                $convert: {
+                  input: "$pigeonId",
+                  to: "objectId",
+                  onError: null,
+                  onNull: null,
+                },
+              },
             },
           },
-        },
+          {
+            $lookup: {
+              from: "pigeons",
+              localField: "pigeonObjectId",
+              foreignField: "_id",
+              as: "pigeon",
+            },
+          },
+          { $unwind: "$pigeon" },
+          {
+            $lookup: {
+              from: "users",
+              localField: "userId",
+              foreignField: "id",
+              as: "player",
+            },
+          },
+          { $unwind: "$player" },
+          {
+            $project: {
+              pigeonId: 1,
+              ringNumber: "$pigeon.ringNumber",
+              nickname: "$pigeon.nickname",
+              avatarId: "$pigeon.avatarId",
+              ownerName: "$player.name",
+              userId: 1,
+              speedMPM: 1,
+              distanceKm: 1,
+              arrivalTime: 1,
+              flightTimeHours: 1,
+              clockInNumber: 1,
+              clockInCode: 1,
+            },
+          },
+          { $sort: { speedMPM: -1 } },
+        ]);
+        return pigeonResults.map((r, index) => ({ ...r, rank: index + 1 }));
       },
-      {
-        $lookup: {
-          from: "pigeons",
-          localField: "pigeonObjectId",
-          foreignField: "_id",
-          as: "pigeon",
-        },
-      },
-      { $unwind: "$pigeon" },
-      {
-        $lookup: {
-          from: "users",
-          localField: "userId",
-          foreignField: "id",
-          as: "player",
-        },
-      },
-      { $unwind: "$player" },
-      {
-        $project: {
-          pigeonId: 1,
-          ringNumber: "$pigeon.ringNumber",
-          nickname: "$pigeon.nickname",
-          avatarId: "$pigeon.avatarId",
-          ownerName: "$player.name",
-          userId: 1,
-          speedMPM: 1,
-          distanceKm: 1,
-          arrivalTime: 1,
-          flightTimeHours: 1,
-          clockInNumber: 1,
-          clockInCode: 1,
-        },
-      },
-      { $sort: { speedMPM: -1 } },
-    ]);
-    const ranked = pigeonResults.map((r, index) => ({ ...r, rank: index + 1 }));
+    );
+    if (ranked === null) {
+      return res.status(404).json({ error: "Event not found." });
+    }
     res.json(ranked);
   } catch (error) {
     console.error("Pigeon results error:", error);
@@ -1331,7 +1482,7 @@ app.get("/api/results/:eventCode/pigeons", async (req, res) => {
 
 app.get("/api/logs", async (req, res) => {
   try {
-    const logs = await Log.find().sort({ _id: -1 }).limit(100);
+    const logs = await Log.find().sort({ _id: -1 }).limit(100).lean();
     res.json(logs);
   } catch (error) {
     console.error("Logs error:", error);
@@ -1344,7 +1495,9 @@ app.get("/api/logs", async (req, res) => {
 // ============================================================
 app.get("/api/users/players", requireAdmin, async (req, res) => {
   try {
-    const users = await User.find({ role: "player" }).select("-passwordHash");
+    const users = await User.find({ role: "player" })
+      .select("-passwordHash")
+      .lean();
     res.json(users);
   } catch (error) {
     console.error("Players error:", error);
@@ -1354,9 +1507,9 @@ app.get("/api/users/players", requireAdmin, async (req, res) => {
 
 app.get("/api/users/player/:id", async (req, res) => {
   try {
-    const user = await User.findOne({ id: req.params.id }).select(
-      "-passwordHash",
-    );
+    const user = await User.findOne({ id: req.params.id })
+      .select("-passwordHash")
+      .lean();
     if (!user) return res.status(404).json({ error: "Player not found" });
     res.json(user);
   } catch (error) {
@@ -1488,6 +1641,7 @@ app.delete("/api/events/:code", requireAdmin, async (req, res) => {
     await Log.create({
       message: `Admin deleted event ${event.name} (${code})`,
     });
+    invalidateLiveCaches(code);
     res.json({ success: true });
   } catch (error) {
     console.error("Event delete error:", error);
@@ -1547,6 +1701,7 @@ app.post(
       await Log.create({
         message: `Admin created event ${event.name} (${event.code})`,
       });
+      invalidateLiveCaches(event.code);
       res.json({ success: true, event });
     } catch (error) {
       console.error("Event creation error:", error);
@@ -1564,6 +1719,7 @@ app.put("/api/events/:code/toggle", requireAdmin, async (req, res) => {
     await Log.create({
       message: `Admin toggled event ${event.name} (${event.code}) to ${event.status}`,
     });
+    invalidateLiveCaches(event.code);
     res.json({ success: true, event });
   } catch (error) {
     console.error("Event toggle error:", error);
@@ -1635,7 +1791,8 @@ app.get("/api/pigeons", async (req, res) => {
       .select(
         "ringNumber nickname gender color birthYear photo avatarId status createdAt",
       )
-      .sort({ createdAt: -1 });
+      .sort({ createdAt: -1 })
+      .lean();
     res.json(pigeons);
   } catch (error) {
     console.error("Error fetching pigeons:", error);
@@ -1847,14 +2004,7 @@ async function validateRegistrationEligibility(
 
 app.get("/api/events/open", async (req, res) => {
   try {
-    const now = new Date();
-    const events = await Event.find({
-      state: "Registration Open",
-      $or: [
-        { registrationDeadline: { $exists: false } },
-        { registrationDeadline: { $gt: now } },
-      ],
-    }).sort({ releaseTime: 1 });
+    const events = await getOpenEvents();
     res.json(events);
   } catch (error) {
     console.error("Error fetching open events:", error);
@@ -2457,6 +2607,7 @@ app.put(
       await Log.create({
         message: `Admin changed state of event ${event.name} (${eventId}) to ${state}.`,
       });
+      invalidateLiveCaches(eventId);
       res.json({ success: true, event });
     } catch (error) {
       console.error("Error updating registration settings:", error);

@@ -143,8 +143,16 @@ function getAvatarPreviewHTML(avatar, size = 52) {
   return `<img src="${avatar.image}" alt="${avatar.name}" style="width:${size}px;height:${size}px;object-fit:cover;border-radius:50%;display:block;background:#f0ece8;">`;
 }
 
+const inflightGets = new Map();
+const LIVE_POLL_MS = 20000;
+const BACKGROUND_POLL_MS = 60000;
+
 function fetchWithAuth(url, options = {}) {
   const token = sessionStorage.getItem("wingsync_token");
+  const method = (options.method || "GET").toUpperCase();
+  if (method === "GET" && inflightGets.has(url)) {
+    return inflightGets.get(url);
+  }
   const headers = {
     "Content-Type": "application/json",
     ...options.headers,
@@ -152,7 +160,7 @@ function fetchWithAuth(url, options = {}) {
   if (token) {
     headers["Authorization"] = `Bearer ${token}`;
   }
-  return fetch(url, {
+  const request = fetch(url, {
     ...options,
     headers,
   }).then((res) => {
@@ -162,8 +170,18 @@ function fetchWithAuth(url, options = {}) {
       window.location.reload();
       throw new Error("Session expired. Please log in again.");
     }
+    if (res.status === 429) {
+      console.warn("Rate limited:", url);
+    }
     return res;
   });
+  if (method === "GET") {
+    inflightGets.set(url, request);
+    request.finally(() => {
+      if (inflightGets.get(url) === request) inflightGets.delete(url);
+    });
+  }
+  return request;
 }
 
 function formatFlightHours(hours) {
@@ -446,6 +464,8 @@ const app = {
   clockIntervalId: null,
   _lastEventsFetch: 0,
   _isRendering: false,
+  _dashboardLoading: false,
+  _eventsInFlight: null,
 
   _profileStatsInterval: null,
   _pigeonRefreshInterval: null,
@@ -461,7 +481,10 @@ const app = {
     this.loadTheme();
     this.setupVisibilityListener();
     this.syncServerTime();
-    setInterval(() => this.syncServerTime(), 30000);
+    setInterval(() => {
+      if (document.hidden) return;
+      this.syncServerTime();
+    }, BACKGROUND_POLL_MS);
 
     const path = window.location.pathname;
     if (path.startsWith("/verify/")) {
@@ -1720,7 +1743,7 @@ const app = {
       if (certView && !certView.classList.contains("hidden")) {
         this.loadAdminCertificates();
       }
-      this.fetchAllEvents();
+      this.fetchAllEvents(true);
     } catch (err) {
       console.error("Certificate generation error:", err);
       this.showModal({
@@ -2113,13 +2136,14 @@ const app = {
       if (this._adminCertRefreshInterval)
         clearInterval(this._adminCertRefreshInterval);
       this._adminCertRefreshInterval = setInterval(() => {
+        if (document.hidden) return;
         const currentView = document.querySelector(
           ".view-section:not(.hidden)",
         );
         if (currentView && currentView.id === "view-admin-certificates") {
           this.loadAdminCertificates();
         }
-      }, 60000);
+      }, BACKGROUND_POLL_MS);
     } else {
       adminEls.forEach((el) => el.classList.add("hidden"));
       playerEls.forEach((el) => el.classList.remove("hidden"));
@@ -2137,7 +2161,7 @@ const app = {
 
     this.navigate("dashboard");
     this.loadProfile();
-    this.fetchAllEvents();
+    this.fetchAllEvents(true);
 
     if (this.currentUser.role === "admin") {
       this.loadAdminStats();
@@ -2145,8 +2169,17 @@ const app = {
     }
   },
 
-  fetchAllEvents() {
-    return fetchWithAuth(`${API_URL}/events/all`)
+  fetchAllEvents(force = false) {
+    if (!force && this._eventsInFlight) return this._eventsInFlight;
+    if (
+      !force &&
+      Array.isArray(this.allEvents) &&
+      this.allEvents.length &&
+      Date.now() - this._lastEventsFetch < LIVE_POLL_MS
+    ) {
+      return Promise.resolve(this.allEvents);
+    }
+    this._eventsInFlight = fetchWithAuth(`${API_URL}/events/all`)
       .then((res) => {
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         return res.json();
@@ -2162,12 +2195,17 @@ const app = {
         this.populateReviewSelector();
         this.populateStickerSelector(events);
         this._populateAdminCertEventFilter();
+        return events;
       })
       .catch((err) => {
         console.error("Failed to fetch events for lookup:", err);
         this.allEvents = [];
         this.eventLookup = {};
+      })
+      .finally(() => {
+        this._eventsInFlight = null;
       });
+    return this._eventsInFlight;
   },
 
   fetchRegistrationCounts() {
@@ -2228,6 +2266,7 @@ const app = {
       if (this.currentUser.role === "player") {
         this.loadPlayerStats();
         this._profileStatsInterval = setInterval(() => {
+          if (document.hidden) return;
           const currentView = document.querySelector(
             ".view-section:not(.hidden)",
           );
@@ -2237,10 +2276,11 @@ const app = {
             clearInterval(this._profileStatsInterval);
             this._profileStatsInterval = null;
           }
-        }, 30000);
+        }, BACKGROUND_POLL_MS);
       } else {
         this.loadAdminStats();
         this._adminStatsInterval = setInterval(() => {
+          if (document.hidden) return;
           const currentView = document.querySelector(
             ".view-section:not(.hidden)",
           );
@@ -2250,12 +2290,13 @@ const app = {
             clearInterval(this._adminStatsInterval);
             this._adminStatsInterval = null;
           }
-        }, 30000);
+        }, BACKGROUND_POLL_MS);
       }
     }
     if (view === "pigeons") {
       this.loadPigeons();
       this._pigeonRefreshInterval = setInterval(() => {
+        if (document.hidden) return;
         const currentView = document.querySelector(
           ".view-section:not(.hidden)",
         );
@@ -2265,7 +2306,7 @@ const app = {
           clearInterval(this._pigeonRefreshInterval);
           this._pigeonRefreshInterval = null;
         }
-      }, 30000);
+      }, BACKGROUND_POLL_MS);
     }
     if (view === "entries") {
       this.loadOpenEvents();
@@ -2320,6 +2361,7 @@ const app = {
   startAutoRefresh() {
     if (this.refreshIntervalId) clearInterval(this.refreshIntervalId);
     this.refreshIntervalId = setInterval(() => {
+      if (document.hidden) return;
       const currentView = document.querySelector(".view-section:not(.hidden)");
       if (currentView) {
         const id = currentView.id;
@@ -2329,7 +2371,7 @@ const app = {
           this.renderDashboard();
         }
       }
-    }, 5000);
+    }, LIVE_POLL_MS);
   },
 
   stopAutoRefresh() {
@@ -2340,21 +2382,17 @@ const app = {
   },
 
   renderDashboard() {
-    Promise.all([
-      fetchWithAuth(`${API_URL}/events/active`).then((res) => {
+    if (this._dashboardLoading) return;
+    this._dashboardLoading = true;
+    fetchWithAuth(`${API_URL}/dashboard`)
+      .then((res) => {
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         return res.json();
-      }),
-      fetchWithAuth(`${API_URL}/events/open`).then((res) => {
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        return res.json();
-      }),
-      fetchWithAuth(`${API_URL}/events/registrations-summary`).then((res) => {
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        return res.json();
-      }),
-    ])
-      .then(([activeEvents, openEvents, summary]) => {
+      })
+      .then((payload) => {
+        let activeEvents = payload.activeEvents;
+        let openEvents = payload.openEvents;
+        let summary = payload.summary;
         if (!Array.isArray(activeEvents)) activeEvents = [];
         if (!Array.isArray(openEvents)) openEvents = [];
         if (!Array.isArray(summary)) summary = [];
@@ -2453,6 +2491,9 @@ const app = {
         console.error("Dashboard error:", err);
         const table = document.querySelector("#active-events-table");
         table.innerHTML = `<tbody><tr><td colspan="5" style="text-align:center; color:#999; padding:20px;">Could not load events. Please refresh.</td></tr></tbody>`;
+      })
+      .finally(() => {
+        this._dashboardLoading = false;
       });
   },
 
@@ -2793,7 +2834,7 @@ const app = {
       }
 
       if (!this.eventLookup[this.selectedEventCode]) {
-        await this.fetchAllEvents();
+        await this.fetchAllEvents(true);
         if (!this.eventLookup[this.selectedEventCode]) {
           this.selectedEventCode = null;
           tbody.innerHTML = "";
@@ -3987,7 +4028,7 @@ const app = {
           this.closeModal("modal-manage-registration");
           this.renderEvents();
           this.renderDashboard();
-          this.fetchAllEvents();
+          this.fetchAllEvents(true);
           this.showModal({
             title: "✅ Registration Settings Updated",
             message: `Event state: ${data.event.state}`,
@@ -4020,7 +4061,7 @@ const app = {
         if (data.success) {
           this.renderEvents();
           this.renderDashboard();
-          this.fetchAllEvents();
+          this.fetchAllEvents(true);
           this.showModal({
             title: "🔄 Event Updated",
             message: `Event status changed to ${data.event.status}.`,
@@ -4059,7 +4100,7 @@ const app = {
         if (data.success) {
           this.renderEvents();
           this.renderDashboard();
-          this.fetchAllEvents();
+          this.fetchAllEvents(true);
           this.showModal({
             title: "Event Deleted",
             message: "Event has been removed.",
@@ -4180,7 +4221,7 @@ const app = {
           this.renderEvents();
           this.renderDashboard();
           this.clearEventSelection();
-          this.fetchAllEvents();
+          this.fetchAllEvents(true);
           this.showModal({
             title: "✅ Event Created",
             message: `Event Created: ${data.event.name}\n📍 ${data.event.lat.toFixed(6)}, ${data.event.lng.toFixed(6)}`,
