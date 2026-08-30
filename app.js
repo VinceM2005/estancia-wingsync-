@@ -1133,16 +1133,6 @@ const app = {
       ctx.lineWidth = 1.0;
       ctx.strokeRect(0, 0, widthPx, heightPx);
 
-      ctx.strokeStyle = "#c9a84c";
-      ctx.lineWidth = 0.8;
-      ctx.setLineDash([]);
-      ctx.strokeRect(
-        marginPx,
-        marginPx,
-        scratchWidthPx - marginPx,
-        topHeightPx - marginPx,
-      );
-
       return canvas;
     };
 
@@ -1209,29 +1199,30 @@ const app = {
         const img = document.createElement("img");
         img.src = dataUrl;
         img.alt = `Sticker ${data.code} · ${data.ringNumber || "NO-RING"}`;
-        img.style.width = "100%";
-        img.style.height = "auto";
-        img.style.borderRadius = "3px";
+        img.className = "sticker-preview-img";
         wrapper.appendChild(img);
+
+        const meta = document.createElement("div");
+        meta.className = "sticker-preview-meta";
 
         const playerDiv = document.createElement("div");
         playerDiv.className = "sticker-player";
-        playerDiv.textContent = data.playerName;
-        wrapper.appendChild(playerDiv);
+        playerDiv.textContent = data.playerName || "Player";
+        meta.appendChild(playerDiv);
 
         const ringDiv = document.createElement("div");
         ringDiv.className = "sticker-ring";
-        ringDiv.style.cssText =
-          "font-weight:700;font-size:12px;color:#0a3d30;margin-top:2px;";
         ringDiv.textContent = data.ringNumber
           ? `Ring: ${data.ringNumber}${data.nickname ? ` (${data.nickname})` : ""}`
           : "Ring: — missing —";
-        wrapper.appendChild(ringDiv);
+        meta.appendChild(ringDiv);
 
         const codeDiv = document.createElement("div");
         codeDiv.className = "sticker-label";
         codeDiv.textContent = `Code: ${data.code}`;
-        wrapper.appendChild(codeDiv);
+        meta.appendChild(codeDiv);
+
+        wrapper.appendChild(meta);
 
         grid.appendChild(wrapper);
       }
