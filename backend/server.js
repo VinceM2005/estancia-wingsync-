@@ -756,8 +756,8 @@ async function computeTargetState(event, now) {
     targetIndex = Math.max(targetIndex, getStateIndex("Live Race"));
   }
 
-  const sixHoursAfter = new Date(releaseTime.getTime() + 6 * 60 * 60 * 1000);
-  if (now >= sixHoursAfter) {
+  const twelveHoursAfter = new Date(releaseTime.getTime() + 12 * 60 * 60 * 1000);
+  if (now >= twelveHoursAfter) {
     targetIndex = Math.max(targetIndex, getStateIndex("Result Verification"));
   }
 
