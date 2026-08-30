@@ -2957,6 +2957,7 @@ const app = {
         tr.appendChild(td);
         tbody.appendChild(tr);
         this.clearAnalyticsSections();
+        await this.renderSpeedForecast(this.selectedEventCode);
         this._isRendering = false;
         return;
       }
@@ -3036,15 +3037,6 @@ const app = {
               a.arrivalTime > b.arrivalTime ? a : b,
             )
           : null;
-      const longestDist =
-        safeResults.length > 0
-          ? safeResults.reduce((a, b) => (a.distanceKm > b.distanceKm ? a : b))
-          : null;
-      const closestFinish =
-        safeResults.length > 1
-          ? safeResults[0].speedMPM - safeResults[1].speedMPM
-          : 0;
-      const highestSpeed = fastest;
 
       document.getElementById("hl-fastest-bird").textContent = fastest
         ? `${fastest.userName} (${fastest.speedMPM.toFixed(2)} m/min)`
@@ -3055,13 +3047,8 @@ const app = {
       document.getElementById("hl-last-arrival").textContent = lastArrival
         ? `${lastArrival.userName} (${lastArrival.arrivalTime.toLocaleTimeString()})`
         : "—";
-      document.getElementById("hl-longest-dist").innerHTML =
-        '— <span class="unit">km</span>';
-      document.getElementById("hl-closest-finish").textContent =
-        closestFinish > 0 ? `${closestFinish.toFixed(2)} m/min` : "—";
-      document.getElementById("hl-highest-speed").innerHTML = highestSpeed
-        ? `${highestSpeed.speedMPM.toFixed(2)} <span class="unit">m/min</span>`
-        : '— <span class="unit">m/min</span>';
+
+      await this.renderSpeedForecast(this.selectedEventCode);
 
       safeResults.forEach((r, i) => {
         const tr = document.createElement("tr");
@@ -3179,11 +3166,70 @@ const app = {
     document.getElementById("hl-fastest-bird").textContent = "—";
     document.getElementById("hl-first-arrival").textContent = "—";
     document.getElementById("hl-last-arrival").textContent = "—";
-    document.getElementById("hl-longest-dist").innerHTML =
-      '— <span class="unit">km</span>';
-    document.getElementById("hl-closest-finish").textContent = "—";
-    document.getElementById("hl-highest-speed").innerHTML =
-      '— <span class="unit">m/min</span>';
+    const forecastMeta = document.getElementById("speed-forecast-meta");
+    const forecastList = document.getElementById("speed-forecast-list");
+    if (forecastMeta) forecastMeta.textContent = "—";
+    if (forecastList) {
+      forecastList.innerHTML =
+        '<div class="speed-forecast-empty">Select an event.</div>';
+    }
+  },
+
+  async renderSpeedForecast(eventCode) {
+    const meta = document.getElementById("speed-forecast-meta");
+    const list = document.getElementById("speed-forecast-list");
+    if (!meta || !list) return;
+    if (!eventCode) {
+      meta.textContent = "—";
+      list.innerHTML =
+        '<div class="speed-forecast-empty">Select an event.</div>';
+      return;
+    }
+    try {
+      const res = await fetchWithAuth(
+        `${API_URL}/results/${eventCode}/forecast`,
+      );
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const data = await res.json();
+      const elapsedMin = Number(data.elapsedMinutes) || 0;
+      if (!data.released) {
+        meta.textContent = "Waiting for release";
+      } else {
+        meta.textContent = `Elapsed ${formatFlightHours(elapsedMin / 60)}`;
+      }
+      const players = Array.isArray(data.players) ? data.players : [];
+      if (players.length === 0) {
+        list.innerHTML =
+          '<div class="speed-forecast-empty">No joined players yet.</div>';
+        return;
+      }
+      list.innerHTML = players
+        .map((p, i) => {
+          const dist =
+            p.distanceKm == null
+              ? "—"
+              : `${Number(p.distanceKm).toFixed(2)} km`;
+          const speed =
+            p.forecastSpeedMpm == null
+              ? "—"
+              : `${Number(p.forecastSpeedMpm).toFixed(2)}`;
+          const clocked = p.clocked
+            ? '<span class="speed-forecast-tag">Clocked</span>'
+            : "";
+          return `<div class="speed-forecast-row">
+            <span class="speed-forecast-rank">${i + 1}</span>
+            <span class="speed-forecast-name">${escapeHtml(p.userName || p.userId)}${clocked}</span>
+            <span class="speed-forecast-dist">${dist}</span>
+            <span class="speed-forecast-speed">${speed} <small>m/min</small></span>
+          </div>`;
+        })
+        .join("");
+    } catch (err) {
+      console.warn("Speed forecast failed:", err);
+      meta.textContent = "—";
+      list.innerHTML =
+        '<div class="speed-forecast-empty">Could not load forecast.</div>';
+    }
   },
 
   renderLogs() {

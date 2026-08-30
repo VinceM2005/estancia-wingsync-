@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Wingsync - Pigeon Clocking System</title>
     <link rel="manifest" href="manifest.json" />
-    <link rel="stylesheet" href="style.css?v=23" />
+    <link rel="stylesheet" href="style.css?v=24" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="mobile-web-app-capable" content="yes" />
     <meta
@@ -44,7 +44,7 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
 
-    <link rel="stylesheet" href="style.css?v=23" />
+    <link rel="stylesheet" href="style.css?v=24" />
     <style>
       /* ===== ADDITIONAL STYLES FOR UI COMPONENTS ===== */
       .pigeons-grid {
@@ -1404,73 +1404,23 @@
                     <div class="highlight-value" id="hl-last-arrival">—</div>
                   </div>
                 </div>
-                <div class="highlight-item">
-                  <div class="highlight-icon">
-                    <svg
-                      width="20"
-                      height="20"
-                      viewBox="0 0 24 24"
-                      fill="none"
-                      stroke="currentColor"
-                      stroke-width="2"
-                    >
-                      <path
-                        d="M12 22c5.523 0 10-4.477 10-10S17.523 2 12 2 2 6.477 2 12s4.477 10 10 10z"
-                      />
-                      <path d="M12 8v8" />
-                      <path d="M8 12h8" />
-                    </svg>
+              </div>
+
+              <div class="speed-forecast" id="speed-forecast">
+                <div class="speed-forecast-header">
+                  <div>
+                    <p class="speed-forecast-kicker">Per player</p>
+                    <h3 class="speed-forecast-title">Speed Forecast</h3>
                   </div>
-                  <div class="highlight-content">
-                    <div class="highlight-label">Longest Distance</div>
-                    <div class="highlight-value" id="hl-longest-dist">
-                      — <span class="unit">km</span>
-                    </div>
-                  </div>
+                  <p class="speed-forecast-meta" id="speed-forecast-meta">—</p>
                 </div>
-                <div class="highlight-item">
-                  <div class="highlight-icon">
-                    <svg
-                      width="20"
-                      height="20"
-                      viewBox="0 0 24 24"
-                      fill="none"
-                      stroke="currentColor"
-                      stroke-width="2"
-                    >
-                      <path d="M3 3l18 18" />
-                      <path d="M18 3l3 3" />
-                      <path d="M9 21l-3-3" />
-                      <path d="M3 6h3v3" />
-                      <path d="M21 18h-3v-3" />
-                    </svg>
-                  </div>
-                  <div class="highlight-content">
-                    <div class="highlight-label">Closest Finish</div>
-                    <div class="highlight-value" id="hl-closest-finish">—</div>
-                  </div>
-                </div>
-                <div class="highlight-item">
-                  <div class="highlight-icon">
-                    <svg
-                      width="20"
-                      height="20"
-                      viewBox="0 0 24 24"
-                      fill="none"
-                      stroke="currentColor"
-                      stroke-width="2"
-                    >
-                      <polygon
-                        points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"
-                      />
-                    </svg>
-                  </div>
-                  <div class="highlight-content">
-                    <div class="highlight-label">Highest Speed</div>
-                    <div class="highlight-value" id="hl-highest-speed">
-                      — <span class="unit">m/min</span>
-                    </div>
-                  </div>
+                <p class="speed-forecast-hint">
+                  Live speed if a bird arrived now: air distance from the
+                  release point to the loft, divided by time since release
+                  (m/min).
+                </p>
+                <div class="speed-forecast-list" id="speed-forecast-list">
+                  <div class="speed-forecast-empty">Select an event.</div>
                 </div>
               </div>
 

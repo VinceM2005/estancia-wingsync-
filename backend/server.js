@@ -1390,6 +1390,79 @@ app.post(
 // ============================================================
 //  RESULTS
 // ============================================================
+app.get("/api/results/:eventCode/forecast", async (req, res) => {
+  try {
+    const event = await getEventByCode(req.params.eventCode);
+    if (!event) {
+      return res.status(404).json({ error: "Event not found." });
+    }
+
+    const now = new Date();
+    const releaseTime = new Date(event.releaseTime);
+    const elapsedMinutes = (now.getTime() - releaseTime.getTime()) / 60000;
+
+    const regs = await EventRegistration.find({
+      eventId: event.code,
+      status: { $in: ["confirmed", "locked"] },
+    })
+      .select("playerId")
+      .lean();
+    const playerIds = [...new Set(regs.map((r) => r.playerId))];
+
+    const [users, clockedRows] = await Promise.all([
+      User.find({ id: { $in: playerIds } })
+        .select("id name lat lng")
+        .lean(),
+      Result.find({ eventId: event.code }).select("userId").lean(),
+    ]);
+    const clockedIds = new Set(clockedRows.map((r) => r.userId));
+
+    const players = users
+      .map((u) => {
+        let distanceKm = null;
+        if (
+          typeof u.lat === "number" &&
+          typeof u.lng === "number" &&
+          typeof event.lat === "number" &&
+          typeof event.lng === "number"
+        ) {
+          try {
+            distanceKm = calculateDistance(event.lat, event.lng, u.lat, u.lng);
+          } catch (_) {
+            distanceKm = null;
+          }
+        }
+        let forecastSpeedMpm = null;
+        if (distanceKm != null && elapsedMinutes > 0) {
+          forecastSpeedMpm = (distanceKm * 1000) / elapsedMinutes;
+        }
+        return {
+          userId: u.id,
+          userName: u.name,
+          distanceKm,
+          forecastSpeedMpm,
+          clocked: clockedIds.has(u.id),
+        };
+      })
+      .sort((a, b) => {
+        const as = a.forecastSpeedMpm == null ? -1 : a.forecastSpeedMpm;
+        const bs = b.forecastSpeedMpm == null ? -1 : b.forecastSpeedMpm;
+        return bs - as;
+      });
+
+    res.json({
+      eventCode: event.code,
+      releaseTime: event.releaseTime,
+      elapsedMinutes,
+      released: elapsedMinutes > 0,
+      players,
+    });
+  } catch (error) {
+    console.error("Speed forecast error:", error);
+    res.status(500).json({ error: "Failed to load speed forecast." });
+  }
+});
+
 app.get("/api/results/:eventCode", async (req, res) => {
   try {
     const eventCode = req.params.eventCode;

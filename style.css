@@ -4123,3 +4123,139 @@ tr:hover td {
     font-size: 20px;
   }
 }
+
+/* ===== SPEED FORECAST (results analytics) ===== */
+.speed-forecast {
+  margin: 0 0 24px;
+  padding: 16px 18px 12px;
+  background: var(--card-bg);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+}
+
+.speed-forecast-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.speed-forecast-kicker {
+  margin: 0 0 2px;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--primary);
+}
+
+.speed-forecast-title {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 800;
+  letter-spacing: -0.03em;
+  color: var(--text);
+}
+
+.speed-forecast-meta {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+
+.speed-forecast-hint {
+  margin: 8px 0 12px;
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--text-muted);
+}
+
+.speed-forecast-list {
+  display: flex;
+  flex-direction: column;
+  max-height: 320px;
+  overflow: auto;
+}
+
+.speed-forecast-row {
+  display: grid;
+  grid-template-columns: 28px minmax(0, 1.4fr) 90px 110px;
+  gap: 8px;
+  align-items: center;
+  padding: 8px 4px;
+  border-top: 1px solid var(--border);
+  font-size: 13px;
+}
+
+.speed-forecast-rank {
+  font-weight: 800;
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.speed-forecast-name {
+  font-weight: 700;
+  color: var(--text);
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.speed-forecast-tag {
+  display: inline-block;
+  margin-left: 8px;
+  padding: 1px 7px;
+  border-radius: 999px;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--primary-dark);
+  background: rgba(42, 122, 98, 0.12);
+  vertical-align: middle;
+}
+
+.speed-forecast-dist,
+.speed-forecast-speed {
+  text-align: right;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  color: var(--text);
+}
+
+.speed-forecast-speed small {
+  font-weight: 600;
+  color: var(--text-muted);
+}
+
+.speed-forecast-empty {
+  padding: 16px 8px;
+  text-align: center;
+  color: var(--text-muted);
+  font-size: 13px;
+}
+
+@media (max-width: 640px) {
+  .speed-forecast-row {
+    grid-template-columns: 24px minmax(0, 1fr) 1fr;
+    grid-template-areas:
+      "rank name name"
+      "rank dist speed";
+  }
+  .speed-forecast-rank {
+    grid-area: rank;
+  }
+  .speed-forecast-name {
+    grid-area: name;
+  }
+  .speed-forecast-dist {
+    grid-area: dist;
+    text-align: left;
+  }
+  .speed-forecast-speed {
+    grid-area: speed;
+  }
+}
