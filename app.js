@@ -2057,13 +2057,11 @@ const app = {
       : this.getServerTime();
     const distanceKm = Number(data.distance ?? result.distanceKm);
     const speedMpm = Number(data.speed ?? result.speedMPM);
-    const speedKph = Number(result.speedKPH);
     const flightHours = Number(result.flightTimeHours);
     const hasFlight = Number.isFinite(flightHours) && flightHours >= 0;
     const eventName = data.eventName || result.eventId || "Event";
     const eventCode = result.eventId || "";
     const stickerCode = data.stickerCode || result.clockInCode || "—";
-    const clockNo = result.clockInNumber;
     const ringNumber = pigeon.ringNumber || "—";
     const nickname = (pigeon.nickname || "").trim();
     const playerName =
@@ -2085,11 +2083,8 @@ const app = {
     const distanceLabel = Number.isFinite(distanceKm)
       ? distanceKm.toFixed(2)
       : "—";
-    const speedLabel = Number.isFinite(speedMpm) ? speedMpm.toFixed(1) : "—";
-    const kphLabel = Number.isFinite(speedKph) ? speedKph.toFixed(2) : "—";
+    const speedLabel = Number.isFinite(speedMpm) ? speedMpm.toFixed(2) : "—";
     const flightLabel = hasFlight ? formatFlightHours(flightHours) : "—";
-    const clockNoLabel =
-      clockNo != null && clockNo !== "" ? String(clockNo) : "—";
 
     const modal = document.createElement("div");
     modal.id = "custom-modal";
@@ -2128,9 +2123,7 @@ const app = {
         </div>
         <dl class="clockin-details">
           <div><dt>Sticker</dt><dd>${escapeHtml(stickerCode)}</dd></div>
-          <div><dt>Clock-in</dt><dd>#${escapeHtml(clockNoLabel)}</dd></div>
           <div><dt>Event</dt><dd>${escapeHtml(eventCode || "—")}</dd></div>
-          <div><dt>Speed</dt><dd>${escapeHtml(kphLabel)} km/h</dd></div>
         </dl>
         <button type="button" class="clockin-done">Done</button>
       </div>

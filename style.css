@@ -3644,7 +3644,7 @@ tr:hover td {
   color: var(--text-muted);
 }
 
-/* ===== CLOCK-IN SUCCESS (Strava-style activity card) ===== */
+/* ===== CLOCK-IN SUCCESS (WingSync activity card) ===== */
 @keyframes customFadeIn {
   from { opacity: 0; }
   to { opacity: 1; }
@@ -3698,7 +3698,7 @@ tr:hover td {
 
 .clockin-hero {
   padding: 22px 22px 18px;
-  background: linear-gradient(160deg, #fc4c02 0%, #e34402 55%, #c73700 100%);
+  background: linear-gradient(160deg, #2a7a62 0%, #1d5f4c 55%, #0a3d30 100%);
   color: #fff;
 }
 
@@ -3742,7 +3742,7 @@ tr:hover td {
   overflow: hidden;
   background: #f0ece8;
   border: 2px solid #fff;
-  box-shadow: 0 0 0 2px #fc4c02;
+  box-shadow: 0 0 0 2px #2a7a62;
 }
 
 .clockin-avatar img,
@@ -3850,7 +3850,7 @@ tr:hover td {
   padding: 13px 16px;
   border: none;
   border-radius: 8px;
-  background: #fc4c02;
+  background: #2a7a62;
   color: #fff;
   font-size: 15px;
   font-weight: 800;
@@ -3859,7 +3859,7 @@ tr:hover td {
 }
 
 .clockin-done:hover {
-  background: #e34402;
+  background: #1d5f4c;
 }
 
 .clockin-done:active {
