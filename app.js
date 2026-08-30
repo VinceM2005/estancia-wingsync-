@@ -1023,6 +1023,17 @@ const app = {
       });
     };
 
+    const roundRectPath = (ctx, x, y, w, h, r) => {
+      const radius = Math.max(0, Math.min(r, w / 2, h / 2));
+      ctx.beginPath();
+      ctx.moveTo(x + radius, y);
+      ctx.arcTo(x + w, y, x + w, y + h, radius);
+      ctx.arcTo(x + w, y + h, x, y + h, radius);
+      ctx.arcTo(x, y + h, x, y, radius);
+      ctx.arcTo(x, y, x + w, y, radius);
+      ctx.closePath();
+    };
+
     const renderStickerCanvas = async (
       eventName,
       playerName,
@@ -1039,6 +1050,9 @@ const app = {
       canvas.width = widthPx;
       canvas.height = heightPx;
       const ctx = canvas.getContext("2d");
+      const borderWidth = 1.2;
+      const inset = borderWidth / 2;
+      const cornerRadiusPx = Math.round((1.8 / 25.4) * dpi);
 
       ctx.fillStyle = "#ffffff";
       ctx.fillRect(0, 0, widthPx, heightPx);
@@ -1130,8 +1144,16 @@ const app = {
       ctx.fillText(playerLabel, rightX, centerY);
 
       ctx.strokeStyle = "#000000";
-      ctx.lineWidth = 1.0;
-      ctx.strokeRect(0, 0, widthPx, heightPx);
+      ctx.lineWidth = borderWidth;
+      roundRectPath(
+        ctx,
+        inset,
+        inset,
+        widthPx - inset * 2,
+        heightPx - inset * 2,
+        cornerRadiusPx,
+      );
+      ctx.stroke();
 
       return canvas;
     };
@@ -1201,7 +1223,7 @@ const app = {
         img.alt = `Sticker ${data.code} · ${data.ringNumber || "NO-RING"}`;
         img.style.width = "100%";
         img.style.height = "auto";
-        img.style.borderRadius = "3px";
+        img.style.borderRadius = "8px";
         wrapper.appendChild(img);
 
         const playerDiv = document.createElement("div");
