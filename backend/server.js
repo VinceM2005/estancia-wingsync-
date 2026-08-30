@@ -466,7 +466,7 @@ async function getRegistrationsSummary() {
           $group: {
             _id: "$eventId",
             playerCount: { $addToSet: "$userId" },
-            pigeonIds: { $addToSet: "$pigeonId" },
+            pigeonCount: { $sum: 1 },
           },
         },
         {
@@ -474,22 +474,31 @@ async function getRegistrationsSummary() {
             eventId: "$_id",
             _id: 0,
             playerCount: { $size: "$playerCount" },
-            pigeonCount: { $size: "$pigeonIds" },
+            pigeonCount: 1,
           },
         },
       ]),
       EventRegistration.aggregate([
         {
-          $unwind: {
-            path: "$pigeonIds",
-            preserveNullAndEmptyArrays: true,
+          $project: {
+            eventId: 1,
+            playerId: 1,
+            pigeonIds: {
+              $filter: {
+                input: { $ifNull: ["$pigeonIds", []] },
+                as: "pid",
+                cond: {
+                  $and: [{ $ne: ["$$pid", null] }, { $ne: ["$$pid", ""] }],
+                },
+              },
+            },
           },
         },
         {
           $group: {
             _id: "$eventId",
             playerIds: { $addToSet: "$playerId" },
-            pigeonIds: { $addToSet: "$pigeonIds" },
+            pigeonCount: { $sum: { $size: "$pigeonIds" } },
           },
         },
         {
@@ -497,7 +506,7 @@ async function getRegistrationsSummary() {
             eventId: "$_id",
             _id: 0,
             playerCount: { $size: "$playerIds" },
-            pigeonCount: { $size: "$pigeonIds" },
+            pigeonCount: 1,
           },
         },
       ]),
@@ -541,6 +550,12 @@ async function hashPassword(plain) {
   return bcrypt.hash(plain, saltRounds);
 }
 
+function roundRace(n, digits = 4) {
+  const num = Number(n);
+  if (!Number.isFinite(num)) return null;
+  return parseFloat(num.toFixed(digits));
+}
+
 function calculateDistance(lat1, lon1, lat2, lon2) {
   if (
     typeof lat1 !== "number" ||
@@ -562,6 +577,90 @@ function calculateDistance(lat1, lon1, lat2, lon2) {
       Math.cos(lat2Rad);
   const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
   return R * c;
+}
+
+async function loadResultsWithPigeons(eventCode) {
+  const rows = await Result.aggregate([
+    { $match: { eventId: eventCode } },
+    {
+      $addFields: {
+        pigeonObjectId: {
+          $convert: {
+            input: "$pigeonId",
+            to: "objectId",
+            onError: null,
+            onNull: null,
+          },
+        },
+      },
+    },
+    {
+      $lookup: {
+        from: "pigeons",
+        localField: "pigeonObjectId",
+        foreignField: "_id",
+        as: "pigeonDoc",
+      },
+    },
+    { $sort: { speedMPM: -1 } },
+  ]);
+  return rows.map((r) => {
+    const p = r.pigeonDoc && r.pigeonDoc[0];
+    return {
+      _id: r._id,
+      eventId: r.eventId,
+      userId: r.userId,
+      userName: r.userName,
+      clockInNumber: r.clockInNumber,
+      clockInCode: r.clockInCode,
+      distanceKm: r.distanceKm,
+      arrivalTime: r.arrivalTime,
+      flightTimeHours: r.flightTimeHours,
+      speedKPH: r.speedKPH,
+      speedMPM: r.speedMPM,
+      pigeonId: p
+        ? {
+            _id: p._id,
+            ringNumber: p.ringNumber,
+            nickname: p.nickname || "",
+            color: p.color,
+            gender: p.gender,
+            avatarId: p.avatarId || "",
+          }
+        : null,
+      registrationId: r.registrationId,
+    };
+  });
+}
+
+async function hydrateCertificatePigeons(certs) {
+  const isArray = Array.isArray(certs);
+  const list = isArray ? certs : [certs];
+  const ids = [];
+  for (const c of list) {
+    if (!c || c.pigeonId == null) continue;
+    if (typeof c.pigeonId === "object" && c.pigeonId.ringNumber) continue;
+    const raw = typeof c.pigeonId === "object" ? c.pigeonId._id : c.pigeonId;
+    const str = String(raw || "");
+    if (/^[a-fA-F0-9]{24}$/.test(str)) ids.push(str);
+  }
+  const map = {};
+  if (ids.length > 0) {
+    const pigeons = await Pigeon.find({ _id: { $in: [...new Set(ids)] } })
+      .select("ringNumber nickname color gender avatarId")
+      .lean();
+    pigeons.forEach((p) => {
+      map[String(p._id)] = p;
+    });
+  }
+  const apply = (c) => {
+    if (!c || c.pigeonId == null) return c;
+    if (typeof c.pigeonId === "object" && c.pigeonId.ringNumber) return c;
+    const raw = typeof c.pigeonId === "object" ? c.pigeonId._id : c.pigeonId;
+    const pigeon = map[String(raw)];
+    return pigeon ? { ...c, pigeonId: pigeon } : c;
+  };
+  return isArray ? list.map(apply) : apply(list[0]);
 }
 
 function generateRaceCode() {
@@ -1282,11 +1381,8 @@ app.post(
 
       let distanceKm;
       try {
-        distanceKm = calculateDistance(
-          user.lat,
-          user.lng,
-          event.lat,
-          event.lng,
+        distanceKm = roundRace(
+          calculateDistance(user.lat, user.lng, event.lat, event.lng),
         );
       } catch (err) {
         counter.count -= 1;
@@ -1301,10 +1397,8 @@ app.post(
         return res.status(400).json({ error: "Error calculating distance" });
       }
 
-      const speedKPH = parseFloat((distanceKm / flightHours).toFixed(4));
-      const speedMPM = parseFloat(
-        ((distanceKm * 1000) / (flightHours * 60)).toFixed(4),
-      );
+      const speedKPH = roundRace(distanceKm / flightHours);
+      const speedMPM = roundRace((distanceKm * 1000) / (flightHours * 60));
 
       const result = await Result.create(
         [
@@ -1354,11 +1448,12 @@ app.post(
       session.endSession();
       invalidateLiveCaches(event.code);
 
+      const saved = result[0].toObject ? result[0].toObject() : result[0];
       res.json({
         success: true,
-        result: result[0],
-        distance: distanceKm,
-        speed: speedMPM,
+        result: saved,
+        distance: saved.distanceKm,
+        speed: saved.speedMPM,
         eventName: event.name,
         stickerCode: eventCode,
         pigeon: clockedPigeon
@@ -1427,14 +1522,16 @@ app.get("/api/results/:eventCode/forecast", async (req, res) => {
           typeof event.lng === "number"
         ) {
           try {
-            distanceKm = calculateDistance(event.lat, event.lng, u.lat, u.lng);
+            distanceKm = roundRace(
+              calculateDistance(event.lat, event.lng, u.lat, u.lng),
+            );
           } catch (_) {
             distanceKm = null;
           }
         }
         let forecastSpeedMpm = null;
         if (distanceKm != null && elapsedMinutes > 0) {
-          forecastSpeedMpm = (distanceKm * 1000) / elapsedMinutes;
+          forecastSpeedMpm = roundRace((distanceKm * 1000) / elapsedMinutes);
         }
         return {
           userId: u.id,
@@ -1469,10 +1566,7 @@ app.get("/api/results/:eventCode", async (req, res) => {
     const results = await cacheWrap(`results:${eventCode}`, RESULTS_TTL_MS, async () => {
       const event = await getEventByCode(eventCode);
       if (!event) return [];
-      return Result.find({ eventId: event.code })
-        .sort({ speedMPM: -1 })
-        .populate("pigeonId", "ringNumber nickname color gender avatarId")
-        .lean();
+      return loadResultsWithPigeons(event.code);
     });
     res.json(results);
   } catch (error) {
@@ -2706,21 +2800,20 @@ async function generateCertificateNumber() {
 }
 
 async function computePigeonRankings(eventId) {
-  const results = await Result.find({ eventId, pigeonId: { $ne: null } })
-    .sort({ speedMPM: -1 })
-    .populate("pigeonId")
-    .lean();
-  return results.map((r, index) => ({
-    pigeonId: r.pigeonId._id,
-    userId: r.userId,
-    userName: r.userName,
-    ringNumber: r.pigeonId.ringNumber,
-    nickname: r.pigeonId.nickname,
-    avatarId: r.pigeonId.avatarId || "",
-    speedMPM: r.speedMPM,
-    distanceKm: r.distanceKm,
-    rank: index + 1,
-  }));
+  const results = await loadResultsWithPigeons(eventId);
+  return results
+    .filter((r) => r.pigeonId && r.pigeonId._id)
+    .map((r, index) => ({
+      pigeonId: r.pigeonId._id,
+      userId: r.userId,
+      userName: r.userName,
+      ringNumber: r.pigeonId.ringNumber,
+      nickname: r.pigeonId.nickname,
+      avatarId: r.pigeonId.avatarId || "",
+      speedMPM: r.speedMPM,
+      distanceKm: r.distanceKm,
+      rank: index + 1,
+    }));
 }
 
 function generateQRHash(certificateNumber, eventId, playerId) {
@@ -2766,8 +2859,8 @@ app.post(
           playerId: r.userId,
           pigeonId: r.pigeonId,
           rank: rank,
-          speed: r.speedMPM,
-          distance: r.distanceKm,
+          speed: roundRace(r.speedMPM),
+          distance: roundRace(r.distanceKm),
           issueDate: new Date(),
           qrHash,
         });
@@ -2818,6 +2911,7 @@ app.get("/api/certificates/player", async (req, res) => {
       eventId: eventMap[c.eventId] || { name: "Unknown" },
       playerId: userMap[c.playerId] || { name: "Unknown" },
     }));
+    certs = await hydrateCertificatePigeons(certs);
 
     res.json(certs);
   } catch (error) {
@@ -2849,6 +2943,7 @@ app.get("/api/certificates/:certificateId", async (req, res) => {
 
     cert.eventId = event || { name: "Unknown Event" };
     cert.playerId = player || { id: cert.playerId, name: "Unknown" };
+    cert = await hydrateCertificatePigeons(cert);
 
     res.json(cert);
   } catch (error) {
@@ -2860,19 +2955,21 @@ app.get("/api/certificates/:certificateId", async (req, res) => {
 app.get("/api/certificates/verify/:hash", async (req, res) => {
   try {
     const { hash } = req.params;
-    const cert = await Certificate.findOne({ qrHash: hash })
-      .populate("eventId", "name releaseTime")
-      .populate("playerId", "id name")
-      .populate("pigeonId", "ringNumber nickname avatarId");
+    const cert = await Certificate.findOne({ qrHash: hash }).lean();
     if (!cert) {
       return res.status(404).json({ error: "Invalid certificate." });
     }
+    const [event, player, hydrated] = await Promise.all([
+      Event.findOne({ code: cert.eventId }).select("name").lean(),
+      User.findOne({ id: cert.playerId }).select("name").lean(),
+      hydrateCertificatePigeons(cert),
+    ]);
     res.json({
       valid: true,
       certificateNumber: cert.certificateNumber,
-      player: cert.playerId.name,
-      pigeon: cert.pigeonId.ringNumber,
-      event: cert.eventId.name,
+      player: player?.name || "Unknown",
+      pigeon: hydrated.pigeonId?.ringNumber || "Unknown",
+      event: event?.name || "Unknown",
       rank: cert.rank,
       speed: cert.speed,
       issueDate: cert.issueDate,
@@ -2940,6 +3037,7 @@ app.get("/api/admin/certificates", requireAdmin, async (req, res) => {
       },
       playerId: userMap[c.playerId] || { id: c.playerId, name: "Unknown" },
     }));
+    certs = await hydrateCertificatePigeons(certs);
 
     let results = certs;
     if (search && !searchFilter.certificateNumber) {
@@ -3008,6 +3106,7 @@ app.get(
 
       cert.eventId = event || { name: "Unknown Event" };
       cert.playerId = player || { id: cert.playerId, name: "Unknown" };
+      cert = await hydrateCertificatePigeons(cert);
 
       res.json({ success: true, certificate: cert });
     } catch (error) {
@@ -3138,6 +3237,9 @@ app.get("/api/users/player/:id/stats", authenticateToken, async (req, res) => {
       playerId: id,
       status: { $in: ["confirmed", "locked"] },
     });
+    const totalCertificates = await Certificate.countDocuments({
+      playerId: id,
+    });
     if (results.length === 0) {
       return res.json({
         userId: id,
@@ -3151,7 +3253,7 @@ app.get("/api/users/player/:id/stats", authenticateToken, async (req, res) => {
         bestSpeed: 0,
         winRate: 0,
         championTitles: 0,
-        totalCertificates: 0,
+        totalCertificates,
         fastestArrival: null,
         seasonRanking: null,
         currentSeasonRank: null,
@@ -3159,7 +3261,11 @@ app.get("/api/users/player/:id/stats", authenticateToken, async (req, res) => {
       });
     }
 
-    const totalPigeons = results.length;
+    const totalPigeons = new Set(
+      results
+        .map((r) => (r.pigeonId ? String(r.pigeonId) : null))
+        .filter((id) => id && !id.startsWith("LEGACY_")),
+    ).size;
     const eventIds = [...new Set(results.map((r) => r.eventId))];
     const eventsParticipated = eventIds.length;
     const speeds = results.map((r) => r.speedMPM);
@@ -3190,10 +3296,7 @@ app.get("/api/users/player/:id/stats", authenticateToken, async (req, res) => {
     let wins = 0;
     let podiums = 0;
     for (const eventId of eventIds) {
-      const eventResults = await Result.find({
-        eventId,
-        pigeonId: { $ne: null },
-      })
+      const eventResults = await Result.find({ eventId })
         .sort({ speedMPM: -1 })
         .lean();
       if (eventResults.length === 0) continue;
@@ -3203,9 +3306,6 @@ app.get("/api/users/player/:id/stats", authenticateToken, async (req, res) => {
     }
     const winRate =
       eventsParticipated > 0 ? (wins / eventsParticipated) * 100 : 0;
-    const totalCertificates = await Certificate.countDocuments({
-      playerId: id,
-    });
     const currentYear = new Date().getFullYear();
     const seasonRanking = await getSeasonRanking(id, currentYear);
 
@@ -3245,7 +3345,9 @@ app.get("/api/pigeons/:id/stats", async (req, res) => {
         .json({ error: "Pigeon not found or does not belong to you." });
     }
 
-    const results = await Result.find({ pigeonId })
+    const results = await Result.find({
+      pigeonId: { $in: [String(pigeon._id), pigeon._id] },
+    })
       .sort({ arrivalTime: -1 })
       .lean();
 
@@ -3308,7 +3410,9 @@ app.get("/api/pigeons/:id/stats", async (req, res) => {
       if (pos >= 1 && pos <= 3) podiums++;
     }
 
-    const certs = await Certificate.find({ pigeonId }).lean();
+    const certs = await Certificate.find({
+      pigeonId: { $in: [String(pigeon._id), pigeon._id] },
+    }).lean();
     const certEventIds = [...new Set(certs.map((c) => c.eventId))];
     const certEvents = await Event.find({ code: { $in: certEventIds } }).lean();
     const certEventMap = {};

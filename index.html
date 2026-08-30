@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Wingsync - Pigeon Clocking System</title>
     <link rel="manifest" href="manifest.json" />
-    <link rel="stylesheet" href="style.css?v=24" />
+    <link rel="stylesheet" href="style.css?v=25" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="mobile-web-app-capable" content="yes" />
     <meta
@@ -44,7 +44,7 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
 
-    <link rel="stylesheet" href="style.css?v=24" />
+    <link rel="stylesheet" href="style.css?v=25" />
     <style>
       /* ===== ADDITIONAL STYLES FOR UI COMPONENTS ===== */
       .pigeons-grid {
@@ -926,7 +926,7 @@
                 <div class="player-perf-hero">
                   <div class="player-perf-hero-stat">
                     <div class="player-perf-hero-value" id="stats-events">0</div>
-                    <div class="player-perf-hero-label">Races</div>
+                    <div class="player-perf-hero-label">Races Clocked</div>
                   </div>
                   <div class="player-perf-hero-stat">
                     <div class="player-perf-hero-value" id="stats-wins">0</div>
@@ -962,7 +962,7 @@
                     <div class="stat-metric-content">
                       <span class="stat-metric-label">Average Speed</span>
                       <span class="stat-metric-value" id="stats-avg-speed"
-                        >0.00</span
+                        >0.0000</span
                       >
                       <span class="stat-metric-unit">m/min</span>
                     </div>
@@ -973,7 +973,7 @@
                       <span
                         class="stat-metric-value stat-metric-value-accent"
                         id="stats-best-speed"
-                        >0.00</span
+                        >0.0000</span
                       >
                       <span class="stat-metric-unit">m/min</span>
                     </div>
@@ -1165,7 +1165,7 @@
                     </svg>
                   </div>
                   <div class="stat-value" id="stat-released">0</div>
-                  <div class="stat-label">Birds Released</div>
+                  <div class="stat-label">Birds Entered</div>
                 </div>
                 <div class="race-stat-card highlight">
                   <div class="stat-icon">
@@ -1222,7 +1222,7 @@
                       <polyline points="22 4 12 14.01 9 11.01" />
                     </svg>
                   </div>
-                  <div class="stat-value" id="stat-completion">0%</div>
+                  <div class="stat-value" id="stat-completion">0.0%</div>
                   <div class="stat-label">Completion Rate</div>
                 </div>
                 <div class="race-stat-card">
@@ -1261,7 +1261,7 @@
                     </svg>
                   </div>
                   <div class="stat-value" id="stat-avg-speed">
-                    0.00 <span class="unit">m/min</span>
+                    0.0000 <span class="unit">m/min</span>
                   </div>
                   <div class="stat-label">Average Speed</div>
                 </div>
@@ -1281,7 +1281,7 @@
                     </svg>
                   </div>
                   <div class="stat-value" id="stat-highest-speed">
-                    0.00 <span class="unit">m/min</span>
+                    0.0000 <span class="unit">m/min</span>
                   </div>
                   <div class="stat-label">Highest Speed</div>
                 </div>
@@ -1301,7 +1301,7 @@
                     </svg>
                   </div>
                   <div class="stat-value" id="stat-lowest-speed">
-                    0.00 <span class="unit">m/min</span>
+                    0.0000 <span class="unit">m/min</span>
                   </div>
                   <div class="stat-label">Lowest Speed</div>
                 </div>
@@ -1319,7 +1319,7 @@
                       <polyline points="12 6 12 12 16 14" />
                     </svg>
                   </div>
-                  <div class="stat-value" id="stat-avg-flight-time">0:00</div>
+                  <div class="stat-value" id="stat-avg-flight-time">00:00:00</div>
                   <div class="stat-label">Avg Flight Time</div>
                 </div>
                 <div class="race-stat-card highlight">
@@ -1338,7 +1338,7 @@
                     </svg>
                   </div>
                   <div class="stat-value" id="stat-winning-margin">
-                    0.00 <span class="unit">m/min</span>
+                    0.0000 <span class="unit">m/min</span>
                   </div>
                   <div class="stat-label">Winning Margin</div>
                 </div>
@@ -1819,7 +1819,7 @@
             type="text"
             id="modal-p-contact"
             class="form-control"
-            placeholder="09..."
+            placeholder="09123456789"
           />
         </div>
         <div class="form-group">
@@ -1828,7 +1828,7 @@
             type="text"
             id="player-search-box"
             class="form-control"
-            placeholder="Search for a location..."
+            placeholder="e.g., Malinao, Albay"
           />
           <small style="display: block; margin-top: 4px; color: #666"
             >Type an address or landmark, then select from dropdown</small
@@ -1889,7 +1889,7 @@
             type="text"
             id="modal-e-name"
             class="form-control"
-            placeholder="e.g., Estancia Cup 2026"
+            placeholder="e.g., Malinao Cup 2026"
           />
         </div>
         <div class="form-group">
@@ -1914,7 +1914,7 @@
             type="text"
             id="event-search-box"
             class="form-control"
-            placeholder="Search for a location..."
+            placeholder="e.g., Malinao, Albay"
           />
           <small style="display: block; margin-top: 4px; color: #666"
             >Type an address or landmark, then select from dropdown</small
@@ -1986,7 +1986,7 @@
             type="text"
             id="edit-p-contact"
             class="form-control"
-            placeholder="09..."
+            placeholder="09123456789"
           />
         </div>
         <div class="form-group">
@@ -1995,7 +1995,7 @@
             type="text"
             id="edit-player-search-box"
             class="form-control"
-            placeholder="Search for a location..."
+            placeholder="e.g., Malinao, Albay"
           />
           <small style="display: block; margin-top: 4px; color: #666"
             >Type an address or landmark, then select from dropdown</small
@@ -2151,7 +2151,7 @@
             type="text"
             id="pigeon-nickname"
             class="form-control"
-            placeholder="Optional"
+            placeholder="e.g., Blue Thunder"
           />
         </div>
         <div class="form-group">

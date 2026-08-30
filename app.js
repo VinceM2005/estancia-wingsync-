@@ -205,6 +205,27 @@ function toNumber(value) {
   return isNaN(num) ? 0 : num;
 }
 
+function pigeonNickname(pigeon) {
+  if (!pigeon) return "—";
+  const nick = String(pigeon.nickname || "").trim();
+  if (nick) return nick;
+  return pigeon.ringNumber || "—";
+}
+
+function pigeonRing(pigeon) {
+  return (pigeon && pigeon.ringNumber) || "—";
+}
+
+function formatSpeedMpm(value) {
+  const num = Number(value);
+  return Number.isFinite(num) ? num.toFixed(4) : "—";
+}
+
+function formatDistanceKm(value) {
+  const num = Number(value);
+  return Number.isFinite(num) ? num.toFixed(4) : "—";
+}
+
 let playerMap, playerMarker, eventMap, eventMarker;
 let selectedPlayerLat = null,
   selectedPlayerLng = null;
@@ -557,7 +578,7 @@ const app = {
           <div><strong>Pigeon</strong></div><div>${data.pigeon}</div>
           <div><strong>Event</strong></div><div>${data.event}</div>
           <div><strong>Rank</strong></div><div>#${data.rank}</div>
-          <div><strong>Speed</strong></div><div>${data.speed.toFixed(2)} m/min</div>
+          <div><strong>Speed</strong></div><div>${formatSpeedMpm(data.speed)} m/min</div>
           <div><strong>Issue Date</strong></div><div>${new Date(data.issueDate).toLocaleDateString()}</div>
         </div>
         <div style="text-align: center; margin-top: 16px; font-size: 14px; color: var(--text-muted);">
@@ -2080,10 +2101,8 @@ const app = {
       second: "2-digit",
       hour12: true,
     });
-    const distanceLabel = Number.isFinite(distanceKm)
-      ? distanceKm.toFixed(2)
-      : "—";
-    const speedLabel = Number.isFinite(speedMpm) ? speedMpm.toFixed(2) : "—";
+    const distanceLabel = formatDistanceKm(distanceKm);
+    const speedLabel = formatSpeedMpm(speedMpm);
     const flightLabel = hasFlight ? formatFlightHours(flightHours) : "—";
 
     const modal = document.createElement("div");
@@ -2658,8 +2677,14 @@ const app = {
     document.getElementById("prof-contact").value =
       this.currentUser.contact || "";
     if (this.currentUser.role === "player") {
-      document.getElementById("prof-lat").value = this.currentUser.lat || "";
-      document.getElementById("prof-lng").value = this.currentUser.lng || "";
+      document.getElementById("prof-lat").value =
+        this.currentUser.lat != null
+          ? Number(this.currentUser.lat).toFixed(6)
+          : "";
+      document.getElementById("prof-lng").value =
+        this.currentUser.lng != null
+          ? Number(this.currentUser.lng).toFixed(6)
+          : "";
     }
   },
 
@@ -2678,9 +2703,9 @@ const app = {
         document.getElementById("stats-wins").textContent = stats.wins;
         document.getElementById("stats-podiums").textContent = stats.podiums;
         document.getElementById("stats-avg-speed").textContent =
-          stats.averageSpeed.toFixed(2);
+          Number(stats.averageSpeed || 0).toFixed(4);
         document.getElementById("stats-best-speed").textContent =
-          stats.bestSpeed.toFixed(2);
+          Number(stats.bestSpeed || 0).toFixed(4);
         document.getElementById("stats-win-rate").textContent =
           stats.winRate.toFixed(1) + "%";
         const joinedEl = document.getElementById("stats-races-joined");
@@ -2957,6 +2982,7 @@ const app = {
         tr.appendChild(td);
         tbody.appendChild(tr);
         this.clearAnalyticsSections();
+        this.updateRaceEntryStats(0);
         await this.renderSpeedForecast(this.selectedEventCode);
         this._isRendering = false;
         return;
@@ -2971,21 +2997,19 @@ const app = {
       }));
 
       const winner = safeResults[0];
+      const winnerPigeon = winner.pigeonId;
       document.getElementById("champion-name").textContent = winner.userName;
-      document.getElementById("champion-code").textContent = winner.clockInCode;
+      document.getElementById("champion-code").textContent =
+        pigeonRing(winnerPigeon);
       document.getElementById("champion-speed").innerHTML =
-        `${winner.speedMPM.toFixed(2)} <span class="unit">m/min</span>`;
+        `${formatSpeedMpm(winner.speedMPM)} <span class="unit">m/min</span>`;
       document.getElementById("champion-flight-time").textContent =
         formatFlightHours(winner.flightTimeHours);
       document.getElementById("champion-distance").innerHTML =
-        `${winner.distanceKm.toFixed(2)} <span class="unit">km</span>`;
+        `${formatDistanceKm(winner.distanceKm)} <span class="unit">km</span>`;
 
       const clocked = safeResults.length;
-      const totalRegistered =
-        this.registrationCounts[this.selectedEventCode] || 0;
-      const missing = Math.max(0, totalRegistered - clocked);
-      const completionRate =
-        totalRegistered > 0 ? (clocked / totalRegistered) * 100 : 0;
+      this.updateRaceEntryStats(clocked);
       const participants = new Set(safeResults.map((r) => r.userId)).size;
       const speeds = safeResults.map((r) => r.speedMPM);
       const avgSpeed =
@@ -3004,22 +3028,17 @@ const app = {
           ? safeResults[0].speedMPM - safeResults[1].speedMPM
           : 0;
 
-      document.getElementById("stat-released").textContent = totalRegistered;
-      document.getElementById("stat-clocked").textContent = clocked;
-      document.getElementById("stat-missing").textContent = missing;
-      document.getElementById("stat-completion").textContent =
-        completionRate.toFixed(1) + "%";
       document.getElementById("stat-participants").textContent = participants;
       document.getElementById("stat-avg-speed").innerHTML =
-        `${avgSpeed.toFixed(2)} <span class="unit">m/min</span>`;
+        `${formatSpeedMpm(avgSpeed)} <span class="unit">m/min</span>`;
       document.getElementById("stat-highest-speed").innerHTML =
-        `${highest.toFixed(2)} <span class="unit">m/min</span>`;
+        `${formatSpeedMpm(highest)} <span class="unit">m/min</span>`;
       document.getElementById("stat-lowest-speed").innerHTML =
-        `${lowest.toFixed(2)} <span class="unit">m/min</span>`;
+        `${formatSpeedMpm(lowest)} <span class="unit">m/min</span>`;
       document.getElementById("stat-avg-flight-time").textContent =
         formatFlightHours(avgFlight);
       document.getElementById("stat-winning-margin").innerHTML =
-        `${winningMargin.toFixed(2)} <span class="unit">m/min</span>`;
+        `${formatSpeedMpm(winningMargin)} <span class="unit">m/min</span>`;
 
       const fastest =
         safeResults.length > 0
@@ -3039,7 +3058,7 @@ const app = {
           : null;
 
       document.getElementById("hl-fastest-bird").textContent = fastest
-        ? `${fastest.userName} (${fastest.speedMPM.toFixed(2)} m/min)`
+        ? `${fastest.userName} · ${pigeonNickname(fastest.pigeonId)} (${formatSpeedMpm(fastest.speedMPM)} m/min)`
         : "—";
       document.getElementById("hl-first-arrival").textContent = firstArrival
         ? `${firstArrival.userName} (${firstArrival.arrivalTime.toLocaleTimeString()})`
@@ -3086,19 +3105,19 @@ const app = {
         tdPigeon.innerHTML = `
           <div style="display:flex;align-items:center;gap:8px;">
             <span style="width:32px;height:32px;display:inline-block;border-radius:50%;overflow:hidden;flex-shrink:0;border:1px solid var(--border);">${avatarHTML}</span>
-            <span>${r.pigeonId?.nickname || "N/A"}</span>
+            <span>${escapeHtml(pigeonNickname(r.pigeonId))}</span>
           </div>
         `;
         tr.appendChild(tdPigeon);
 
         const tdRingNumber = document.createElement("td");
         tdRingNumber.setAttribute("data-label", "Ring Number");
-        tdRingNumber.textContent = r.pigeonId?.ringNumber || "N/A";
+        tdRingNumber.textContent = pigeonRing(r.pigeonId);
         tr.appendChild(tdRingNumber);
 
         const tdDist = document.createElement("td");
         tdDist.setAttribute("data-label", "Air Dist");
-        tdDist.textContent = r.distanceKm.toFixed(2) + " km";
+        tdDist.textContent = formatDistanceKm(r.distanceKm) + " km";
         tr.appendChild(tdDist);
 
         const tdArr = document.createElement("td");
@@ -3114,7 +3133,7 @@ const app = {
         const tdSpeed = document.createElement("td");
         tdSpeed.setAttribute("data-label", "Speed m/min");
         tdSpeed.className = "speed-cell";
-        tdSpeed.textContent = r.speedMPM.toFixed(4);
+        tdSpeed.textContent = formatSpeedMpm(r.speedMPM);
         tr.appendChild(tdSpeed);
 
         if (i === 0) tr.className = "winner-row";
@@ -3139,6 +3158,19 @@ const app = {
     }
   },
 
+  updateRaceEntryStats(clocked) {
+    const totalRegistered =
+      this.registrationCounts[this.selectedEventCode] || 0;
+    const missing = Math.max(0, totalRegistered - clocked);
+    const completionRate =
+      totalRegistered > 0 ? (clocked / totalRegistered) * 100 : 0;
+    document.getElementById("stat-released").textContent = totalRegistered;
+    document.getElementById("stat-clocked").textContent = clocked;
+    document.getElementById("stat-missing").textContent = missing;
+    document.getElementById("stat-completion").textContent =
+      completionRate.toFixed(1) + "%";
+  },
+
   clearAnalyticsSections() {
     document.getElementById("champion-name").textContent = "—";
     document.getElementById("champion-code").textContent = "—";
@@ -3151,17 +3183,17 @@ const app = {
     document.getElementById("stat-released").textContent = "0";
     document.getElementById("stat-clocked").textContent = "0";
     document.getElementById("stat-missing").textContent = "0";
-    document.getElementById("stat-completion").textContent = "0%";
+    document.getElementById("stat-completion").textContent = "0.0%";
     document.getElementById("stat-participants").textContent = "0";
     document.getElementById("stat-avg-speed").innerHTML =
-      '0.00 <span class="unit">m/min</span>';
+      '0.0000 <span class="unit">m/min</span>';
     document.getElementById("stat-highest-speed").innerHTML =
-      '0.00 <span class="unit">m/min</span>';
+      '0.0000 <span class="unit">m/min</span>';
     document.getElementById("stat-lowest-speed").innerHTML =
-      '0.00 <span class="unit">m/min</span>';
-    document.getElementById("stat-avg-flight-time").textContent = "0:00";
+      '0.0000 <span class="unit">m/min</span>';
+    document.getElementById("stat-avg-flight-time").textContent = "00:00:00";
     document.getElementById("stat-winning-margin").innerHTML =
-      '0.00 <span class="unit">m/min</span>';
+      '0.0000 <span class="unit">m/min</span>';
 
     document.getElementById("hl-fastest-bird").textContent = "—";
     document.getElementById("hl-first-arrival").textContent = "—";
@@ -3208,11 +3240,11 @@ const app = {
           const dist =
             p.distanceKm == null
               ? "—"
-              : `${Number(p.distanceKm).toFixed(2)} km`;
+              : `${formatDistanceKm(p.distanceKm)} km`;
           const speed =
             p.forecastSpeedMpm == null
               ? "—"
-              : `${Number(p.forecastSpeedMpm).toFixed(2)}`;
+              : formatSpeedMpm(p.forecastSpeedMpm);
           const clocked = p.clocked
             ? '<span class="speed-forecast-tag">Clocked</span>'
             : "";
@@ -4006,9 +4038,9 @@ const app = {
 
       const rank = row.rank ?? indexOnPage + 1;
       const player = row.ownerName || row.userName || "—";
-      const pigeon = (row.nickname || "").trim() || "—";
+      const pigeon = (row.nickname || "").trim() || row.ringNumber || "—";
       const ring = row.ringNumber || row.pigeonId?.ringNumber || "—";
-      const dist = `${toNumber(row.distanceKm).toFixed(2)}`;
+      const dist = formatDistanceKm(toNumber(row.distanceKm));
       const arrival = row.arrivalTime
         ? new Date(row.arrivalTime).toLocaleString("en-PH", {
             month: "short",
@@ -4883,7 +4915,7 @@ const app = {
                     </div>
                     <div class="pigeon-stats-history-stats">
                       <span class="${rankClass}">${this._escapeCertHtml(rankText)}</span>
-                      <span class="pigeon-stats-speed">${speed.toFixed(2)} m/min</span>
+                      <span class="pigeon-stats-speed">${formatSpeedMpm(speed)} m/min</span>
                     </div>
                   </li>`;
                 })
@@ -4945,14 +4977,14 @@ const app = {
                 <span class="pigeon-stats-speed-icon" aria-hidden="true"><i class="fas fa-bolt"></i></span>
                 <div class="pigeon-stats-speed-info">
                   <span class="pigeon-stats-speed-label">Best speed</span>
-                  <span class="pigeon-stats-speed-value">${bestSpeed.toFixed(2)} <small>m/min</small></span>
+                  <span class="pigeon-stats-speed-value">${formatSpeedMpm(bestSpeed)} <small>m/min</small></span>
                 </div>
               </div>
               <div class="pigeon-stats-speed-item">
                 <span class="pigeon-stats-speed-icon" aria-hidden="true"><i class="fas fa-chart-line"></i></span>
                 <div class="pigeon-stats-speed-info">
                   <span class="pigeon-stats-speed-label">Average</span>
-                  <span class="pigeon-stats-speed-value">${avgSpeed.toFixed(2)} <small>m/min</small></span>
+                  <span class="pigeon-stats-speed-value">${formatSpeedMpm(avgSpeed)} <small>m/min</small></span>
                 </div>
               </div>
             </div>
@@ -5476,8 +5508,8 @@ const app = {
               <span style="width:40px;height:40px;display:inline-block;border-radius:50%;overflow:hidden;flex-shrink:0;border:1px solid var(--border);">${avatarHTML}</span>
               <div style="flex:1;">
                 <div><strong>${c.certificateNumber}</strong> – ${rankLabel}</div>
-                <div>Event: ${c.eventId ? c.eventId.name : "Unknown"} • Pigeon: ${c.pigeonId ? c.pigeonId.ringNumber : "N/A"}</div>
-                <div>Speed: ${c.speed.toFixed(2)} m/min | Distance: ${c.distance.toFixed(2)} km</div>
+                <div>Event: ${c.eventId ? c.eventId.name : "Unknown"} • Pigeon: ${c.pigeonId ? pigeonRing(c.pigeonId) : "—"}</div>
+                <div>Speed: ${formatSpeedMpm(c.speed)} m/min | Distance: ${formatDistanceKm(c.distance)} km</div>
               </div>
               <div>
                 <button class="btn btn-sm btn-primary" onclick="app.viewCertificate('${c._id}')">View</button>
@@ -5601,14 +5633,14 @@ const app = {
       : "N/A";
 
     const nickname = (cert.pigeonId?.nickname || "").trim();
-    const ringNumber = cert.pigeonId?.ringNumber || "N/A";
+    const ringNumber = cert.pigeonId?.ringNumber || "—";
     const pigeonDisplay = nickname
       ? `${nickname} (${ringNumber})`
       : ringNumber;
 
     const eventName = cert.eventId?.name || "Unknown Event";
-    const distance = Number(cert.distance || 0).toFixed(2);
-    const speed = Number(cert.speed || 0).toFixed(2);
+    const distance = formatDistanceKm(cert.distance);
+    const speed = formatSpeedMpm(cert.speed);
 
     const baseUrl = window.location.origin;
     const verifyUrl = `${baseUrl}/verify/${cert.qrHash || ""}`;
@@ -5999,13 +6031,13 @@ const app = {
     y += 12;
 
     const nickname = (cert.pigeonId?.nickname || "").trim();
-    const ringNumber = cert.pigeonId?.ringNumber || "N/A";
+    const ringNumber = cert.pigeonId?.ringNumber || "—";
     const pigeonDisplay = nickname
       ? `${nickname} (${ringNumber})`
       : ringNumber;
     const eventName = cert.eventId?.name || "Unknown Event";
-    const distance = Number(cert.distance || 0).toFixed(2);
-    const speed = Number(cert.speed || 0).toFixed(2);
+    const distance = formatDistanceKm(cert.distance);
+    const speed = formatSpeedMpm(cert.speed);
     const releaseDate = cert.eventId?.releaseTime
       ? new Date(cert.eventId.releaseTime).toLocaleDateString("en-PH", {
           year: "numeric",
@@ -6189,12 +6221,12 @@ const app = {
           <td>
             <div style="display:flex;align-items:center;gap:6px;">
               <span style="width:28px;height:28px;display:inline-block;border-radius:50%;overflow:hidden;flex-shrink:0;">${avatarHTML}</span>
-              ${c.pigeonId?.ringNumber || "N/A"}
+              ${c.pigeonId?.ringNumber || "—"}
             </div>
           </td>
           <td>${c.eventId?.name || "Unknown"}</td>
           <td>${rankEmoji} ${rankLabel}</td>
-          <td>${c.speed.toFixed(2)}</td>
+          <td>${formatSpeedMpm(c.speed)}</td>
           <td>${issueDate}</td>
           <td>
             <button class="btn btn-sm btn-primary" onclick="app.viewAdminCertificate('${c._id}')"><i class="fas fa-eye"></i></button>
