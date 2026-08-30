@@ -192,6 +192,14 @@ function formatFlightHours(hours) {
   return `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`;
 }
 
+function escapeHtml(value) {
+  return String(value ?? "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
+}
+
 function toNumber(value) {
   const num = parseFloat(value);
   return isNaN(num) ? 0 : num;
@@ -2038,6 +2046,106 @@ const app = {
     return modal;
   },
 
+  showClockInSuccessModal(data) {
+    const existingModal = document.getElementById("custom-modal");
+    if (existingModal) existingModal.remove();
+
+    const result = data.result || {};
+    const pigeon = data.pigeon || {};
+    const arrival = result.arrivalTime
+      ? new Date(result.arrivalTime)
+      : this.getServerTime();
+    const distanceKm = Number(data.distance ?? result.distanceKm);
+    const speedMpm = Number(data.speed ?? result.speedMPM);
+    const speedKph = Number(result.speedKPH);
+    const flightHours = Number(result.flightTimeHours);
+    const hasFlight = Number.isFinite(flightHours) && flightHours >= 0;
+    const eventName = data.eventName || result.eventId || "Event";
+    const eventCode = result.eventId || "";
+    const stickerCode = data.stickerCode || result.clockInCode || "—";
+    const clockNo = result.clockInNumber;
+    const ringNumber = pigeon.ringNumber || "—";
+    const nickname = (pigeon.nickname || "").trim();
+    const playerName =
+      result.userName || this.currentUser?.name || "Player";
+    const avatarHtml = getPigeonAvatarSVG(pigeon.avatarId, 56);
+
+    const dateLine = arrival.toLocaleDateString("en-US", {
+      weekday: "short",
+      month: "long",
+      day: "numeric",
+      year: "numeric",
+    });
+    const timeLine = arrival.toLocaleTimeString("en-US", {
+      hour: "numeric",
+      minute: "2-digit",
+      second: "2-digit",
+      hour12: true,
+    });
+    const distanceLabel = Number.isFinite(distanceKm)
+      ? distanceKm.toFixed(2)
+      : "—";
+    const speedLabel = Number.isFinite(speedMpm) ? speedMpm.toFixed(1) : "—";
+    const kphLabel = Number.isFinite(speedKph) ? speedKph.toFixed(2) : "—";
+    const flightLabel = hasFlight ? formatFlightHours(flightHours) : "—";
+    const clockNoLabel =
+      clockNo != null && clockNo !== "" ? String(clockNo) : "—";
+
+    const modal = document.createElement("div");
+    modal.id = "custom-modal";
+    modal.className = "clockin-overlay";
+    modal.innerHTML = `
+      <div class="clockin-card" role="dialog" aria-labelledby="clockin-activity-title">
+        <button type="button" class="clockin-close" aria-label="Close">×</button>
+        <header class="clockin-hero">
+          <div class="clockin-kicker">Clocked</div>
+          <h2 id="clockin-activity-title" class="clockin-title">${escapeHtml(eventName)}</h2>
+          <p class="clockin-when">${escapeHtml(dateLine)} at ${escapeHtml(timeLine)}</p>
+        </header>
+        <div class="clockin-athlete">
+          <div class="clockin-avatar">${avatarHtml}</div>
+          <div class="clockin-athlete-copy">
+            <div class="clockin-ring">${escapeHtml(ringNumber)}</div>
+            <div class="clockin-sub">${escapeHtml(nickname || "Racing pigeon")} · ${escapeHtml(playerName)}</div>
+          </div>
+        </div>
+        <div class="clockin-stats">
+          <div class="clockin-stat">
+            <div class="clockin-stat-value">${escapeHtml(distanceLabel)}</div>
+            <div class="clockin-stat-label">Distance</div>
+            <div class="clockin-stat-unit">km</div>
+          </div>
+          <div class="clockin-stat">
+            <div class="clockin-stat-value">${escapeHtml(flightLabel)}</div>
+            <div class="clockin-stat-label">Time</div>
+            <div class="clockin-stat-unit">hh:mm:ss</div>
+          </div>
+          <div class="clockin-stat">
+            <div class="clockin-stat-value">${escapeHtml(speedLabel)}</div>
+            <div class="clockin-stat-label">Speed</div>
+            <div class="clockin-stat-unit">m/min</div>
+          </div>
+        </div>
+        <dl class="clockin-details">
+          <div><dt>Sticker</dt><dd>${escapeHtml(stickerCode)}</dd></div>
+          <div><dt>Clock-in</dt><dd>#${escapeHtml(clockNoLabel)}</dd></div>
+          <div><dt>Event</dt><dd>${escapeHtml(eventCode || "—")}</dd></div>
+          <div><dt>Speed</dt><dd>${escapeHtml(kphLabel)} km/h</dd></div>
+        </dl>
+        <button type="button" class="clockin-done">Done</button>
+      </div>
+    `;
+
+    const close = () => modal.remove();
+    modal.addEventListener("click", (e) => {
+      if (e.target === modal) close();
+    });
+    modal.querySelector(".clockin-close").addEventListener("click", close);
+    modal.querySelector(".clockin-done").addEventListener("click", close);
+    document.body.appendChild(modal);
+    return modal;
+  },
+
   login() {
     const id = document.getElementById("login-id").value;
     const pass = document.getElementById("login-pass").value;
@@ -2531,37 +2639,7 @@ const app = {
           return;
         }
 
-        const eventName = data.eventName || "Unknown Event";
-        const now = this.getServerTime();
-        const formattedDate = now.toLocaleDateString("en-US", {
-          year: "numeric",
-          month: "2-digit",
-          day: "2-digit",
-        });
-        const formattedTime = now.toLocaleTimeString("en-US", {
-          hour: "2-digit",
-          minute: "2-digit",
-          second: "2-digit",
-          hour12: true,
-        });
-
-        const pigeon = data.pigeon;
-        const pigeonLine = pigeon?.ringNumber
-          ? `🕊️ ${pigeon.ringNumber}${
-              pigeon.nickname ? ` (${pigeon.nickname})` : ""
-            }`
-          : "🕊️ Pigeon: (bound to sticker)";
-        const codeLine = data.stickerCode
-          ? `🏷️ Sticker: ${data.stickerCode}`
-          : "";
-
-        this.showModal({
-          title: "✅ Bird Clocked!",
-          message: `${formattedDate}  ${formattedTime}\n📋 ${eventName}\n${pigeonLine}\n${codeLine}\n📏 Air Distance: ${data.distance.toFixed(4)} KM\n⚡ Speed: ${data.speed.toFixed(4)} m/min`,
-          icon: "✅",
-          iconColor: "#27ae60",
-          buttonText: "OK",
-        });
+        this.showClockInSuccessModal(data);
 
         document.getElementById("clock-in-code").value = "";
         this.renderDashboard();

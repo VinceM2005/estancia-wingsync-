@@ -3643,3 +3643,268 @@ tr:hover td {
   font-size: 13px;
   color: var(--text-muted);
 }
+
+/* ===== CLOCK-IN SUCCESS (Strava-style activity card) ===== */
+@keyframes customFadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+@keyframes customSlideUp {
+  from { opacity: 0; transform: translateY(24px) scale(0.97); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+.clockin-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  background: rgba(15, 15, 15, 0.62);
+  backdrop-filter: blur(6px);
+  animation: customFadeIn 0.25s ease;
+}
+
+.clockin-card {
+  position: relative;
+  width: 100%;
+  max-width: 420px;
+  max-height: 92vh;
+  overflow: auto;
+  background: #fff;
+  border-radius: 16px;
+  box-shadow: 0 24px 64px rgba(0, 0, 0, 0.28);
+  text-align: left;
+  animation: customSlideUp 0.32s ease;
+}
+
+.clockin-close {
+  position: absolute;
+  top: 10px;
+  right: 12px;
+  z-index: 2;
+  width: 36px;
+  height: 36px;
+  border: none;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.16);
+  color: #fff;
+  font-size: 26px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.clockin-hero {
+  padding: 22px 22px 18px;
+  background: linear-gradient(160deg, #fc4c02 0%, #e34402 55%, #c73700 100%);
+  color: #fff;
+}
+
+.clockin-kicker {
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  opacity: 0.92;
+  margin-bottom: 6px;
+}
+
+.clockin-title {
+  margin: 0 28px 8px 0;
+  font-size: 22px;
+  font-weight: 800;
+  letter-spacing: -0.03em;
+  line-height: 1.2;
+}
+
+.clockin-when {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 500;
+  opacity: 0.92;
+}
+
+.clockin-athlete {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 14px 20px;
+  border-bottom: 1px solid #eee;
+}
+
+.clockin-avatar {
+  flex-shrink: 0;
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
+  overflow: hidden;
+  background: #f0ece8;
+  border: 2px solid #fff;
+  box-shadow: 0 0 0 2px #fc4c02;
+}
+
+.clockin-avatar img,
+.clockin-avatar svg {
+  width: 100% !important;
+  height: 100% !important;
+  object-fit: cover;
+  display: block;
+  border-radius: 50%;
+}
+
+.clockin-ring {
+  font-size: 16px;
+  font-weight: 800;
+  color: #111;
+  letter-spacing: -0.02em;
+}
+
+.clockin-sub {
+  margin-top: 2px;
+  font-size: 13px;
+  color: #6a6a6a;
+}
+
+.clockin-stats {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  gap: 0;
+  padding: 16px 8px 14px;
+  border-bottom: 1px solid #eee;
+}
+
+.clockin-stat {
+  text-align: center;
+  padding: 0 6px;
+  min-width: 0;
+}
+
+.clockin-stat + .clockin-stat {
+  border-left: 1px solid #eee;
+}
+
+.clockin-stat-value {
+  font-size: 22px;
+  font-weight: 800;
+  letter-spacing: -0.04em;
+  color: #111;
+  line-height: 1.1;
+  font-variant-numeric: tabular-nums;
+}
+
+.clockin-stat-label {
+  margin-top: 6px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #6a6a6a;
+}
+
+.clockin-stat-unit {
+  font-size: 11px;
+  color: #8a8a8a;
+  margin-top: 1px;
+}
+
+.clockin-details {
+  margin: 0;
+  padding: 8px 20px 4px;
+}
+
+.clockin-details > div {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 0;
+  border-bottom: 1px solid #f1f1f1;
+}
+
+.clockin-details > div:last-child {
+  border-bottom: none;
+}
+
+.clockin-details dt {
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: #8a8a8a;
+}
+
+.clockin-details dd {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 700;
+  color: #111;
+  text-align: right;
+  word-break: break-word;
+}
+
+.clockin-done {
+  display: block;
+  width: calc(100% - 40px);
+  margin: 8px 20px 20px;
+  padding: 13px 16px;
+  border: none;
+  border-radius: 8px;
+  background: #fc4c02;
+  color: #fff;
+  font-size: 15px;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+  cursor: pointer;
+}
+
+.clockin-done:hover {
+  background: #e34402;
+}
+
+.clockin-done:active {
+  transform: scale(0.98);
+}
+
+[data-theme="dark"] .clockin-card {
+  background: #1c1c1c;
+}
+
+[data-theme="dark"] .clockin-athlete,
+[data-theme="dark"] .clockin-stats {
+  border-bottom-color: #333;
+}
+
+[data-theme="dark"] .clockin-stat + .clockin-stat {
+  border-left-color: #333;
+}
+
+[data-theme="dark"] .clockin-ring,
+[data-theme="dark"] .clockin-stat-value,
+[data-theme="dark"] .clockin-details dd {
+  color: #f4f4f4;
+}
+
+[data-theme="dark"] .clockin-sub,
+[data-theme="dark"] .clockin-stat-label,
+[data-theme="dark"] .clockin-stat-unit,
+[data-theme="dark"] .clockin-details dt {
+  color: #a3a3a3;
+}
+
+[data-theme="dark"] .clockin-details > div {
+  border-bottom-color: #2a2a2a;
+}
+
+@media (max-width: 480px) {
+  .clockin-card {
+    max-width: 100%;
+    border-radius: 14px;
+  }
+  .clockin-stat-value {
+    font-size: 18px;
+  }
+  .clockin-title {
+    font-size: 20px;
+  }
+}
