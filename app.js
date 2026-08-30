@@ -1199,30 +1199,29 @@ const app = {
         const img = document.createElement("img");
         img.src = dataUrl;
         img.alt = `Sticker ${data.code} · ${data.ringNumber || "NO-RING"}`;
-        img.className = "sticker-preview-img";
+        img.style.width = "100%";
+        img.style.height = "auto";
+        img.style.borderRadius = "3px";
         wrapper.appendChild(img);
-
-        const meta = document.createElement("div");
-        meta.className = "sticker-preview-meta";
 
         const playerDiv = document.createElement("div");
         playerDiv.className = "sticker-player";
-        playerDiv.textContent = data.playerName || "Player";
-        meta.appendChild(playerDiv);
+        playerDiv.textContent = data.playerName;
+        wrapper.appendChild(playerDiv);
 
         const ringDiv = document.createElement("div");
         ringDiv.className = "sticker-ring";
+        ringDiv.style.cssText =
+          "font-weight:700;font-size:12px;color:#0a3d30;margin-top:2px;";
         ringDiv.textContent = data.ringNumber
           ? `Ring: ${data.ringNumber}${data.nickname ? ` (${data.nickname})` : ""}`
           : "Ring: — missing —";
-        meta.appendChild(ringDiv);
+        wrapper.appendChild(ringDiv);
 
         const codeDiv = document.createElement("div");
         codeDiv.className = "sticker-label";
         codeDiv.textContent = `Code: ${data.code}`;
-        meta.appendChild(codeDiv);
-
-        wrapper.appendChild(meta);
+        wrapper.appendChild(codeDiv);
 
         grid.appendChild(wrapper);
       }

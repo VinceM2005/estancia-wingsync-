@@ -1187,64 +1187,47 @@ tr:hover td {
 }
 .sticker-preview-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
-  gap: 16px;
+  grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+  gap: 12px;
   padding: 4px 0;
 }
 .sticker-preview-item {
   background: var(--card-bg);
-  border-radius: 12px;
-  box-shadow: none;
+  border-radius: 6px;
+  box-shadow: var(--shadow);
   border: 1px solid var(--border);
   overflow: hidden;
   display: flex;
   flex-direction: column;
-  align-items: stretch;
-  padding: 12px;
-  transition: transform 0.15s ease, border-color 0.15s ease;
+  align-items: center;
+  padding: 6px;
+  transition: transform 0.15s;
   color: var(--text);
 }
 .sticker-preview-item:hover {
-  transform: translateY(-1px);
-  border-color: var(--primary);
-  box-shadow: none;
+  transform: scale(1.02);
+  box-shadow: var(--shadow-hover);
 }
-.sticker-preview-item canvas,
-.sticker-preview-item .sticker-preview-img {
+.sticker-preview-item canvas {
   width: 100%;
   height: auto;
-  display: block;
-  border-radius: 4px;
+  border-radius: 3px;
   image-rendering: crisp-edges;
-  background: #ffffff;
-}
-.sticker-preview-meta {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  margin-top: 10px;
-  min-width: 0;
-}
-.sticker-preview-item .sticker-player {
-  font-size: 14px;
-  font-weight: 700;
-  color: var(--text);
-  line-height: 1.25;
-  word-break: break-word;
-}
-.sticker-preview-item .sticker-ring {
-  font-size: 12px;
-  font-weight: 700;
-  color: var(--primary);
-  line-height: 1.3;
-  word-break: break-word;
 }
 .sticker-preview-item .sticker-label {
-  font-size: 11px;
+  font-size: 10px;
   color: var(--text-muted);
-  margin-top: 2px;
+  margin-top: 4px;
   font-family: monospace;
-  letter-spacing: 0.4px;
+  letter-spacing: 0.5px;
+}
+.sticker-preview-item .sticker-player {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text);
+  margin-top: 2px;
+  text-align: center;
+  line-height: 1.2;
 }
 .sticker-empty-state {
   text-align: center;
@@ -1272,8 +1255,8 @@ tr:hover td {
 }
 @media (max-width: 768px) {
   .sticker-preview-grid {
-    grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
-    gap: 10px;
+    grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+    gap: 8px;
   }
   .sticker-controls {
     flex-direction: column;
@@ -1309,15 +1292,12 @@ tr:hover td {
     background: transparent !important;
     break-inside: avoid !important;
   }
-  .sticker-preview-item canvas,
-  .sticker-preview-item .sticker-preview-img {
+  .sticker-preview-item canvas {
     width: 100% !important;
     height: auto !important;
   }
   .sticker-preview-item .sticker-label,
-  .sticker-preview-item .sticker-player,
-  .sticker-preview-item .sticker-ring,
-  .sticker-preview-item .sticker-preview-meta {
+  .sticker-preview-item .sticker-player {
     display: none !important;
   }
   body {
