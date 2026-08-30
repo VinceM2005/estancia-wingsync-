@@ -8,7 +8,7 @@
     />
     <title>Wingsync - Pigeon Clocking System</title>
     <link rel="manifest" href="manifest.json" />
-    <link rel="stylesheet" href="style.css?v=27" />
+    <link rel="stylesheet" href="style.css?v=29" />
     <meta name="theme-color" content="#2a7a62" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="mobile-web-app-capable" content="yes" />
@@ -46,7 +46,7 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
 
-    <link rel="stylesheet" href="style.css?v=27" />
+    <link rel="stylesheet" href="style.css?v=29" />
     <style>
       /* ===== ADDITIONAL STYLES FOR UI COMPONENTS ===== */
       .pigeons-grid {
@@ -98,13 +98,6 @@
       .review-table .badge-invalid {
         color: red;
       }
-      .season-rank {
-        grid-column: 1 / -1 !important;
-        justify-self: center;
-        width: 100%;
-        max-width: 320px;
-      }
-
       /* ===== RACE ANALYTICS DASHBOARD ===== */
       .race-info-bar {
         display: flex;
@@ -981,6 +974,33 @@
                       >
                     </div>
                   </div>
+                </div>
+
+                <p class="player-perf-section-label">Current Season</p>
+                <div class="season-rank-panel" id="season-rank-panel">
+                  <div class="season-rank-main">
+                    <span class="season-rank-label">Season Rank</span>
+                    <span class="season-rank-value" id="stats-season-rank"
+                      >—</span
+                    >
+                    <span class="season-rank-points"
+                      ><span id="stats-season-points">0</span> pts</span
+                    >
+                  </div>
+                  <div class="season-rank-meta">
+                    <div class="season-rank-meta-item">
+                      <span id="stats-season-races">0</span>
+                      <small>Races</small>
+                    </div>
+                    <div class="season-rank-meta-item">
+                      <span id="stats-season-year">—</span>
+                      <small>Season</small>
+                    </div>
+                  </div>
+                  <p class="season-rank-hint" id="stats-season-hint">
+                    Best bird per race · 1st 10 pts · 2nd 7 · 3rd 5 · other
+                    places 3.
+                  </p>
                 </div>
               </div>
 

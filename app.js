@@ -2696,6 +2696,49 @@ const app = {
     }
   },
 
+  renderSeasonRank(season) {
+    const rankEl = document.getElementById("stats-season-rank");
+    const pointsEl = document.getElementById("stats-season-points");
+    const racesEl = document.getElementById("stats-season-races");
+    const yearEl = document.getElementById("stats-season-year");
+    const hintEl = document.getElementById("stats-season-hint");
+    const panel = document.getElementById("season-rank-panel");
+    if (!rankEl || !panel) return;
+
+    const year =
+      season && season.year
+        ? season.year
+        : new Intl.DateTimeFormat("en-US", {
+            timeZone: "Asia/Manila",
+            year: "numeric",
+          }).format(new Date());
+    const points = Number(season && season.totalPoints) || 0;
+    const races = Number(season && season.eventsParticipated) || 0;
+    const fieldSize = Number(season && season.fieldSize) || 0;
+    const rank = Number(season && season.rank) || 0;
+
+    if (yearEl) yearEl.textContent = String(year);
+    if (pointsEl) pointsEl.textContent = String(points);
+    if (racesEl) racesEl.textContent = String(races);
+
+    if (rank > 0) {
+      rankEl.textContent = `#${rank}`;
+      panel.classList.remove("season-rank-panel-empty");
+      if (hintEl) {
+        const place = fieldSize
+          ? `${rank} of ${fieldSize} players`
+          : `Rank #${rank}`;
+        hintEl.textContent = `${place} · best bird per race · 1st 10 pts · 2nd 7 · 3rd 5 · other places 3`;
+      }
+    } else {
+      rankEl.textContent = "Unranked";
+      panel.classList.add("season-rank-panel-empty");
+      if (hintEl) {
+        hintEl.textContent = `No clock-ins in the ${year} season yet. Rank uses your fastest bird in each Live / verified race.`;
+      }
+    }
+  },
+
   loadPlayerStats() {
     const userId = this.currentUser.id;
     fetchWithAuth(`${API_URL}/users/player/${userId}/stats`)
@@ -2720,27 +2763,7 @@ const app = {
         if (joinedEl) joinedEl.textContent = stats.racesJoined || 0;
         const certEl = document.getElementById("stats-total-certificates");
         if (certEl) certEl.textContent = stats.totalCertificates || 0;
-        if (stats.seasonRanking && stats.seasonRanking.rank) {
-          let rankEl = document.querySelector(".season-rank");
-          if (!rankEl) {
-            const container = document.querySelector(".stats-grid");
-            if (container) {
-              rankEl = document.createElement("div");
-              rankEl.className =
-                "stat-metric stat-metric-highlight stat-metric-full season-rank";
-              container.appendChild(rankEl);
-            }
-          }
-          if (rankEl) {
-            rankEl.innerHTML = `
-              <div class="stat-metric-content">
-                <span class="stat-metric-label">Current Season Rank</span>
-                <span class="stat-metric-value stat-metric-value-accent">#${stats.seasonRanking.rank}</span>
-                <span class="stat-metric-unit">${stats.seasonRanking.totalPoints} pts</span>
-              </div>
-            `;
-          }
-        }
+        this.renderSeasonRank(stats.seasonRanking);
         document
           .getElementById("player-stats-container")
           .classList.remove("hidden");

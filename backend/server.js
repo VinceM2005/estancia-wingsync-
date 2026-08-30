@@ -3213,6 +3213,17 @@ async function getChampionTitles(playerId) {
   return results.length > 0 ? results[0].championTitles : 0;
 }
 
+const SEASON_TZ = "Asia/Manila";
+const SEASON_STATES = ["Live Race", "Result Verification"];
+
+function calendarYearInManila(date) {
+  const formatted = new Intl.DateTimeFormat("en-US", {
+    timeZone: SEASON_TZ,
+    year: "numeric",
+  }).format(new Date(date));
+  return Number(formatted);
+}
+
 function seasonPoints(position) {
   if (position === 1) return 10;
   if (position === 2) return 7;
@@ -3220,55 +3231,133 @@ function seasonPoints(position) {
   return 3;
 }
 
-async function getSeasonRanking(playerId, year = new Date().getFullYear()) {
-  const start = new Date(year, 0, 1);
-  const end = new Date(year, 11, 31, 23, 59, 59);
+function emptySeasonRanking(year) {
+  return {
+    year,
+    rank: null,
+    totalPoints: 0,
+    eventsParticipated: 0,
+    clocks: 0,
+    fieldSize: 0,
+    wins: 0,
+  };
+}
+
+async function getSeasonRanking(playerId) {
+  const currentYear = calendarYearInManila(new Date());
   const events = await Event.find({
-    releaseTime: { $gte: start, $lte: end },
-    state: { $in: ["Result Verification"] },
+    state: { $in: SEASON_STATES },
   })
-    .select("code")
+    .select("code releaseTime")
     .lean();
-  const eventIds = events.map((e) => e.code);
-  if (eventIds.length === 0) {
-    return { year, rank: null, totalPoints: 0, eventsParticipated: 0 };
+  if (!events.length) return emptySeasonRanking(currentYear);
+
+  const yearByCode = new Map();
+  for (const event of events) {
+    yearByCode.set(event.code, calendarYearInManila(event.releaseTime));
   }
 
   const allResults = await Result.find({
-    eventId: { $in: eventIds },
-    pigeonId: { $ne: null },
+    eventId: { $in: events.map((event) => event.code) },
   })
-    .select("_id eventId userId speedMPM")
-    .sort({ speedMPM: -1 })
+    .select("eventId userId speedMPM arrivalTime")
     .lean();
 
+  const yearsWithResults = new Set();
+  for (const row of allResults) {
+    const year = yearByCode.get(row.eventId);
+    if (year) yearsWithResults.add(year);
+  }
+
+  const year = yearsWithResults.has(currentYear)
+    ? currentYear
+    : yearsWithResults.size
+      ? Math.max(...yearsWithResults)
+      : currentYear;
+
+  const seasonEventIds = new Set(
+    events
+      .filter((event) => yearByCode.get(event.code) === year)
+      .map((event) => event.code),
+  );
+  const seasonResults = allResults.filter((row) =>
+    seasonEventIds.has(row.eventId),
+  );
+  if (!seasonResults.length) return emptySeasonRanking(year);
+
   const byEvent = new Map();
-  for (const r of allResults) {
-    let list = byEvent.get(r.eventId);
+  for (const row of seasonResults) {
+    const speed = Number(row.speedMPM);
+    if (!Number.isFinite(speed)) continue;
+    let list = byEvent.get(row.eventId);
     if (!list) {
       list = [];
-      byEvent.set(r.eventId, list);
+      byEvent.set(row.eventId, list);
     }
-    list.push(r);
+    list.push(row);
   }
 
   const playerPoints = new Map();
-  let playerClockIns = 0;
+  const playerWins = new Map();
+  const playerRaces = new Map();
+  const playerClocks = new Map();
+  const playerBestSum = new Map();
+
   for (const rows of byEvent.values()) {
-    rows.forEach((r, i) => {
-      const pts = seasonPoints(i + 1);
-      playerPoints.set(r.userId, (playerPoints.get(r.userId) || 0) + pts);
-      if (r.userId === playerId) playerClockIns++;
+    const bestByPlayer = new Map();
+    for (const row of rows) {
+      const uid = String(row.userId);
+      playerClocks.set(uid, (playerClocks.get(uid) || 0) + 1);
+      const speed = Number(row.speedMPM);
+      const arrival = row.arrivalTime
+        ? new Date(row.arrivalTime).getTime()
+        : Number.POSITIVE_INFINITY;
+      const prev = bestByPlayer.get(uid);
+      if (
+        !prev ||
+        speed > prev.speed ||
+        (speed === prev.speed && arrival < prev.arrival)
+      ) {
+        bestByPlayer.set(uid, { speed, arrival });
+      }
+    }
+
+    const ordered = [...bestByPlayer.entries()].sort((a, b) => {
+      if (b[1].speed !== a[1].speed) return b[1].speed - a[1].speed;
+      return a[1].arrival - b[1].arrival;
+    });
+
+    ordered.forEach(([uid, best], index) => {
+      const position = index + 1;
+      playerPoints.set(uid, (playerPoints.get(uid) || 0) + seasonPoints(position));
+      playerRaces.set(uid, (playerRaces.get(uid) || 0) + 1);
+      playerBestSum.set(uid, (playerBestSum.get(uid) || 0) + best.speed);
+      if (position === 1) {
+        playerWins.set(uid, (playerWins.get(uid) || 0) + 1);
+      }
     });
   }
 
-  const ranked = [...playerPoints.entries()].sort((a, b) => b[1] - a[1]);
-  const rankIndex = ranked.findIndex((p) => p[0] === playerId);
+  const pid = String(playerId);
+  const ranked = [...playerPoints.entries()].sort((a, b) => {
+    if (b[1] !== a[1]) return b[1] - a[1];
+    const winDiff = (playerWins.get(b[0]) || 0) - (playerWins.get(a[0]) || 0);
+    if (winDiff !== 0) return winDiff;
+    const speedDiff =
+      (playerBestSum.get(b[0]) || 0) - (playerBestSum.get(a[0]) || 0);
+    if (speedDiff !== 0) return speedDiff;
+    return String(a[0]).localeCompare(String(b[0]));
+  });
+  const rankIndex = ranked.findIndex((entry) => entry[0] === pid);
+
   return {
     year,
     rank: rankIndex >= 0 ? rankIndex + 1 : null,
-    totalPoints: playerPoints.get(playerId) || 0,
-    eventsParticipated: playerClockIns,
+    totalPoints: playerPoints.get(pid) || 0,
+    eventsParticipated: playerRaces.get(pid) || 0,
+    clocks: playerClocks.get(pid) || 0,
+    fieldSize: ranked.length,
+    wins: playerWins.get(pid) || 0,
   };
 }
 
@@ -3293,6 +3382,7 @@ app.get("/api/users/player/:id/stats", authenticateToken, async (req, res) => {
       playerId: id,
     });
     if (results.length === 0) {
+      const seasonRanking = await getSeasonRanking(id);
       return {
         userId: id,
         userName: user.name,
@@ -3307,8 +3397,8 @@ app.get("/api/users/player/:id/stats", authenticateToken, async (req, res) => {
         championTitles: 0,
         totalCertificates,
         fastestArrival: null,
-        seasonRanking: null,
-        currentSeasonRank: null,
+        seasonRanking,
+        currentSeasonRank: seasonRanking.rank || null,
         winningPercentage: 0,
       };
     }
@@ -3371,8 +3461,7 @@ app.get("/api/users/player/:id/stats", authenticateToken, async (req, res) => {
     }
     const winRate =
       eventsParticipated > 0 ? (wins / eventsParticipated) * 100 : 0;
-    const currentYear = new Date().getFullYear();
-    const seasonRanking = await getSeasonRanking(id, currentYear);
+    const seasonRanking = await getSeasonRanking(id);
 
     return {
       userId: id,
