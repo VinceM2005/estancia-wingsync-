@@ -36,6 +36,32 @@ app.use(
 app.use(helmet());
 app.use(express.json({ limit: "10mb" }));
 
+const zlib = require("zlib");
+app.use((req, res, next) => {
+  const accept = String(req.headers["accept-encoding"] || "");
+  if (!/\bgzip\b/i.test(accept)) return next();
+  const sendJson = res.json.bind(res);
+  res.json = (body) => {
+    let json;
+    try {
+      json = JSON.stringify(body);
+    } catch (_) {
+      return sendJson(body);
+    }
+    if (!json || json.length < 1024) return sendJson(body);
+    zlib.gzip(json, { level: 4 }, (err, buf) => {
+      if (err || res.headersSent) return sendJson(body);
+      res.setHeader("Content-Encoding", "gzip");
+      res.setHeader("Vary", "Accept-Encoding");
+      res.setHeader("Content-Type", "application/json; charset=utf-8");
+      res.setHeader("Content-Length", buf.length);
+      res.end(buf);
+    });
+    return res;
+  };
+  next();
+});
+
 app.use((req, res, next) => {
   const started = Date.now();
   res.on("finish", () => {
@@ -213,6 +239,7 @@ const UserSchema = new mongoose.Schema({
     validate: { validator: (v) => v !== null && v !== undefined && !isNaN(v) },
   },
 });
+UserSchema.index({ role: 1 });
 
 const EventSchema = new mongoose.Schema({
   code: { type: String, required: true, unique: true },
@@ -288,6 +315,7 @@ const ResultSchema = new mongoose.Schema({
 ResultSchema.index({ eventId: 1, userId: 1, clockInCode: 1 }, { unique: true });
 ResultSchema.index({ eventId: 1, speedMPM: -1 });
 ResultSchema.index({ eventId: 1, pigeonId: 1 });
+ResultSchema.index({ userId: 1, eventId: 1 });
 
 const LogSchema = new mongoose.Schema({
   message: { type: String, required: true },
@@ -334,6 +362,7 @@ const EventRegistrationSchema = new mongoose.Schema(
   { versionKey: false },
 );
 EventRegistrationSchema.index({ eventId: 1, playerId: 1 }, { unique: true });
+EventRegistrationSchema.index({ playerId: 1, status: 1 });
 
 const CertificateSchema = new mongoose.Schema({
   certificateNumber: { type: String, required: true, unique: true },
@@ -378,6 +407,12 @@ function cacheGet(key) {
 }
 
 function cacheSet(key, val, ttlMs) {
+  if (memCache.size > 400) {
+    const now = Date.now();
+    for (const [k, entry] of memCache) {
+      if (now > entry.exp) memCache.delete(k);
+    }
+  }
   memCache.set(key, { val, exp: Date.now() + ttlMs });
 }
 
@@ -385,7 +420,7 @@ function cacheDelete(key) {
   memCache.delete(key);
 }
 
-function invalidateLiveCaches(eventCode) {
+function invalidateLiveCaches(eventCode, userId) {
   cacheDelete("dashboard");
   cacheDelete("events:active");
   cacheDelete("events:open");
@@ -395,7 +430,9 @@ function invalidateLiveCaches(eventCode) {
     cacheDelete(`event:${eventCode}`);
     cacheDelete(`results:${eventCode}`);
     cacheDelete(`resultsPigeons:${eventCode}`);
+    cacheDelete(`forecastBase:${eventCode}`);
   }
+  if (userId) cacheDelete(`playerStats:${userId}`);
 }
 
 async function cacheWrap(key, ttlMs, fn) {
@@ -512,15 +549,12 @@ async function getRegistrationsSummary() {
       ]),
     ]);
 
-    const allEventIds = new Set([
-      ...raceCodeSummary.map((r) => r.eventId),
-      ...eventRegSummary.map((r) => r.eventId),
-    ]);
-
+    const raceMap = new Map(raceCodeSummary.map((r) => [r.eventId, r]));
+    const regMap = new Map(eventRegSummary.map((r) => [r.eventId, r]));
     const result = [];
-    for (const eventId of allEventIds) {
-      const race = raceCodeSummary.find((r) => r.eventId === eventId);
-      const reg = eventRegSummary.find((r) => r.eventId === eventId);
+    for (const eventId of new Set([...raceMap.keys(), ...regMap.keys()])) {
+      const race = raceMap.get(eventId);
+      const reg = regMap.get(eventId);
       result.push({
         eventId,
         playerCount: race ? race.playerCount : reg ? reg.playerCount : 0,
@@ -1446,7 +1480,7 @@ app.post(
 
       await session.commitTransaction();
       session.endSession();
-      invalidateLiveCaches(event.code);
+      invalidateLiveCaches(event.code, user.id);
 
       const saved = result[0].toObject ? result[0].toObject() : result[0];
       res.json({
@@ -1496,50 +1530,57 @@ app.get("/api/results/:eventCode/forecast", async (req, res) => {
     const releaseTime = new Date(event.releaseTime);
     const elapsedMinutes = (now.getTime() - releaseTime.getTime()) / 60000;
 
-    const regs = await EventRegistration.find({
-      eventId: event.code,
-      status: { $in: ["confirmed", "locked"] },
-    })
-      .select("playerId")
-      .lean();
-    const playerIds = [...new Set(regs.map((r) => r.playerId))];
-
-    const [users, clockedRows] = await Promise.all([
-      User.find({ id: { $in: playerIds } })
-        .select("id name lat lng")
-        .lean(),
-      Result.find({ eventId: event.code }).select("userId").lean(),
-    ]);
-    const clockedIds = new Set(clockedRows.map((r) => r.userId));
-
-    const players = users
-      .map((u) => {
-        let distanceKm = null;
-        if (
-          typeof u.lat === "number" &&
-          typeof u.lng === "number" &&
-          typeof event.lat === "number" &&
-          typeof event.lng === "number"
-        ) {
-          try {
-            distanceKm = roundRace(
-              calculateDistance(event.lat, event.lng, u.lat, u.lng),
-            );
-          } catch (_) {
-            distanceKm = null;
+    const base = await cacheWrap(
+      `forecastBase:${event.code}`,
+      RESULTS_TTL_MS,
+      async () => {
+        const regs = await EventRegistration.find({
+          eventId: event.code,
+          status: { $in: ["confirmed", "locked"] },
+        })
+          .select("playerId")
+          .lean();
+        const playerIds = [...new Set(regs.map((r) => r.playerId))];
+        const [users, clockedRows] = await Promise.all([
+          User.find({ id: { $in: playerIds } })
+            .select("id name lat lng")
+            .lean(),
+          Result.find({ eventId: event.code }).select("userId").lean(),
+        ]);
+        const clockedIds = new Set(clockedRows.map((r) => r.userId));
+        return users.map((u) => {
+          let distanceKm = null;
+          if (
+            typeof u.lat === "number" &&
+            typeof u.lng === "number" &&
+            typeof event.lat === "number" &&
+            typeof event.lng === "number"
+          ) {
+            try {
+              distanceKm = roundRace(
+                calculateDistance(event.lat, event.lng, u.lat, u.lng),
+              );
+            } catch (_) {
+              distanceKm = null;
+            }
           }
-        }
+          return {
+            userId: u.id,
+            userName: u.name,
+            distanceKm,
+            clocked: clockedIds.has(u.id),
+          };
+        });
+      },
+    );
+
+    const players = base
+      .map((p) => {
         let forecastSpeedMpm = null;
-        if (distanceKm != null && elapsedMinutes > 0) {
-          forecastSpeedMpm = roundRace((distanceKm * 1000) / elapsedMinutes);
+        if (p.distanceKm != null && elapsedMinutes > 0) {
+          forecastSpeedMpm = roundRace((p.distanceKm * 1000) / elapsedMinutes);
         }
-        return {
-          userId: u.id,
-          userName: u.name,
-          distanceKm,
-          forecastSpeedMpm,
-          clocked: clockedIds.has(u.id),
-        };
+        return { ...p, forecastSpeedMpm };
       })
       .sort((a, b) => {
         const as = a.forecastSpeedMpm == null ? -1 : a.forecastSpeedMpm;
@@ -2179,6 +2220,20 @@ app.get("/api/events/open", async (req, res) => {
   }
 });
 
+app.get("/api/events/registrations/mine", async (req, res) => {
+  try {
+    const registrations = await EventRegistration.find({
+      playerId: req.user.id,
+    })
+      .select("eventId playerId pigeonIds status registrationDate")
+      .lean();
+    res.json({ registrations });
+  } catch (error) {
+    console.error("Error fetching player registrations:", error);
+    res.status(500).json({ error: "Failed to fetch registrations." });
+  }
+});
+
 app.get("/api/events/:eventId/registrations/my", async (req, res) => {
   try {
     const { eventId } = req.params;
@@ -2251,6 +2306,7 @@ app.post(
         message: `Player ${playerId} registered for event ${eventId} with ${pigeonIds.length} pigeons.`,
       });
 
+      invalidateLiveCaches(eventId, playerId);
       res.status(201).json({ success: true, registration });
     } catch (error) {
       console.error("Error creating registration:", error);
@@ -2342,6 +2398,7 @@ app.put(
       await Log.create({
         message: `Player ${playerId} updated registration for event ${eventId}.`,
       });
+      invalidateLiveCaches(eventId, playerId);
       res.json({ success: true, registration: updated });
     } catch (error) {
       console.error("Error updating registration:", error);
@@ -2384,6 +2441,7 @@ app.delete("/api/events/:eventId/register", async (req, res) => {
     await Log.create({
       message: `Player ${playerId} withdrew registration for event ${eventId}.`,
     });
+    invalidateLiveCaches(eventId, playerId);
     res.json({ success: true, message: "Registration removed." });
   } catch (error) {
     console.error("Error withdrawing registration:", error);
@@ -3155,71 +3213,62 @@ async function getChampionTitles(playerId) {
   return results.length > 0 ? results[0].championTitles : 0;
 }
 
+function seasonPoints(position) {
+  if (position === 1) return 10;
+  if (position === 2) return 7;
+  if (position === 3) return 5;
+  return 3;
+}
+
 async function getSeasonRanking(playerId, year = new Date().getFullYear()) {
   const start = new Date(year, 0, 1);
   const end = new Date(year, 11, 31, 23, 59, 59);
   const events = await Event.find({
     releaseTime: { $gte: start, $lte: end },
     state: { $in: ["Result Verification"] },
-  });
+  })
+    .select("code")
+    .lean();
   const eventIds = events.map((e) => e.code);
-  const results = await Result.find({
-    userId: playerId,
-    eventId: { $in: eventIds },
-    pigeonId: { $ne: null },
-  });
-  if (results.length === 0) {
+  if (eventIds.length === 0) {
     return { year, rank: null, totalPoints: 0, eventsParticipated: 0 };
   }
-  let totalPoints = 0;
-  for (const r of results) {
-    const eventResults = await Result.find({
-      eventId: r.eventId,
-      pigeonId: { $ne: null },
-    }).sort({ speedMPM: -1 });
-    const position =
-      eventResults.findIndex((res) => res._id.toString() === r._id.toString()) +
-      1;
-    if (position === 1) totalPoints += 10;
-    else if (position === 2) totalPoints += 7;
-    else if (position === 3) totalPoints += 5;
-    else totalPoints += 3;
-  }
-  const allPlayers = await Result.aggregate([
-    { $match: { eventId: { $in: eventIds }, pigeonId: { $ne: null } } },
-    {
-      $group: {
-        _id: "$userId",
-        events: { $addToSet: "$eventId" },
-        results: { $push: "$$ROOT" },
-      },
-    },
-  ]);
-  const playerPoints = [];
-  for (const p of allPlayers) {
-    let pts = 0;
-    for (const r of p.results) {
-      const eventRes = await Result.find({
-        eventId: r.eventId,
-        pigeonId: { $ne: null },
-      }).sort({ speedMPM: -1 });
-      const pos =
-        eventRes.findIndex((res) => res._id.toString() === r._id.toString()) +
-        1;
-      if (pos === 1) pts += 10;
-      else if (pos === 2) pts += 7;
-      else if (pos === 3) pts += 5;
-      else pts += 3;
+
+  const allResults = await Result.find({
+    eventId: { $in: eventIds },
+    pigeonId: { $ne: null },
+  })
+    .select("_id eventId userId speedMPM")
+    .sort({ speedMPM: -1 })
+    .lean();
+
+  const byEvent = new Map();
+  for (const r of allResults) {
+    let list = byEvent.get(r.eventId);
+    if (!list) {
+      list = [];
+      byEvent.set(r.eventId, list);
     }
-    playerPoints.push({ userId: p._id, points: pts });
+    list.push(r);
   }
-  playerPoints.sort((a, b) => b.points - a.points);
-  const rank = playerPoints.findIndex((p) => p.userId === playerId) + 1;
+
+  const playerPoints = new Map();
+  let playerClockIns = 0;
+  for (const rows of byEvent.values()) {
+    rows.forEach((r, i) => {
+      const pts = seasonPoints(i + 1);
+      playerPoints.set(r.userId, (playerPoints.get(r.userId) || 0) + pts);
+      if (r.userId === playerId) playerClockIns++;
+    });
+  }
+
+  const ranked = [...playerPoints.entries()].sort((a, b) => b[1] - a[1]);
+  const rankIndex = ranked.findIndex((p) => p[0] === playerId);
   return {
     year,
-    rank: rank > 0 ? rank : null,
-    totalPoints,
-    eventsParticipated: results.length,
+    rank: rankIndex >= 0 ? rankIndex + 1 : null,
+    totalPoints: playerPoints.get(playerId) || 0,
+    eventsParticipated: playerClockIns,
   };
 }
 
@@ -3229,10 +3278,13 @@ app.get("/api/users/player/:id/stats", authenticateToken, async (req, res) => {
     if (req.user.id !== id && req.user.role !== "admin") {
       return res.status(403).json({ error: "Forbidden" });
     }
-    const user = await User.findOne({ id });
+    const user = await User.findOne({ id }).select("id name").lean();
     if (!user) return res.status(404).json({ error: "Player not found" });
 
-    const results = await Result.find({ userId: id });
+    const payload = await cacheWrap(`playerStats:${id}`, 20000, async () => {
+    const results = await Result.find({ userId: id })
+      .select("eventId pigeonId speedMPM")
+      .lean();
     const racesJoined = await EventRegistration.countDocuments({
       playerId: id,
       status: { $in: ["confirmed", "locked"] },
@@ -3241,7 +3293,7 @@ app.get("/api/users/player/:id/stats", authenticateToken, async (req, res) => {
       playerId: id,
     });
     if (results.length === 0) {
-      return res.json({
+      return {
         userId: id,
         userName: user.name,
         totalPigeons: 0,
@@ -3258,7 +3310,7 @@ app.get("/api/users/player/:id/stats", authenticateToken, async (req, res) => {
         seasonRanking: null,
         currentSeasonRank: null,
         winningPercentage: 0,
-      });
+      };
     }
 
     const totalPigeons = new Set(
@@ -3277,7 +3329,9 @@ app.get("/api/users/player/:id/stats", authenticateToken, async (req, res) => {
     );
     let fastestArrival = null;
     if (fastestResult.pigeonId) {
-      const pigeon = await Pigeon.findById(fastestResult.pigeonId);
+      const pigeon = await Pigeon.findById(fastestResult.pigeonId)
+        .select("nickname ringNumber avatarId")
+        .lean();
       fastestArrival = {
         speed: fastestResult.speedMPM,
         pigeonName: pigeon ? pigeon.nickname || pigeon.ringNumber : "Unknown",
@@ -3295,10 +3349,21 @@ app.get("/api/users/player/:id/stats", authenticateToken, async (req, res) => {
 
     let wins = 0;
     let podiums = 0;
+    const rankedRows = await Result.find({ eventId: { $in: eventIds } })
+      .select("eventId userId speedMPM")
+      .sort({ speedMPM: -1 })
+      .lean();
+    const byEvent = new Map();
+    for (const r of rankedRows) {
+      let list = byEvent.get(r.eventId);
+      if (!list) {
+        list = [];
+        byEvent.set(r.eventId, list);
+      }
+      list.push(r);
+    }
     for (const eventId of eventIds) {
-      const eventResults = await Result.find({ eventId })
-        .sort({ speedMPM: -1 })
-        .lean();
+      const eventResults = byEvent.get(eventId) || [];
       if (eventResults.length === 0) continue;
       const userIndex = eventResults.findIndex((r) => r.userId === id);
       if (userIndex === 0) wins++;
@@ -3309,7 +3374,7 @@ app.get("/api/users/player/:id/stats", authenticateToken, async (req, res) => {
     const currentYear = new Date().getFullYear();
     const seasonRanking = await getSeasonRanking(id, currentYear);
 
-    res.json({
+    return {
       userId: id,
       userName: user.name,
       totalPigeons,
@@ -3325,7 +3390,9 @@ app.get("/api/users/player/:id/stats", authenticateToken, async (req, res) => {
       seasonRanking,
       currentSeasonRank: seasonRanking.rank || null,
       winningPercentage: parseFloat(winRate.toFixed(1)),
+    };
     });
+    res.json(payload);
   } catch (error) {
     console.error("Player stats error:", error);
     res.status(500).json({ error: "An internal error occurred." });
@@ -3368,7 +3435,9 @@ app.get("/api/pigeons/:id/stats", async (req, res) => {
     }
 
     const eventIds = [...new Set(results.map((r) => r.eventId))];
-    const events = await Event.find({ code: { $in: eventIds } }).lean();
+    const events = await Event.find({ code: { $in: eventIds } })
+      .select("code name")
+      .lean();
     const eventMap = {};
     events.forEach((e) => {
       eventMap[e.code] = e;
@@ -3391,21 +3460,31 @@ app.get("/api/pigeons/:id/stats", async (req, res) => {
     const bestSpeed = Math.max(...speeds);
     const averageSpeed = speeds.reduce((a, b) => a + b, 0) / speeds.length;
 
-    for (let i = 0; i < raceHistory.length; i++) {
-      const eventResults = await Result.find({
-        eventId: results[i].eventId,
-        pigeonId: { $ne: null },
-      })
-        .sort({ speedMPM: -1 })
-        .lean();
+    const pigeonIdStr = String(pigeon._id);
+    const allEventResults = await Result.find({
+      eventId: { $in: eventIds },
+      pigeonId: { $ne: null },
+    })
+      .select("eventId pigeonId speedMPM")
+      .sort({ speedMPM: -1 })
+      .lean();
+    const byEvent = new Map();
+    for (const r of allEventResults) {
+      let list = byEvent.get(r.eventId);
+      if (!list) {
+        list = [];
+        byEvent.set(r.eventId, list);
+      }
+      list.push(r);
+    }
 
+    for (let i = 0; i < raceHistory.length; i++) {
+      const eventResults = byEvent.get(results[i].eventId) || [];
       const pos =
         eventResults.findIndex(
-          (r) => r.pigeonId.toString() === pigeonId.toString(),
+          (r) => String(r.pigeonId) === pigeonIdStr,
         ) + 1;
-
       raceHistory[i].rank = pos;
-
       if (pos === 1) wins++;
       if (pos >= 1 && pos <= 3) podiums++;
     }
@@ -3414,7 +3493,9 @@ app.get("/api/pigeons/:id/stats", async (req, res) => {
       pigeonId: { $in: [String(pigeon._id), pigeon._id] },
     }).lean();
     const certEventIds = [...new Set(certs.map((c) => c.eventId))];
-    const certEvents = await Event.find({ code: { $in: certEventIds } }).lean();
+    const certEvents = await Event.find({ code: { $in: certEventIds } })
+      .select("code name")
+      .lean();
     const certEventMap = {};
     certEvents.forEach((e) => {
       certEventMap[e.code] = e;

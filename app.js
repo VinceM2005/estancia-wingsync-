@@ -2924,6 +2924,8 @@ const app = {
       if (!this.selectedEventCode) {
         tbody.innerHTML = "";
         this.clearAnalyticsSections();
+        this._resultsFp = null;
+        this._resultsEvent = null;
         this._isRendering = false;
         return;
       }
@@ -2963,12 +2965,27 @@ const app = {
         document.getElementById("race-status").className = "race-status-badge";
       }
 
-      const res = await fetchWithAuth(
-        `${API_URL}/results/${this.selectedEventCode}`,
-      );
+      const eventCode = this.selectedEventCode;
+      const forecastTask = this.renderSpeedForecast(eventCode);
+      const res = await fetchWithAuth(`${API_URL}/results/${eventCode}`);
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       let results = await res.json();
       if (!Array.isArray(results)) results = [];
+
+      const fp = results
+        .map((r) => `${r._id}:${r.speedMPM}:${r.arrivalTime}`)
+        .join("|");
+      if (this._resultsEvent === eventCode && this._resultsFp === fp) {
+        const updatedEl = document.getElementById("results-last-updated");
+        if (updatedEl) {
+          updatedEl.textContent = `Last updated: ${new Date().toLocaleTimeString()}`;
+        }
+        await forecastTask;
+        this._isRendering = false;
+        return;
+      }
+      this._resultsEvent = eventCode;
+      this._resultsFp = fp;
 
       tbody.innerHTML = "";
       if (results.length === 0) {
@@ -2983,7 +3000,7 @@ const app = {
         tbody.appendChild(tr);
         this.clearAnalyticsSections();
         this.updateRaceEntryStats(0);
-        await this.renderSpeedForecast(this.selectedEventCode);
+        await forecastTask;
         this._isRendering = false;
         return;
       }
@@ -3067,7 +3084,7 @@ const app = {
         ? `${lastArrival.userName} (${lastArrival.arrivalTime.toLocaleTimeString()})`
         : "—";
 
-      await this.renderSpeedForecast(this.selectedEventCode);
+      await forecastTask;
 
       safeResults.forEach((r, i) => {
         const tr = document.createElement("tr");
@@ -5018,31 +5035,32 @@ const app = {
   },
 
   loadOpenEvents() {
-    fetchWithAuth(`${API_URL}/events/open`)
-      .then((res) => res.json())
-      .then((events) => {
+    Promise.all([
+      fetchWithAuth(`${API_URL}/events/open`).then((res) => res.json()),
+      fetchWithAuth(`${API_URL}/events/registrations/mine`)
+        .then((res) => res.json())
+        .catch(() => ({ registrations: [] })),
+    ])
+      .then(([events, mine]) => {
         const container = document.getElementById("entries-container");
         if (!events || events.length === 0) {
           container.innerHTML = `<p>No open events for registration at the moment.</p>`;
           return;
         }
-        return Promise.all(
-          events.map((e) =>
-            fetchWithAuth(`${API_URL}/events/${e.code}/registrations/my`)
-              .then((r) => r.json())
-              .then((data) => ({ event: e, registration: data.registration }))
-              .catch(() => ({ event: e, registration: null })),
-          ),
-        ).then((rows) => {
-          let html = `<h3>Open Events</h3>`;
-          rows.forEach(({ event: e, registration }) => {
-            const hasEntry = !!registration;
-            const joinLabel = hasEntry ? "Manage Entry" : "Join Race";
-            const joinClass = hasEntry ? "btn-primary" : "btn-success";
-            const entryBadge = hasEntry
-              ? `<span class="entry-registered-badge">${registration.pigeonIds?.length || 0} entered</span>`
-              : "";
-            html += `
+        const byEvent = {};
+        (mine.registrations || []).forEach((r) => {
+          byEvent[r.eventId] = r;
+        });
+        let html = `<h3>Open Events</h3>`;
+        events.forEach((e) => {
+          const registration = byEvent[e.code];
+          const hasEntry = !!registration;
+          const joinLabel = hasEntry ? "Manage Entry" : "Join Race";
+          const joinClass = hasEntry ? "btn-primary" : "btn-success";
+          const entryBadge = hasEntry
+            ? `<span class="entry-registered-badge">${registration.pigeonIds?.length || 0} entered</span>`
+            : "";
+          html += `
             <div class="entry-item">
               <div><strong>${e.name}</strong> (${e.code}) ${entryBadge}<br><small>Release: ${new Date(e.releaseTime).toLocaleString()}</small></div>
               <div>
@@ -5051,9 +5069,8 @@ const app = {
               </div>
             </div>
           `;
-          });
-          container.innerHTML = html;
         });
+        container.innerHTML = html;
       })
       .catch((err) => {
         document.getElementById("entries-container").innerHTML =
