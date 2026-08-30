@@ -5687,6 +5687,11 @@ const app = {
       : ringNumber;
 
     const eventName = cert.eventId?.name || "Unknown Event";
+    const ownerName = (
+      (typeof cert.playerId === "object" && cert.playerId?.name) ||
+      cert.playerName ||
+      ""
+    ).trim() || "—";
     const distance = formatDistanceKm(cert.distance);
     const speed = formatSpeedMpm(cert.speed);
 
@@ -5800,6 +5805,11 @@ const app = {
               </div>
             </div>
 
+            <div class="cert-bred">
+              <span class="cert-bred-label">Raced and Bred by</span>
+              <span class="cert-bred-name">${esc(ownerName)}</span>
+            </div>
+
             <div class="cert-footer">
               <div class="cert-signed">
                 <div class="cert-signed-date">${esc(formattedDate)}</div>
@@ -5901,7 +5911,7 @@ const app = {
 
     const origin = window.location.origin;
     const basePath = window.location.pathname.replace(/\/[^/]*$/, "/");
-    const cssHref = `${origin}${basePath}style.css?v=17`;
+    const cssHref = `${origin}${basePath}style.css?v=30`;
     const fontHref =
       "https://fonts.googleapis.com/css2?family=Cinzel:wght@400;600;700&family=Great+Vibes&family=Libre+Baskerville:ital,wght@0,400;0,700;1,400&display=swap";
     const faHref =
@@ -6146,6 +6156,22 @@ const app = {
     doc.setFontSize(10);
     doc.setTextColor(26, 36, 32);
     doc.text("in the said race.", textX + textW / 2, y, { align: "center" });
+
+    const ownerName = (
+      (typeof cert.playerId === "object" && cert.playerId?.name) ||
+      cert.playerName ||
+      ""
+    ).trim() || "—";
+    y += 8;
+    doc.setFont("times", "italic");
+    doc.setFontSize(9);
+    doc.setTextColor(80, 80, 80);
+    doc.text("Raced and Bred by", cx, y, { align: "center" });
+    y += 6;
+    doc.setFont("times", "bold");
+    doc.setFontSize(12);
+    doc.setTextColor(10, 61, 48);
+    doc.text(ownerName, cx, y, { align: "center" });
 
     const footerY = pageHeight - margin - 18;
     doc.setDrawColor(80, 80, 80);

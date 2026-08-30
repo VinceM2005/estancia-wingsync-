@@ -2707,7 +2707,36 @@ tr:hover td {
   color: var(--cert-ink);
 }
 
-/* ----- FOOTER ----- */
+.cert-bred {
+  flex: 0 0 auto;
+  text-align: center;
+  padding: 0.2% 10% 0.6%;
+  margin-top: 2px;
+  position: relative;
+  z-index: 2;
+}
+
+.cert-bred-label {
+  display: block;
+  font-family: "Libre Baskerville", Georgia, serif;
+  font-style: italic;
+  font-size: clamp(10px, 1.05vw, 13px);
+  color: #555;
+  margin-bottom: 3px;
+}
+
+.cert-bred-name {
+  display: inline-block;
+  font-family: "Cinzel", "Times New Roman", serif;
+  font-weight: 700;
+  font-size: clamp(13px, 1.5vw, 19px);
+  color: var(--cert-green);
+  letter-spacing: 0.05em;
+  line-height: 1.2;
+  border-bottom: 1px solid rgba(40, 40, 40, 0.35);
+  padding: 0 16px 3px;
+  min-width: min(52%, 220px);
+}
 .cert-footer {
   flex: 0 0 auto;
   display: grid;
@@ -2854,6 +2883,7 @@ tr:hover td {
 }
 [data-theme="dark"] .cert-title,
 [data-theme="dark"] .cert-name,
+[data-theme="dark"] .cert-bred-name,
 [data-theme="dark"] .cert-body .cert-value {
   color: var(--cert-green);
 }
@@ -2863,6 +2893,7 @@ tr:hover td {
 [data-theme="dark"] .cert-intro,
 [data-theme="dark"] .cert-body,
 [data-theme="dark"] .cert-closing,
+[data-theme="dark"] .cert-bred-label,
 [data-theme="dark"] .cert-signed-date,
 [data-theme="dark"] .cert-sig-name {
   color: var(--cert-ink);
