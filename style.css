@@ -4368,8 +4368,9 @@ tr:hover td {
   content: "";
   position: absolute;
   inset: 0 auto 0 0;
-  width: 3px;
+  width: 5px;
   background: var(--border);
+  box-shadow: none;
 }
 
 .podium-card::after {
@@ -4392,28 +4393,49 @@ tr:hover td {
 
 .podium-card--1 {
   padding: 22px 20px 18px;
-  border-color: rgba(42, 122, 98, 0.28);
+  border-color: rgba(212, 175, 55, 0.45);
   background:
-    linear-gradient(180deg, rgba(42, 122, 98, 0.07) 0%, var(--card-bg) 42%),
+    linear-gradient(180deg, rgba(212, 175, 55, 0.1) 0%, var(--card-bg) 42%),
     var(--card-bg);
-  box-shadow: 0 12px 32px rgba(29, 95, 76, 0.1);
+  box-shadow: 0 12px 32px rgba(201, 162, 39, 0.14);
 }
 
 .podium-card--1::before {
-  width: 4px;
-  background: linear-gradient(180deg, #c9a227 0%, var(--primary) 100%);
+  width: 7px;
+  background: linear-gradient(180deg, #f6e27a 0%, #d4af37 42%, #b8860b 100%);
+  box-shadow: 0 0 12px rgba(212, 175, 55, 0.55);
 }
 
 .podium-card--1:hover {
-  border-color: rgba(42, 122, 98, 0.42);
+  border-color: rgba(212, 175, 55, 0.7);
+}
+
+.podium-card--2 {
+  border-color: rgba(168, 178, 192, 0.55);
 }
 
 .podium-card--2::before {
-  background: #8a96a3;
+  width: 6px;
+  background: linear-gradient(180deg, #f2f4f7 0%, #c5ced8 40%, #8e9aab 100%);
+  box-shadow: 0 0 10px rgba(174, 184, 196, 0.5);
+}
+
+.podium-card--2:hover {
+  border-color: rgba(168, 178, 192, 0.85);
+}
+
+.podium-card--3 {
+  border-color: rgba(184, 115, 51, 0.45);
 }
 
 .podium-card--3::before {
-  background: #9a7b56;
+  width: 6px;
+  background: linear-gradient(180deg, #e0a36b 0%, #cd7f32 42%, #8d4e1a 100%);
+  box-shadow: 0 0 10px rgba(205, 127, 50, 0.45);
+}
+
+.podium-card--3:hover {
+  border-color: rgba(184, 115, 51, 0.7);
 }
 
 .podium-card-rank {
@@ -4603,13 +4625,22 @@ tr:hover td {
 }
 
 [data-theme="dark"] .podium-card--1 {
+  border-color: rgba(212, 175, 55, 0.5);
   background:
-    linear-gradient(180deg, rgba(62, 160, 130, 0.12) 0%, var(--card-bg) 46%),
+    linear-gradient(180deg, rgba(212, 175, 55, 0.14) 0%, var(--card-bg) 46%),
     var(--card-bg);
 }
 
+[data-theme="dark"] .podium-card--2 {
+  border-color: rgba(192, 201, 214, 0.4);
+}
+
+[data-theme="dark"] .podium-card--3 {
+  border-color: rgba(205, 127, 50, 0.45);
+}
+
 [data-theme="dark"] .podium-card--1 .podium-card-place {
-  color: var(--primary-light);
+  color: #e8c547;
 }
 
 @media (hover: none) {
