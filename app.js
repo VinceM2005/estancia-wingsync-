@@ -2997,7 +2997,6 @@ const app = {
       }
 
       const eventCode = this.selectedEventCode;
-      const forecastTask = this.renderSpeedForecast(eventCode);
       const res = await fetchWithAuth(`${API_URL}/results/${eventCode}`);
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       let results = await res.json();
@@ -3011,7 +3010,6 @@ const app = {
         if (updatedEl) {
           updatedEl.textContent = `Last updated: ${new Date().toLocaleTimeString()}`;
         }
-        await forecastTask;
         this._isRendering = false;
         return;
       }
@@ -3023,15 +3021,12 @@ const app = {
         const tr = document.createElement("tr");
         const td = document.createElement("td");
         td.colSpan = 8;
-        td.style.textAlign = "center";
-        td.style.color = "#999";
-        td.style.padding = "20px";
+        td.className = "results-table-rest-empty";
         td.textContent = "No results yet for this event.";
         tr.appendChild(td);
         tbody.appendChild(tr);
         this.clearAnalyticsSections();
         this.updateRaceEntryStats(0);
-        await forecastTask;
         this._isRendering = false;
         return;
       }
@@ -3044,17 +3039,7 @@ const app = {
         arrivalTime: new Date(r.arrivalTime),
       }));
 
-      const winner = safeResults[0];
-      const winnerPigeon = winner.pigeonId;
-      document.getElementById("champion-name").textContent = winner.userName;
-      document.getElementById("champion-code").textContent =
-        pigeonRing(winnerPigeon);
-      document.getElementById("champion-speed").innerHTML =
-        `${formatSpeedMpm(winner.speedMPM)} <span class="unit">m/min</span>`;
-      document.getElementById("champion-flight-time").textContent =
-        formatFlightHours(winner.flightTimeHours);
-      document.getElementById("champion-distance").innerHTML =
-        `${formatDistanceKm(winner.distanceKm)} <span class="unit">km</span>`;
+      this.renderResultsPodium(safeResults);
 
       const clocked = safeResults.length;
       this.updateRaceEntryStats(clocked);
@@ -3115,78 +3100,77 @@ const app = {
         ? `${lastArrival.userName} (${lastArrival.arrivalTime.toLocaleTimeString()})`
         : "—";
 
-      await forecastTask;
-
-      safeResults.forEach((r, i) => {
+      const rest = safeResults.slice(3);
+      if (rest.length === 0) {
         const tr = document.createElement("tr");
+        const td = document.createElement("td");
+        td.colSpan = 8;
+        td.className = "results-table-rest-empty";
+        td.textContent =
+          safeResults.length <= 3
+            ? "Rankings from 4th place will appear here."
+            : "No further rankings.";
+        tr.appendChild(td);
+        tbody.appendChild(tr);
+      } else {
+        rest.forEach((r, offset) => {
+          const i = offset + 3;
+          const tr = document.createElement("tr");
 
-        const tdRank = document.createElement("td");
-        tdRank.setAttribute("data-label", "Rank");
-        let rankClass = "";
-        if (i === 0) {
-          tdRank.textContent = "🥇";
-          rankClass = "rank-gold";
-        } else if (i === 1) {
-          tdRank.textContent = "🥈";
-          rankClass = "rank-silver";
-        } else if (i === 2) {
-          tdRank.textContent = "🥉";
-          rankClass = "rank-bronze";
-        } else {
+          const tdRank = document.createElement("td");
+          tdRank.setAttribute("data-label", "Rank");
           tdRank.textContent = i + 1;
-          rankClass = "rank-number";
-        }
-        tdRank.className = rankClass;
-        tr.appendChild(tdRank);
+          tdRank.className = "rank-number";
+          tr.appendChild(tdRank);
 
-        const tdPlayer = document.createElement("td");
-        tdPlayer.setAttribute("data-label", "Player");
-        tdPlayer.textContent = r.userName;
-        tr.appendChild(tdPlayer);
+          const tdPlayer = document.createElement("td");
+          tdPlayer.setAttribute("data-label", "Player");
+          tdPlayer.textContent = r.userName;
+          tr.appendChild(tdPlayer);
 
-        const tdPigeon = document.createElement("td");
-        tdPigeon.setAttribute("data-label", "Pigeon");
-        const avatarId = r.pigeonId?.avatarId || "";
-        const avatarHTML = avatarId
-          ? getPigeonAvatarSVG(avatarId, 28)
-          : getDefaultPigeonSVG(28);
-        tdPigeon.innerHTML = `
+          const tdPigeon = document.createElement("td");
+          tdPigeon.setAttribute("data-label", "Pigeon");
+          const avatarId = r.pigeonId?.avatarId || "";
+          const avatarHTML = avatarId
+            ? getPigeonAvatarSVG(avatarId, 28)
+            : getDefaultPigeonSVG(28);
+          tdPigeon.innerHTML = `
           <div style="display:flex;align-items:center;gap:8px;">
             <span style="width:32px;height:32px;display:inline-block;border-radius:50%;overflow:hidden;flex-shrink:0;border:1px solid var(--border);">${avatarHTML}</span>
             <span>${escapeHtml(pigeonNickname(r.pigeonId))}</span>
           </div>
         `;
-        tr.appendChild(tdPigeon);
+          tr.appendChild(tdPigeon);
 
-        const tdRingNumber = document.createElement("td");
-        tdRingNumber.setAttribute("data-label", "Ring Number");
-        tdRingNumber.textContent = pigeonRing(r.pigeonId);
-        tr.appendChild(tdRingNumber);
+          const tdRingNumber = document.createElement("td");
+          tdRingNumber.setAttribute("data-label", "Ring Number");
+          tdRingNumber.textContent = pigeonRing(r.pigeonId);
+          tr.appendChild(tdRingNumber);
 
-        const tdDist = document.createElement("td");
-        tdDist.setAttribute("data-label", "Air Dist");
-        tdDist.textContent = formatDistanceKm(r.distanceKm) + " km";
-        tr.appendChild(tdDist);
+          const tdDist = document.createElement("td");
+          tdDist.setAttribute("data-label", "Air Dist");
+          tdDist.textContent = formatDistanceKm(r.distanceKm) + " km";
+          tr.appendChild(tdDist);
 
-        const tdArr = document.createElement("td");
-        tdArr.setAttribute("data-label", "Arr");
-        tdArr.textContent = r.arrivalTime.toLocaleTimeString();
-        tr.appendChild(tdArr);
+          const tdArr = document.createElement("td");
+          tdArr.setAttribute("data-label", "Arr");
+          tdArr.textContent = r.arrivalTime.toLocaleTimeString();
+          tr.appendChild(tdArr);
 
-        const tdFlight = document.createElement("td");
-        tdFlight.setAttribute("data-label", "Flight Hrs");
-        tdFlight.textContent = formatFlightHours(r.flightTimeHours);
-        tr.appendChild(tdFlight);
+          const tdFlight = document.createElement("td");
+          tdFlight.setAttribute("data-label", "Flight Hrs");
+          tdFlight.textContent = formatFlightHours(r.flightTimeHours);
+          tr.appendChild(tdFlight);
 
-        const tdSpeed = document.createElement("td");
-        tdSpeed.setAttribute("data-label", "Speed m/min");
-        tdSpeed.className = "speed-cell";
-        tdSpeed.textContent = formatSpeedMpm(r.speedMPM);
-        tr.appendChild(tdSpeed);
+          const tdSpeed = document.createElement("td");
+          tdSpeed.setAttribute("data-label", "Speed m/min");
+          tdSpeed.className = "speed-cell";
+          tdSpeed.textContent = formatSpeedMpm(r.speedMPM);
+          tr.appendChild(tdSpeed);
 
-        if (i === 0) tr.className = "winner-row";
-        tbody.appendChild(tr);
-      });
+          tbody.appendChild(tr);
+        });
+      }
 
       const updatedEl = document.getElementById("results-last-updated");
       if (updatedEl) {
@@ -3206,6 +3190,78 @@ const app = {
     }
   },
 
+  renderResultsPodium(results) {
+    const section = document.getElementById("results-podium");
+    const board = document.getElementById("results-podium-board");
+    const tableHeading = document.getElementById("results-table-heading");
+    if (!section || !board) return;
+
+    const top = Array.isArray(results) ? results.slice(0, 3) : [];
+    if (top.length === 0) {
+      section.hidden = true;
+      board.innerHTML = "";
+      board.className = "results-podium-board";
+      if (tableHeading) tableHeading.hidden = true;
+      return;
+    }
+
+    const places = [
+      { place: "1st", label: "Champion" },
+      { place: "2nd", label: "2nd Place" },
+      { place: "3rd", label: "3rd Place" },
+    ];
+    section.hidden = false;
+    board.className = `results-podium-board podium-count-${top.length}`;
+    board.innerHTML = top
+      .map((row, index) => this._podiumCardHtml(row, index, places[index]))
+      .join("");
+    if (tableHeading) tableHeading.hidden = results.length <= 3;
+  },
+
+  _podiumCardHtml(row, index, meta) {
+    const avatarSize = index === 0 ? 56 : 48;
+    const avatarId = row.pigeonId?.avatarId || "";
+    const avatarHTML = avatarId
+      ? getPigeonAvatarSVG(avatarId, avatarSize)
+      : getDefaultPigeonSVG(avatarSize);
+    const arrival =
+      row.arrivalTime instanceof Date
+        ? row.arrivalTime.toLocaleTimeString()
+        : "—";
+    return `<article class="podium-card podium-card--${index + 1}">
+      <div class="podium-card-rank">
+        <span class="podium-card-place">${meta.place}</span>
+        <span class="podium-card-label">${meta.label}</span>
+      </div>
+      <div class="podium-card-identity">
+        <div class="podium-card-avatar">${avatarHTML}</div>
+        <div class="podium-card-who">
+          <div class="podium-card-player">${escapeHtml(row.userName || "—")}</div>
+          <div class="podium-card-pigeon">${escapeHtml(pigeonNickname(row.pigeonId))}</div>
+          <div class="podium-card-ring">${escapeHtml(pigeonRing(row.pigeonId))}</div>
+        </div>
+      </div>
+      <dl class="podium-card-metrics">
+        <div>
+          <dt>Air Dist</dt>
+          <dd>${escapeHtml(formatDistanceKm(row.distanceKm))} <small>km</small></dd>
+        </div>
+        <div>
+          <dt>Arrival</dt>
+          <dd>${escapeHtml(arrival)}</dd>
+        </div>
+        <div>
+          <dt>Flight</dt>
+          <dd>${escapeHtml(formatFlightHours(row.flightTimeHours))}</dd>
+        </div>
+        <div>
+          <dt>Speed</dt>
+          <dd>${escapeHtml(formatSpeedMpm(row.speedMPM))} <small>m/min</small></dd>
+        </div>
+      </dl>
+    </article>`;
+  },
+
   updateRaceEntryStats(clocked) {
     const totalRegistered =
       this.registrationCounts[this.selectedEventCode] || 0;
@@ -3220,13 +3276,7 @@ const app = {
   },
 
   clearAnalyticsSections() {
-    document.getElementById("champion-name").textContent = "—";
-    document.getElementById("champion-code").textContent = "—";
-    document.getElementById("champion-speed").innerHTML =
-      '— <span class="unit">m/min</span>';
-    document.getElementById("champion-flight-time").textContent = "—";
-    document.getElementById("champion-distance").innerHTML =
-      '— <span class="unit">km</span>';
+    this.renderResultsPodium([]);
 
     document.getElementById("stat-released").textContent = "0";
     document.getElementById("stat-clocked").textContent = "0";
@@ -3246,70 +3296,6 @@ const app = {
     document.getElementById("hl-fastest-bird").textContent = "—";
     document.getElementById("hl-first-arrival").textContent = "—";
     document.getElementById("hl-last-arrival").textContent = "—";
-    const forecastMeta = document.getElementById("speed-forecast-meta");
-    const forecastList = document.getElementById("speed-forecast-list");
-    if (forecastMeta) forecastMeta.textContent = "—";
-    if (forecastList) {
-      forecastList.innerHTML =
-        '<div class="speed-forecast-empty">Select an event.</div>';
-    }
-  },
-
-  async renderSpeedForecast(eventCode) {
-    const meta = document.getElementById("speed-forecast-meta");
-    const list = document.getElementById("speed-forecast-list");
-    if (!meta || !list) return;
-    if (!eventCode) {
-      meta.textContent = "—";
-      list.innerHTML =
-        '<div class="speed-forecast-empty">Select an event.</div>';
-      return;
-    }
-    try {
-      const res = await fetchWithAuth(
-        `${API_URL}/results/${eventCode}/forecast`,
-      );
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const data = await res.json();
-      const elapsedMin = Number(data.elapsedMinutes) || 0;
-      if (!data.released) {
-        meta.textContent = "Waiting for release";
-      } else {
-        meta.textContent = `Elapsed ${formatFlightHours(elapsedMin / 60)}`;
-      }
-      const players = Array.isArray(data.players) ? data.players : [];
-      if (players.length === 0) {
-        list.innerHTML =
-          '<div class="speed-forecast-empty">No joined players yet.</div>';
-        return;
-      }
-      list.innerHTML = players
-        .map((p, i) => {
-          const dist =
-            p.distanceKm == null
-              ? "—"
-              : `${formatDistanceKm(p.distanceKm)} km`;
-          const speed =
-            p.forecastSpeedMpm == null
-              ? "—"
-              : formatSpeedMpm(p.forecastSpeedMpm);
-          const clocked = p.clocked
-            ? '<span class="speed-forecast-tag">Clocked</span>'
-            : "";
-          return `<div class="speed-forecast-row">
-            <span class="speed-forecast-rank">${i + 1}</span>
-            <span class="speed-forecast-name">${escapeHtml(p.userName || p.userId)}${clocked}</span>
-            <span class="speed-forecast-dist">${dist}</span>
-            <span class="speed-forecast-speed">${speed} <small>m/min</small></span>
-          </div>`;
-        })
-        .join("");
-    } catch (err) {
-      console.warn("Speed forecast failed:", err);
-      meta.textContent = "—";
-      list.innerHTML =
-        '<div class="speed-forecast-empty">Could not load forecast.</div>';
-    }
   },
 
   renderLogs() {
@@ -5911,7 +5897,7 @@ const app = {
 
     const origin = window.location.origin;
     const basePath = window.location.pathname.replace(/\/[^/]*$/, "/");
-    const cssHref = `${origin}${basePath}style.css?v=30`;
+    const cssHref = `${origin}${basePath}style.css?v=31`;
     const fontHref =
       "https://fonts.googleapis.com/css2?family=Cinzel:wght@400;600;700&family=Great+Vibes&family=Libre+Baskerville:ital,wght@0,400;0,700;1,400&display=swap";
     const faHref =
