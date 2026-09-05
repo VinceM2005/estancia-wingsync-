@@ -6504,6 +6504,10 @@ const app = {
     document.getElementById("view-event-release").textContent = new Date(
       event.releaseTime,
     ).toLocaleString();
+    document.getElementById("view-event-deadline").textContent =
+      event.registrationDeadline
+        ? new Date(event.registrationDeadline).toLocaleString()
+        : "—";
     document.getElementById("view-event-location").textContent =
       `${event.lat.toFixed(6)}, ${event.lng.toFixed(6)}`;
     document.getElementById("view-event-status").textContent =
