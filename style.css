@@ -976,6 +976,9 @@ tr:hover td {
   z-index: 10000 !important;
   margin-top: 4px !important;
   background: var(--card-bg) !important;
+  max-height: 220px !important;
+  overflow-y: auto !important;
+  pointer-events: auto !important;
 }
 .pac-item {
   padding: 10px 14px !important;

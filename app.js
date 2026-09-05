@@ -251,6 +251,25 @@ function parseCoordinates(input) {
   return null;
 }
 
+function getMapInstance(mapType) {
+  if (mapType === "player") return playerMap;
+  if (mapType === "event") return eventMap;
+  if (mapType === "edit-player") return editPlayerMap;
+  return null;
+}
+
+function assignMapInstance(mapType, map) {
+  if (mapType === "player") playerMap = map;
+  else if (mapType === "event") eventMap = map;
+  else if (mapType === "edit-player") editPlayerMap = map;
+}
+
+function hidePlaceDropdowns() {
+  document.querySelectorAll(".pac-container").forEach((el) => {
+    el.style.display = "none";
+  });
+}
+
 function createGoogleMap(
   containerId,
   searchBoxId,
@@ -284,10 +303,36 @@ function createGoogleMap(
     return;
   }
 
+  if (typeof google.maps.places === "undefined") {
+    if (retries < 10) {
+      if (typeof google.maps.importLibrary === "function") {
+        google.maps.importLibrary("places").catch(() => {});
+      }
+      setTimeout(
+        () =>
+          createGoogleMap(
+            containerId,
+            searchBoxId,
+            coordsTextId,
+            mapType,
+            retries + 1,
+          ),
+        400,
+      );
+    }
+    return;
+  }
+
   const mapElement = document.getElementById(containerId);
   if (!mapElement) {
     console.error(`Map container ${containerId} not found`);
     return;
+  }
+
+  const existingMap = getMapInstance(mapType);
+  if (existingMap) {
+    google.maps.event.trigger(existingMap, "resize");
+    return existingMap;
   }
 
   const rect = mapElement.getBoundingClientRect();
@@ -326,42 +371,73 @@ function createGoogleMap(
     streetViewControlOptions: {
       position: google.maps.ControlPosition.RIGHT_BOTTOM,
     },
+    clickableIcons: false,
   });
+  assignMapInstance(mapType, map);
 
   const searchBox = document.getElementById(searchBoxId);
   if (searchBox) {
-    const autocomplete = new google.maps.places.Autocomplete(searchBox);
-    autocomplete.bindTo("bounds", map);
-    autocomplete.setFields(["geometry", "name", "formatted_address"]);
-    autocomplete.addListener("place_changed", function () {
-      const place = autocomplete.getPlace();
-      if (!place.geometry) {
-        app.showModal({
-          title: "Location Not Found",
-          message: "Please select a location from the dropdown.",
-          icon: "⚠️",
-          iconColor: "#e67e22",
-        });
-        return;
-      }
-      const lat = parseFloat(place.geometry.location.lat().toFixed(6));
-      const lng = parseFloat(place.geometry.location.lng().toFixed(6));
-      map.setCenter(place.geometry.location);
+    const pinLocation = (lat, lng, place) => {
+      map.setCenter({ lat, lng });
       map.setZoom(17);
       setMarker(mapType, lat, lng, map, coordsTextId, place);
-    });
+      hidePlaceDropdowns();
+    };
+
+    const geocodeAddress = (query) => {
+      if (!query || !google.maps.Geocoder) return;
+      const geocoder = new google.maps.Geocoder();
+      geocoder.geocode({ address: query }, (results, status) => {
+        if (status === "OK" && results[0] && results[0].geometry) {
+          const loc = results[0].geometry.location;
+          pinLocation(
+            parseFloat(loc.lat().toFixed(6)),
+            parseFloat(loc.lng().toFixed(6)),
+            {
+              name: results[0].formatted_address,
+              formatted_address: results[0].formatted_address,
+            },
+          );
+        } else {
+          app.showModal({
+            title: "Location Not Found",
+            message: "Please select a location from the dropdown.",
+            icon: "⚠️",
+            iconColor: "#e67e22",
+          });
+        }
+      });
+    };
+
+    try {
+      const autocomplete = new google.maps.places.Autocomplete(searchBox, {
+        fields: ["geometry", "name", "formatted_address"],
+      });
+      autocomplete.bindTo("bounds", map);
+      autocomplete.addListener("place_changed", function () {
+        const place = autocomplete.getPlace();
+        hidePlaceDropdowns();
+        if (!place.geometry || !place.geometry.location) {
+          geocodeAddress(searchBox.value.trim());
+          return;
+        }
+        pinLocation(
+          parseFloat(place.geometry.location.lat().toFixed(6)),
+          parseFloat(place.geometry.location.lng().toFixed(6)),
+          place,
+        );
+      });
+    } catch (err) {
+      console.warn("Places search widget failed:", err);
+    }
 
     searchBox.addEventListener("keydown", function (e) {
-      if (e.key === "Enter") {
+      if (e.key !== "Enter") return;
+      const val = searchBox.value.trim();
+      const coords = parseCoordinates(val);
+      if (coords) {
         e.preventDefault();
-        const val = searchBox.value.trim();
-        const coords = parseCoordinates(val);
-        if (coords) {
-          const { lat, lng } = coords;
-          map.setCenter({ lat, lng });
-          map.setZoom(17);
-          setMarker(mapType, lat, lng, map, coordsTextId);
-        }
+        pinLocation(coords.lat, coords.lng);
       }
     });
 
@@ -369,15 +445,13 @@ function createGoogleMap(
       const val = searchBox.value.trim();
       const coords = parseCoordinates(val);
       if (coords) {
-        const { lat, lng } = coords;
-        map.setCenter({ lat, lng });
-        map.setZoom(17);
-        setMarker(mapType, lat, lng, map, coordsTextId);
+        pinLocation(coords.lat, coords.lng);
       }
     });
   }
 
   map.addListener("click", function (event) {
+    hidePlaceDropdowns();
     const lat = parseFloat(event.latLng.lat().toFixed(6));
     const lng = parseFloat(event.latLng.lng().toFixed(6));
     setMarker(mapType, lat, lng, map, coordsTextId);
@@ -4493,6 +4567,7 @@ const app = {
   },
 
   closeModal(id) {
+    hidePlaceDropdowns();
     if (id === "modal-edit-player") {
       if (editPlayerMarker) {
         editPlayerMarker.setMap(null);
