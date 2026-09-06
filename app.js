@@ -547,6 +547,171 @@ function setMarker(mapType, lat, lng, map, coordsTextId, place = null) {
   return marker;
 }
 
+let editEventMap, editEventMarker;
+let selectedEditEventLat = null,
+  selectedEditEventLng = null;
+
+function toDatetimeLocalValue(value) {
+  const d = new Date(value);
+  if (isNaN(d.getTime())) return "";
+  const pad = (n) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+
+function destroyEditEventMap() {
+  if (editEventMarker) {
+    editEventMarker.setMap(null);
+    editEventMarker = null;
+  }
+  if (editEventMap) {
+    const container = document.getElementById("edit-event-map");
+    if (container) container.innerHTML = "";
+    editEventMap = null;
+  }
+  selectedEditEventLat = null;
+  selectedEditEventLng = null;
+}
+
+function setEditEventMarker(lat, lng, map, place = null) {
+  if (lat < -90 || lat > 90 || lng < -180 || lng > 180) {
+    app.showModal({
+      title: "Invalid Location",
+      message: "Please select a valid location on the map.",
+      icon: "⚠️",
+      iconColor: "#e67e22",
+    });
+    return;
+  }
+  if (editEventMarker) editEventMarker.setMap(null);
+  const position = new google.maps.LatLng(lat, lng);
+  const marker = new google.maps.Marker({
+    position,
+    map,
+    draggable: true,
+    animation: google.maps.Animation.DROP,
+    title: place ? place.name : "Selected Location",
+  });
+  const latStr = lat.toFixed(6);
+  const lngStr = lng.toFixed(6);
+  const coordsEl = document.getElementById("edit-event-coords-text");
+  if (coordsEl) coordsEl.innerText = `${latStr}, ${lngStr}`;
+  selectedEditEventLat = lat;
+  selectedEditEventLng = lng;
+  editEventMarker = marker;
+  const content = place
+    ? `<div style="padding: 8px; max-width:260px;"><strong>📍 ${place.name || "Selected Location"}</strong><br><span style="font-size:12px; color:#666;">${place.formatted_address || ""}<br><b style="color:#1a2a33;">${latStr}, ${lngStr}</b></span></div>`
+    : `<div style="padding:8px;"><strong>📍 Selected Location</strong><br><span style="font-size:12px; color:#666;"><b style="color:#1a2a33;">${latStr}, ${lngStr}</b></span></div>`;
+  const infoWindow = new google.maps.InfoWindow({ content });
+  infoWindow.open(map, marker);
+  marker.addListener("dragend", function () {
+    const pos = marker.getPosition();
+    const newLat = parseFloat(pos.lat().toFixed(6));
+    const newLng = parseFloat(pos.lng().toFixed(6));
+    if (newLat < -90 || newLat > 90 || newLng < -180 || newLng > 180) {
+      app.showModal({
+        title: "Invalid Location",
+        message: "Please select a valid location on the map.",
+        icon: "⚠️",
+        iconColor: "#e67e22",
+      });
+      return;
+    }
+    if (coordsEl) coordsEl.innerText = `${newLat.toFixed(6)}, ${newLng.toFixed(6)}`;
+    selectedEditEventLat = newLat;
+    selectedEditEventLng = newLng;
+    infoWindow.setContent(
+      `<div style="padding:8px;"><strong>📍 Selected Location</strong><br><span style="font-size:12px; color:#666;"><b style="color:#1a2a33;">${newLat.toFixed(6)}, ${newLng.toFixed(6)}</b></span></div>`,
+    );
+    infoWindow.open(map, marker);
+  });
+  return marker;
+}
+
+function createEditEventMap(retries = 0) {
+  if (typeof google === "undefined" || typeof google.maps === "undefined") {
+    if (retries < 10) {
+      setTimeout(() => createEditEventMap(retries + 1), 500);
+    }
+    return;
+  }
+  if (typeof google.maps.places === "undefined") {
+    if (retries < 10) {
+      if (typeof google.maps.importLibrary === "function") {
+        google.maps.importLibrary("places").catch(() => {});
+      }
+      setTimeout(() => createEditEventMap(retries + 1), 400);
+    }
+    return;
+  }
+  const mapElement = document.getElementById("edit-event-map");
+  if (!mapElement) return;
+  if (editEventMap) {
+    google.maps.event.trigger(editEventMap, "resize");
+    return editEventMap;
+  }
+  const rect = mapElement.getBoundingClientRect();
+  if (rect.height === 0 && retries < 5) {
+    setTimeout(() => createEditEventMap(retries + 1), 300);
+    return;
+  }
+  if (rect.height === 0) mapElement.style.height = "400px";
+  const centerLat = selectedEditEventLat != null ? selectedEditEventLat : defaultLat;
+  const centerLng = selectedEditEventLng != null ? selectedEditEventLng : defaultLng;
+  const map = new google.maps.Map(mapElement, {
+    center: { lat: centerLat, lng: centerLng },
+    zoom: 15,
+    mapTypeId: google.maps.MapTypeId.HYBRID,
+    mapTypeControl: true,
+    clickableIcons: false,
+  });
+  editEventMap = map;
+  const searchBox = document.getElementById("edit-event-search-box");
+  if (searchBox) {
+    const pinLocation = (lat, lng, place) => {
+      map.setCenter({ lat, lng });
+      map.setZoom(17);
+      setEditEventMarker(lat, lng, map, place);
+      hidePlaceDropdowns();
+    };
+    try {
+      const autocomplete = new google.maps.places.Autocomplete(searchBox, {
+        fields: ["geometry", "name", "formatted_address"],
+      });
+      autocomplete.bindTo("bounds", map);
+      autocomplete.addListener("place_changed", function () {
+        const place = autocomplete.getPlace();
+        hidePlaceDropdowns();
+        if (!place.geometry || !place.geometry.location) return;
+        pinLocation(
+          parseFloat(place.geometry.location.lat().toFixed(6)),
+          parseFloat(place.geometry.location.lng().toFixed(6)),
+          place,
+        );
+      });
+    } catch (err) {
+      console.warn("Places search widget failed:", err);
+    }
+    searchBox.addEventListener("keydown", function (e) {
+      if (e.key !== "Enter") return;
+      const coords = parseCoordinates(searchBox.value.trim());
+      if (coords) {
+        e.preventDefault();
+        pinLocation(coords.lat, coords.lng);
+      }
+    });
+  }
+  map.addListener("click", function (event) {
+    hidePlaceDropdowns();
+    setEditEventMarker(
+      parseFloat(event.latLng.lat().toFixed(6)),
+      parseFloat(event.latLng.lng().toFixed(6)),
+      map,
+    );
+  });
+  setTimeout(() => google.maps.event.trigger(map, "resize"), 300);
+  return map;
+}
+
 // ============================================================
 //  MAIN APP
 // ============================================================
@@ -3863,6 +4028,12 @@ const app = {
       manageBtn.onclick = () => app.openManageRegistrationModal(e.code);
       tdActions.appendChild(manageBtn);
 
+      const editBtn = document.createElement("button");
+      editBtn.className = "btn btn-sm btn-secondary";
+      editBtn.innerHTML = '<i class="fas fa-edit"></i> Edit';
+      editBtn.onclick = () => app.openEditEventModal(e.code);
+      tdActions.appendChild(editBtn);
+
       const toggleBtn = document.createElement("button");
       toggleBtn.className = "btn btn-danger btn-sm";
       toggleBtn.textContent = e.status === "Active" ? "🔒 Close" : "🔓 Re-open";
@@ -4520,6 +4691,167 @@ const app = {
       icon: "ℹ️",
       iconColor: "#2a7a62",
     });
+  },
+
+  openEditEventModal(eventCode) {
+    const event =
+      this.eventLookup?.[eventCode] ||
+      (this.allEvents || []).find((e) => e.code === eventCode) ||
+      (this._eventsWithSummary || []).find((e) => e.code === eventCode);
+    if (!event) {
+      this.showModal({
+        title: "Error",
+        message: "Event not found.",
+        icon: "❌",
+        iconColor: "#c0392b",
+      });
+      return;
+    }
+    destroyEditEventMap();
+    document.getElementById("edit-event-code").value = event.code;
+    document.getElementById("edit-event-name").textContent = event.name || "";
+    document.getElementById("edit-event-code-label").textContent =
+      event.code || "";
+    document.getElementById("edit-event-time").value = toDatetimeLocalValue(
+      event.releaseTime,
+    );
+    selectedEditEventLat = Number(event.lat);
+    selectedEditEventLng = Number(event.lng);
+    document.getElementById("edit-event-coords-text").innerText =
+      `${Number(event.lat).toFixed(6)}, ${Number(event.lng).toFixed(6)}`;
+    const searchBox = document.getElementById("edit-event-search-box");
+    if (searchBox) searchBox.value = "";
+    document.getElementById("modal-edit-event").classList.add("show");
+    setTimeout(() => {
+      createEditEventMap();
+      setTimeout(() => {
+        if (editEventMap) {
+          editEventMap.setCenter({
+            lat: selectedEditEventLat,
+            lng: selectedEditEventLng,
+          });
+          editEventMap.setZoom(17);
+          setEditEventMarker(
+            selectedEditEventLat,
+            selectedEditEventLng,
+            editEventMap,
+          );
+        }
+      }, 300);
+    }, 500);
+  },
+
+  closeEditEventModal() {
+    hidePlaceDropdowns();
+    destroyEditEventMap();
+    const modal = document.getElementById("modal-edit-event");
+    if (modal) modal.classList.remove("show");
+  },
+
+  getEditEventLocation() {
+    if (!navigator.geolocation) {
+      this.showModal({
+        title: "Location Not Available",
+        message: "Your browser doesn't support geolocation.",
+        icon: "⚠️",
+        iconColor: "#e67e22",
+      });
+      return;
+    }
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        const lat = parseFloat(position.coords.latitude.toFixed(6));
+        const lng = parseFloat(position.coords.longitude.toFixed(6));
+        if (editEventMap) {
+          editEventMap.setCenter({ lat, lng });
+          editEventMap.setZoom(18);
+          setEditEventMarker(lat, lng, editEventMap);
+        }
+      },
+      () => {
+        this.showModal({
+          title: "Location Error",
+          message: "Unable to get your location. Please select manually on the map.",
+          icon: "⚠️",
+          iconColor: "#e67e22",
+        });
+      },
+      { enableHighAccuracy: true, timeout: 12000 },
+    );
+  },
+
+  saveEditEvent() {
+    const code = document.getElementById("edit-event-code").value;
+    const time = document.getElementById("edit-event-time").value;
+    if (!code) {
+      this.showModal({
+        title: "Error",
+        message: "Event code is missing.",
+        icon: "❌",
+        iconColor: "#c0392b",
+      });
+      return;
+    }
+    if (!time) {
+      this.showModal({
+        title: "Incomplete",
+        message: "Release date and time are required.",
+        icon: "❌",
+        iconColor: "#c0392b",
+      });
+      return;
+    }
+    if (selectedEditEventLat == null || selectedEditEventLng == null) {
+      this.showModal({
+        title: "Missing Location",
+        message: "Please select a release location on the map.",
+        icon: "❌",
+        iconColor: "#c0392b",
+      });
+      return;
+    }
+    const lat = parseFloat(Number(selectedEditEventLat).toFixed(6));
+    const lng = parseFloat(Number(selectedEditEventLng).toFixed(6));
+    fetchWithAuth(`${API_URL}/events/${encodeURIComponent(code)}`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        releaseTime: new Date(time).toISOString(),
+        lat,
+        lng,
+      }),
+    })
+      .then((res) => res.json())
+      .then((data) => {
+        if (data.success) {
+          this.closeEditEventModal();
+          this.renderEvents();
+          this.renderDashboard();
+          this.fetchAllEvents(true);
+          const recalc = data.recalculatedResults || 0;
+          this.showModal({
+            title: "Event Updated",
+            message: `${data.event.name} release was updated.\n📍 ${data.event.lat.toFixed(6)}, ${data.event.lng.toFixed(6)}\n${recalc} clock-in${recalc === 1 ? "" : "s"} recalculated. Stickers unchanged.`,
+            icon: "✅",
+            iconColor: "#27ae60",
+          });
+        } else {
+          this.showModal({
+            title: "Update Failed",
+            message: data.error || "Failed to update event.",
+            icon: "❌",
+            iconColor: "#c0392b",
+          });
+        }
+      })
+      .catch(() => {
+        this.showModal({
+          title: "Connection Error",
+          message: "Unable to connect to the server.",
+          icon: "⚠️",
+          iconColor: "#e67e22",
+        });
+      });
   },
 
   openPlayerModal() {

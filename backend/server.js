@@ -1918,6 +1918,195 @@ app.post(
   },
 );
 
+app.put(
+  "/api/events/:code",
+  requireAdmin,
+  [
+    body("releaseTime").isISO8601().withMessage("Valid release time required"),
+    body("lat").isFloat({ min: -90, max: 90 }),
+    body("lng").isFloat({ min: -180, max: 180 }),
+  ],
+  async (req, res) => {
+    const session = await mongoose.startSession();
+    session.startTransaction();
+    try {
+      const errors = validationResult(req);
+      if (!errors.isEmpty()) {
+        await session.abortTransaction();
+        session.endSession();
+        return res.status(400).json({ error: errors.array()[0].msg });
+      }
+      const { code } = req.params;
+      const { releaseTime, lat, lng } = matchedData(req);
+      const event = await Event.findOne({ code }).session(session);
+      if (!event) {
+        await session.abortTransaction();
+        session.endSession();
+        return res.status(404).json({ error: "Event not found" });
+      }
+
+      const certsExist =
+        !!event.certificatesGenerated ||
+        (await Certificate.countDocuments({ eventId: code }).session(session)) >
+          0;
+      if (certsExist) {
+        await session.abortTransaction();
+        session.endSession();
+        return res.status(400).json({
+          error:
+            "Cannot edit release time or location after certificates have been generated.",
+        });
+      }
+
+      const release = new Date(releaseTime);
+      if (isNaN(release.getTime())) {
+        await session.abortTransaction();
+        session.endSession();
+        return res.status(400).json({ error: "Invalid release time" });
+      }
+      const deadline = event.registrationDeadline
+        ? new Date(event.registrationDeadline)
+        : null;
+      if (deadline && deadline >= release) {
+        await session.abortTransaction();
+        session.endSession();
+        return res.status(400).json({
+          error:
+            "Registration deadline must be before the release time. Pick a later release time.",
+        });
+      }
+
+      const newLat = parseFloat(Number(lat).toFixed(6));
+      const newLng = parseFloat(Number(lng).toFixed(6));
+      const results = await Result.find({ eventId: code }).session(session);
+      const playerIds = [...new Set(results.map((r) => r.userId))];
+      const players = playerIds.length
+        ? await User.find({ id: { $in: playerIds } })
+            .select("id lat lng name")
+            .session(session)
+            .lean()
+        : [];
+      const playerMap = {};
+      players.forEach((p) => {
+        playerMap[p.id] = p;
+      });
+
+      for (const row of results) {
+        const arrival = new Date(row.arrivalTime);
+        const flightHours = (arrival - release) / (1000 * 60 * 60);
+        if (!(flightHours > 0)) {
+          await session.abortTransaction();
+          session.endSession();
+          return res.status(400).json({
+            error: `Cannot set this release time. ${row.userName || row.userId} already clocked at ${arrival.toLocaleString()} which would be before release.`,
+          });
+        }
+        const player = playerMap[row.userId];
+        if (
+          !player ||
+          typeof player.lat !== "number" ||
+          typeof player.lng !== "number"
+        ) {
+          await session.abortTransaction();
+          session.endSession();
+          return res.status(400).json({
+            error: `Player ${row.userName || row.userId} is missing loft coordinates. Update that loft before editing this event.`,
+          });
+        }
+        let distanceKm;
+        try {
+          distanceKm = roundRace(
+            calculateDistance(player.lat, player.lng, newLat, newLng),
+          );
+        } catch (err) {
+          await session.abortTransaction();
+          session.endSession();
+          return res.status(400).json({ error: "Error calculating distance" });
+        }
+        const speedKPH = roundRace(distanceKm / flightHours);
+        const speedMPM = roundRace((distanceKm * 1000) / (flightHours * 60));
+        row.distanceKm = distanceKm;
+        row.flightTimeHours = flightHours;
+        row.speedKPH = speedKPH;
+        row.speedMPM = speedMPM;
+        await row.save({ session });
+      }
+
+      const oldRelease = event.releaseTime;
+      const oldLat = event.lat;
+      const oldLng = event.lng;
+      const oldState = event.state;
+      event.releaseTime = release;
+      event.lat = newLat;
+      event.lng = newLng;
+
+      const now = new Date();
+      let targetIndex = getStateIndex("Draft");
+      if (deadline && now > deadline) {
+        targetIndex = Math.max(
+          targetIndex,
+          getStateIndex("Registration Closed"),
+        );
+      }
+      const oneMinBefore = new Date(release.getTime() - 60 * 1000);
+      if (now >= oneMinBefore) {
+        targetIndex = Math.max(targetIndex, getStateIndex("Ready for Release"));
+      }
+      if (now >= release) {
+        targetIndex = Math.max(targetIndex, getStateIndex("Live Race"));
+      }
+      const twelveHoursAfter = new Date(
+        release.getTime() + 12 * 60 * 60 * 1000,
+      );
+      if (now >= twelveHoursAfter) {
+        targetIndex = Math.max(
+          targetIndex,
+          getStateIndex("Result Verification"),
+        );
+      }
+      if (results.length > 0) {
+        targetIndex = Math.max(targetIndex, getStateIndex(event.state));
+      } else {
+        const stickerCount = await RaceCode.countDocuments({
+          eventId: code,
+        }).session(session);
+        if (stickerCount > 0) {
+          targetIndex = Math.max(
+            targetIndex,
+            getStateIndex("Sticker Generated"),
+          );
+        }
+      }
+      event.state = STATE_ORDER[targetIndex];
+      await event.save({ session });
+
+      await Log.create(
+        [
+          {
+            message: `Admin updated event ${event.name} (${code}) release ${new Date(oldRelease).toISOString()} -> ${release.toISOString()}; location ${oldLat}, ${oldLng} -> ${newLat}, ${newLng}; state ${oldState} -> ${event.state}; recalculated ${results.length} result(s). Stickers unchanged.`,
+          },
+        ],
+        { session },
+      );
+
+      await session.commitTransaction();
+      session.endSession();
+      invalidateLiveCaches(code);
+      playerIds.forEach((uid) => cacheDelete(`playerStats:${uid}`));
+      res.json({
+        success: true,
+        event,
+        recalculatedResults: results.length,
+      });
+    } catch (error) {
+      await session.abortTransaction();
+      session.endSession();
+      console.error("Event update error:", error);
+      res.status(500).json({ error: "An internal error occurred." });
+    }
+  },
+);
+
 app.put("/api/events/:code/toggle", requireAdmin, async (req, res) => {
   try {
     const event = await Event.findOne({ code: req.params.code });

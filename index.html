@@ -1782,6 +1782,90 @@
       </div>
     </div>
 
+    <!-- Edit Event Release Modal -->
+    <div id="modal-edit-event" class="modal-overlay">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h3>
+            <i class="fas fa-edit"></i> Edit Release Time &amp; Location
+          </h3>
+          <button class="close-modal" onclick="app.closeEditEventModal()">
+            <i class="fas fa-times"></i>
+          </button>
+        </div>
+        <input type="hidden" id="edit-event-code" />
+        <p>
+          <strong>Event:</strong> <span id="edit-event-name"></span>
+        </p>
+        <p>
+          <strong>Code:</strong> <span id="edit-event-code-label"></span>
+        </p>
+        <small style="display: block; margin-bottom: 12px; color: #666">
+          Stickers stay the same. Existing clock-ins are recalculated from the
+          new release time and point.
+        </small>
+        <div class="form-group">
+          <label>Release Date &amp; Time</label>
+          <input
+            type="datetime-local"
+            id="edit-event-time"
+            class="form-control"
+          />
+        </div>
+        <div class="form-group">
+          <label><i class="fas fa-search"></i> Search Location</label>
+          <input
+            type="text"
+            id="edit-event-search-box"
+            class="form-control"
+            placeholder="e.g., Malinao, Albay"
+          />
+        </div>
+        <div class="form-group">
+          <label>Pinpoint Release Location on Map</label>
+          <div id="edit-event-map" class="map-container"></div>
+          <small
+            ><i class="fas fa-location-dot"></i> Coordinates:
+            <span id="edit-event-coords-text">None selected</span></small
+          >
+          <div
+            style="display: flex; gap: 8px; margin-top: 6px; flex-wrap: wrap"
+          >
+            <button
+              class="btn btn-sm btn-primary"
+              onclick="app.getEditEventLocation()"
+              style="font-size: 12px"
+            >
+              <i class="fas fa-location-dot"></i> Use My Location
+            </button>
+            <small
+              style="
+                color: #888;
+                font-size: 11px;
+                display: flex;
+                align-items: center;
+              "
+              >Click map to set exact point • Drag marker to adjust</small
+            >
+          </div>
+        </div>
+        <button
+          class="btn btn-success"
+          style="width: 100%"
+          onclick="app.saveEditEvent()"
+        >
+          <i class="fas fa-save"></i> Save Release Changes
+        </button>
+        <button
+          class="btn btn-secondary"
+          style="width: 100%; margin-top: 8px"
+          onclick="app.closeEditEventModal()"
+        >
+          Cancel
+        </button>
+      </div>
+    </div>
+
     <!-- Edit Player Modal -->
     <div id="modal-edit-player" class="modal-overlay">
       <div class="modal-content">
@@ -2165,6 +2249,6 @@
       </div>
     </div>
 
-    <script src="app.js?v=38"></script>
+    <script src="app.js?v=39"></script>
   </body>
 </html>
