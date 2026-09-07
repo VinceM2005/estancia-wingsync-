@@ -2095,7 +2095,14 @@ app.get("/api/tournaments/:code/results", async (req, res) => {
         completed,
       });
       if (!completed) continue;
-      rows.forEach((row, idx) => {
+      const ranked = rows.slice().sort((a, b) => {
+        const speedDiff = (Number(b.speedMPM) || 0) - (Number(a.speedMPM) || 0);
+        if (speedDiff !== 0) return speedDiff;
+        return (
+          new Date(a.arrivalTime).getTime() - new Date(b.arrivalTime).getTime()
+        );
+      });
+      ranked.forEach((row, idx) => {
         const key = tournamentPigeonKey(row);
         const pigeon =
           row.pigeonId && typeof row.pigeonId === "object" ? row.pigeonId : null;
