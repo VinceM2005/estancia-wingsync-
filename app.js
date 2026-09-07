@@ -712,6 +712,115 @@ function createEditEventMap(retries = 0) {
   return map;
 }
 
+let lapEventMap, lapEventMarker;
+let selectedLapEventLat = null,
+  selectedLapEventLng = null;
+
+function destroyLapEventMap() {
+  if (lapEventMarker) {
+    lapEventMarker.setMap(null);
+    lapEventMarker = null;
+  }
+  if (lapEventMap) {
+    const container = document.getElementById("lap-event-map");
+    if (container) container.innerHTML = "";
+    lapEventMap = null;
+  }
+  selectedLapEventLat = null;
+  selectedLapEventLng = null;
+}
+
+function setLapEventMarker(lat, lng, map, place = null) {
+  if (lat < -90 || lat > 90 || lng < -180 || lng > 180) return;
+  if (lapEventMarker) lapEventMarker.setMap(null);
+  const marker = new google.maps.Marker({
+    position: new google.maps.LatLng(lat, lng),
+    map,
+    draggable: true,
+    animation: google.maps.Animation.DROP,
+    title: place ? place.name : "Selected Location",
+  });
+  const coordsEl = document.getElementById("lap-event-coords-text");
+  if (coordsEl) coordsEl.innerText = `${lat.toFixed(6)}, ${lng.toFixed(6)}`;
+  selectedLapEventLat = lat;
+  selectedLapEventLng = lng;
+  lapEventMarker = marker;
+  marker.addListener("dragend", function () {
+    const pos = marker.getPosition();
+    const newLat = parseFloat(pos.lat().toFixed(6));
+    const newLng = parseFloat(pos.lng().toFixed(6));
+    selectedLapEventLat = newLat;
+    selectedLapEventLng = newLng;
+    if (coordsEl)
+      coordsEl.innerText = `${newLat.toFixed(6)}, ${newLng.toFixed(6)}`;
+  });
+}
+
+function createLapEventMap(retries = 0) {
+  if (typeof google === "undefined" || typeof google.maps === "undefined") {
+    if (retries < 10) setTimeout(() => createLapEventMap(retries + 1), 500);
+    return;
+  }
+  if (typeof google.maps.places === "undefined") {
+    if (retries < 10) {
+      if (typeof google.maps.importLibrary === "function") {
+        google.maps.importLibrary("places").catch(() => {});
+      }
+      setTimeout(() => createLapEventMap(retries + 1), 400);
+    }
+    return;
+  }
+  const mapElement = document.getElementById("lap-event-map");
+  if (!mapElement) return;
+  if (lapEventMap) {
+    google.maps.event.trigger(lapEventMap, "resize");
+    return lapEventMap;
+  }
+  const rect = mapElement.getBoundingClientRect();
+  if (rect.height === 0 && retries < 5) {
+    setTimeout(() => createLapEventMap(retries + 1), 300);
+    return;
+  }
+  const map = new google.maps.Map(mapElement, {
+    center: { lat: defaultLat, lng: defaultLng },
+    zoom: 15,
+    mapTypeId: google.maps.MapTypeId.HYBRID,
+    clickableIcons: false,
+  });
+  lapEventMap = map;
+  const searchBox = document.getElementById("lap-event-search-box");
+  if (searchBox) {
+    try {
+      const autocomplete = new google.maps.places.Autocomplete(searchBox, {
+        fields: ["geometry", "name", "formatted_address"],
+      });
+      autocomplete.bindTo("bounds", map);
+      autocomplete.addListener("place_changed", function () {
+        const place = autocomplete.getPlace();
+        hidePlaceDropdowns();
+        if (!place.geometry || !place.geometry.location) return;
+        const lat = parseFloat(place.geometry.location.lat().toFixed(6));
+        const lng = parseFloat(place.geometry.location.lng().toFixed(6));
+        map.setCenter({ lat, lng });
+        map.setZoom(17);
+        setLapEventMarker(lat, lng, map, place);
+      });
+    } catch (err) {
+      console.warn("Places search widget failed:", err);
+    }
+  }
+  map.addListener("click", function (event) {
+    hidePlaceDropdowns();
+    setLapEventMarker(
+      parseFloat(event.latLng.lat().toFixed(6)),
+      parseFloat(event.latLng.lng().toFixed(6)),
+      map,
+    );
+  });
+  setTimeout(() => google.maps.event.trigger(map, "resize"), 300);
+  return map;
+}
+
 // ============================================================
 //  MAIN APP
 // ============================================================
@@ -2608,11 +2717,13 @@ const app = {
     if (view === "dashboard") this.renderDashboard();
     if (view === "admin-players") this.renderPlayers();
     if (view === "admin-events") this.renderEvents();
+    if (view === "admin-tournaments") this.renderAdminTournaments();
     if (view === "admin-certificates") {
       this.loadAdminCertificates();
       this._populateAdminCertEventFilter();
     }
     if (view === "results") this.initResultsView();
+    if (view === "tournament-results") this.initTournamentResults();
     if (view === "logs") this.renderLogs();
     if (view === "profile") {
       this.loadProfile();
@@ -3142,10 +3253,16 @@ const app = {
     });
   },
 
+  _singleRaceEvents() {
+    return (this.allEvents || []).filter((e) => !e.tournamentId);
+  },
+
   setupResultsView() {
-    if (this.allEvents.length > 0) {
-      if (!this.selectedEventCode) {
-        this.selectedEventCode = this.allEvents[0].code;
+    const races = this._singleRaceEvents();
+    if (races.length > 0) {
+      const current = this.eventLookup[this.selectedEventCode];
+      if (!this.selectedEventCode || (current && current.tournamentId)) {
+        this.selectedEventCode = races[0].code;
       }
       this.renderResults();
     } else {
@@ -3160,7 +3277,7 @@ const app = {
       .value.toLowerCase()
       .trim();
 
-    const filteredEvents = this.allEvents.filter((e) => {
+    const filteredEvents = this._singleRaceEvents().filter((e) => {
       const nameMatch = e.name.toLowerCase().includes(searchTerm);
       const codeMatch = e.code.toLowerCase().includes(searchTerm);
       return nameMatch || codeMatch;
@@ -4852,6 +4969,337 @@ const app = {
           iconColor: "#e67e22",
         });
       });
+  },
+
+  openCreateTournamentModal() {
+    document.getElementById("modal-t-name").value = "";
+    document.getElementById("modal-t-remarks").value = "";
+    document.getElementById("modal-tournament").classList.add("show");
+  },
+
+  closeTournamentModal() {
+    const modal = document.getElementById("modal-tournament");
+    if (modal) modal.classList.remove("show");
+  },
+
+  saveTournament() {
+    const name = document.getElementById("modal-t-name").value.trim();
+    const remarks = document.getElementById("modal-t-remarks").value.trim();
+    if (!name) {
+      this.showModal({
+        title: "Incomplete",
+        message: "Tournament name is required.",
+        icon: "❌",
+        iconColor: "#c0392b",
+      });
+      return;
+    }
+    fetchWithAuth(`${API_URL}/tournaments`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name, remarks }),
+    })
+      .then((res) => res.json())
+      .then((data) => {
+        if (data.success) {
+          this.closeTournamentModal();
+          this.renderAdminTournaments();
+          this.showModal({
+            title: "Tournament Created",
+            message: `${data.tournament.name} (${data.tournament.code})`,
+            icon: "✅",
+            iconColor: "#27ae60",
+          });
+        } else {
+          this.showModal({
+            title: "Create Failed",
+            message: data.error || "Failed to create tournament.",
+            icon: "❌",
+            iconColor: "#c0392b",
+          });
+        }
+      })
+      .catch(() => {
+        this.showModal({
+          title: "Connection Error",
+          message: "Unable to connect to the server.",
+          icon: "⚠️",
+          iconColor: "#e67e22",
+        });
+      });
+  },
+
+  renderAdminTournaments() {
+    const wrap = document.getElementById("admin-tournaments-list");
+    if (!wrap) return;
+    wrap.innerHTML = "<p style=\"color: var(--text-muted)\">Loading tournaments...</p>";
+    fetchWithAuth(`${API_URL}/tournaments`)
+      .then((res) => res.json())
+      .then((list) => {
+        if (!Array.isArray(list) || list.length === 0) {
+          wrap.innerHTML =
+            "<p style=\"color: var(--text-muted)\">No tournaments yet. Create one to add laps.</p>";
+          return;
+        }
+        wrap.innerHTML = list
+          .map((t) => {
+            const laps = (t.laps || [])
+              .slice()
+              .sort((a, b) => a.index - b.index);
+            const lapRows = laps.length
+              ? `<ul class="tournament-lap-list">${laps
+                  .map(
+                    (l) =>
+                      `<li>Leg ${l.index} — ${this._escapeCertHtml(l.label)} <span class="tournament-lap-code">${this._escapeCertHtml(l.eventCode)}</span></li>`,
+                  )
+                  .join("")}</ul>`
+              : `<p class="tournament-lap-empty">No laps yet.</p>`;
+            return `<div class="tournament-admin-card">
+              <div class="tournament-admin-head">
+                <div>
+                  <h3>${this._escapeCertHtml(t.name)}</h3>
+                  <p>${this._escapeCertHtml(t.remarks || "")} · ${this._escapeCertHtml(t.code)}</p>
+                </div>
+                <button class="btn btn-sm btn-primary" onclick="app.openAddLapModal('${this._escapeCertHtml(t.code)}', decodeURIComponent('${encodeURIComponent(t.name || "")}'))">Add Lap</button>
+              </div>
+              ${lapRows}
+            </div>`;
+          })
+          .join("");
+      })
+      .catch(() => {
+        wrap.innerHTML =
+          "<p style=\"color: var(--text-muted)\">Unable to load tournaments.</p>";
+      });
+  },
+
+  openAddLapModal(code, name) {
+    destroyLapEventMap();
+    document.getElementById("lap-tournament-code").value = code;
+    document.getElementById("lap-tournament-name").textContent = name || code;
+    document.getElementById("lap-label").value = "";
+    document.getElementById("lap-event-name").value = "";
+    document.getElementById("lap-e-time").value = "";
+    const now = new Date();
+    const defaultDeadline = new Date(now.getTime() + 30 * 60 * 1000);
+    document.getElementById("lap-e-deadline").value = toDatetimeLocalValue(
+      defaultDeadline,
+    );
+    const search = document.getElementById("lap-event-search-box");
+    if (search) search.value = "";
+    document.getElementById("lap-event-coords-text").innerText =
+      "None selected";
+    document.getElementById("modal-tournament-lap").classList.add("show");
+    setTimeout(() => createLapEventMap(), 500);
+  },
+
+  closeTournamentLapModal() {
+    hidePlaceDropdowns();
+    destroyLapEventMap();
+    const modal = document.getElementById("modal-tournament-lap");
+    if (modal) modal.classList.remove("show");
+  },
+
+  saveTournamentLap() {
+    const code = document.getElementById("lap-tournament-code").value;
+    const label = document.getElementById("lap-label").value.trim();
+    const name = document.getElementById("lap-event-name").value.trim();
+    const time = document.getElementById("lap-e-time").value;
+    const deadline = document.getElementById("lap-e-deadline").value;
+    if (!label || !name || !time || !deadline) {
+      this.showModal({
+        title: "Incomplete",
+        message: "Lap label, event name, release time, and deadline are required.",
+        icon: "❌",
+        iconColor: "#c0392b",
+      });
+      return;
+    }
+    const releaseDate = new Date(time);
+    const deadlineDate = new Date(deadline);
+    if (deadlineDate >= releaseDate) {
+      this.showModal({
+        title: "Invalid Deadline",
+        message: "Registration deadline must be before the release time.",
+        icon: "❌",
+        iconColor: "#c0392b",
+      });
+      return;
+    }
+    if (selectedLapEventLat == null || selectedLapEventLng == null) {
+      this.showModal({
+        title: "Missing Location",
+        message: "Please select a release location on the map.",
+        icon: "❌",
+        iconColor: "#c0392b",
+      });
+      return;
+    }
+    fetchWithAuth(`${API_URL}/tournaments/${encodeURIComponent(code)}/laps`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        label,
+        name,
+        releaseTime: new Date(time).toISOString(),
+        registrationDeadline: new Date(deadline).toISOString(),
+        lat: parseFloat(Number(selectedLapEventLat).toFixed(6)),
+        lng: parseFloat(Number(selectedLapEventLng).toFixed(6)),
+      }),
+    })
+      .then((res) => res.json())
+      .then((data) => {
+        if (data.success) {
+          this.closeTournamentLapModal();
+          this.renderAdminTournaments();
+          this.fetchAllEvents(true);
+          this.showModal({
+            title: "Lap Created",
+            message: `${data.event.name} (${data.event.code}) was added. Use Manage Events for stickers and registration.`,
+            icon: "✅",
+            iconColor: "#27ae60",
+          });
+        } else {
+          this.showModal({
+            title: "Create Failed",
+            message: data.error || "Failed to create lap.",
+            icon: "❌",
+            iconColor: "#c0392b",
+          });
+        }
+      })
+      .catch(() => {
+        this.showModal({
+          title: "Connection Error",
+          message: "Unable to connect to the server.",
+          icon: "⚠️",
+          iconColor: "#e67e22",
+        });
+      });
+  },
+
+  initTournamentResults() {
+    const select = document.getElementById("tournament-results-select");
+    if (!select) return;
+    fetchWithAuth(`${API_URL}/tournaments`)
+      .then((res) => res.json())
+      .then((list) => {
+        if (!Array.isArray(list)) list = [];
+        const prev = select.value;
+        select.innerHTML = `<option value="">Select a tournament</option>${list
+          .map(
+            (t) =>
+              `<option value="${this._escapeCertHtml(t.code)}">${this._escapeCertHtml(t.name)}</option>`,
+          )
+          .join("")}`;
+        if (prev && list.some((t) => t.code === prev)) select.value = prev;
+        else if (list[0]) select.value = list[0].code;
+        this.loadTournamentResults();
+      })
+      .catch(() => {
+        select.innerHTML = `<option value="">Unable to load tournaments</option>`;
+        this._tournamentResultsPayload = null;
+        this.filterTournamentResultsTable();
+      });
+  },
+
+  loadTournamentResults() {
+    const code = document.getElementById("tournament-results-select")?.value;
+    const nameEl = document.getElementById("tournament-meta-name");
+    const remarksEl = document.getElementById("tournament-meta-remarks");
+    if (!code) {
+      if (nameEl) nameEl.textContent = "—";
+      if (remarksEl) remarksEl.textContent = "—";
+      this._tournamentResultsPayload = null;
+      this.filterTournamentResultsTable();
+      return;
+    }
+    fetchWithAuth(`${API_URL}/tournaments/${encodeURIComponent(code)}/results`)
+      .then((res) => res.json())
+      .then((data) => {
+        if (data.error) throw new Error(data.error);
+        this._tournamentResultsPayload = data;
+        if (nameEl) nameEl.textContent = data.tournament?.name || "—";
+        if (remarksEl) remarksEl.textContent = data.tournament?.remarks || "—";
+        this.filterTournamentResultsTable();
+      })
+      .catch(() => {
+        this._tournamentResultsPayload = null;
+        if (nameEl) nameEl.textContent = "—";
+        if (remarksEl) remarksEl.textContent = "—";
+        this.filterTournamentResultsTable();
+      });
+  },
+
+  filterTournamentResultsTable() {
+    const payload = this._tournamentResultsPayload;
+    const head = document.getElementById("tournament-results-head");
+    const body = document.getElementById("tournament-results-body");
+    if (!head || !body) return;
+    if (!payload || !Array.isArray(payload.rows)) {
+      head.innerHTML = "";
+      body.innerHTML =
+        "<tr><td colspan=\"8\" style=\"text-align:center;color:var(--text-muted);padding:24px\">Select a tournament to view standings.</td></tr>";
+      return;
+    }
+    const completed = (payload.laps || []).filter((l) => l.completed);
+    const q = (
+      document.getElementById("tournament-results-search")?.value || ""
+    )
+      .toLowerCase()
+      .trim();
+    const rows = payload.rows.filter((r) => {
+      if (!q) return true;
+      return (
+        String(r.playerName || "").toLowerCase().includes(q) ||
+        String(r.ringNumber || "").toLowerCase().includes(q) ||
+        String(r.nickname || "").toLowerCase().includes(q)
+      );
+    });
+    const legHeaders = completed
+      .map(
+        (l) =>
+          `<th>Leg ${l.index} - ${this._escapeCertHtml(l.label)} (${this._escapeCertHtml(l.eventCode)}) (m/min)</th>`,
+      )
+      .join("");
+    head.innerHTML = `<tr>
+      <th>Rank</th>
+      <th>Player Name</th>
+      <th>Pigeon</th>
+      <th>Ring Band No</th>
+      <th>Points</th>
+      <th>Total Speed (m/min)</th>
+      ${legHeaders}
+    </tr>`;
+    if (rows.length === 0) {
+      const cols = 6 + completed.length;
+      body.innerHTML = `<tr><td colspan="${cols}" style="text-align:center;color:var(--text-muted);padding:24px">No standings yet. Clock-ins on a lap will appear here.</td></tr>`;
+      return;
+    }
+    body.innerHTML = rows
+      .map((r) => {
+        const avatarHTML = r.avatarId
+          ? getPigeonAvatarSVG(r.avatarId, 28)
+          : "";
+        const pigeonName = r.nickname || "N/A";
+        const legs = completed
+          .map((l) => {
+            const cell = (r.legs || []).find((x) => x.index === l.index);
+            const speed = cell ? Number(cell.speedMPM) || 0 : 0;
+            return `<td>${speed.toFixed(6)}</td>`;
+          })
+          .join("");
+        return `<tr>
+          <td>${r.rank}</td>
+          <td>${this._escapeCertHtml(r.playerName || "—")}</td>
+          <td class="tournament-pigeon-cell">${avatarHTML}<span>${this._escapeCertHtml(pigeonName)}</span></td>
+          <td>${this._escapeCertHtml(r.ringNumber || "—")}</td>
+          <td>${Number(r.points || 0).toFixed(2)}</td>
+          <td>${Number(r.totalSpeed || 0).toFixed(6)}</td>
+          ${legs}
+        </tr>`;
+      })
+      .join("");
   },
 
   openPlayerModal() {

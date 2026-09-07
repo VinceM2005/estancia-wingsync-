@@ -263,6 +263,8 @@ const EventSchema = new mongoose.Schema({
   },
   registrationDeadline: { type: Date, required: true },
   certificatesGenerated: { type: Boolean, default: false },
+  tournamentId: { type: String, default: null, index: true },
+  lapIndex: { type: Number, default: null },
 });
 EventSchema.index({ state: 1, releaseTime: -1 });
 EventSchema.index({ state: 1, registrationDeadline: 1 });
@@ -389,6 +391,22 @@ const EventRegistration = mongoose.model(
   EventRegistrationSchema,
 );
 const Certificate = mongoose.model("Certificate", CertificateSchema);
+
+const TournamentSchema = new mongoose.Schema({
+  code: { type: String, required: true, unique: true },
+  name: { type: String, required: true },
+  remarks: { type: String, default: "" },
+  laps: [
+    {
+      index: { type: Number, required: true },
+      label: { type: String, required: true },
+      eventCode: { type: String, required: true },
+    },
+  ],
+  createdAt: { type: Date, default: Date.now },
+});
+TournamentSchema.index({ createdAt: -1 });
+const Tournament = mongoose.model("Tournament", TournamentSchema);
 
 // ============================================================
 //  SHORT-LIVED MEMORY CACHE (shared by all requests)
@@ -1917,6 +1935,245 @@ app.post(
     }
   },
 );
+
+const TOURNAMENT_LAP_POINTS = [10, 8, 6, 5, 4, 3, 2, 1];
+
+async function generateUniqueEventCode() {
+  let dummyCode = "EVT" + Date.now().toString(36).toUpperCase();
+  let existing = await Event.findOne({ code: dummyCode });
+  while (existing) {
+    dummyCode =
+      "EVT" +
+      Date.now().toString(36).toUpperCase() +
+      Math.random().toString(36).substring(2, 5).toUpperCase();
+    existing = await Event.findOne({ code: dummyCode });
+  }
+  return dummyCode;
+}
+
+function tournamentPigeonKey(row) {
+  const raw = row.pigeonId;
+  if (raw && typeof raw === "object") {
+    const id = raw._id || raw.id;
+    if (id) return String(id);
+  }
+  if (raw && !String(raw).startsWith("LEGACY_")) return String(raw);
+  return `legacy:${row.userId}:${row.clockInCode}`;
+}
+
+app.get("/api/tournaments", async (req, res) => {
+  try {
+    const list = await Tournament.find().sort({ createdAt: -1 }).lean();
+    res.json(list);
+  } catch (error) {
+    console.error("Tournaments list error:", error);
+    res.status(500).json({ error: "An internal error occurred." });
+  }
+});
+
+app.post(
+  "/api/tournaments",
+  requireAdmin,
+  [body("name").trim().notEmpty().withMessage("Tournament name required")],
+  async (req, res) => {
+    try {
+      const errors = validationResult(req);
+      if (!errors.isEmpty()) {
+        return res.status(400).json({ error: errors.array()[0].msg });
+      }
+      const name = String(req.body.name || "").trim();
+      const remarks = String(req.body.remarks || "").trim();
+      let code = "TRN" + Date.now().toString(36).toUpperCase();
+      while (await Tournament.findOne({ code })) {
+        code =
+          "TRN" +
+          Date.now().toString(36).toUpperCase() +
+          Math.random().toString(36).substring(2, 4).toUpperCase();
+      }
+      const tournament = await Tournament.create({
+        code,
+        name,
+        remarks,
+        laps: [],
+      });
+      await Log.create({
+        message: `Admin created tournament ${tournament.name} (${tournament.code})`,
+      });
+      res.json({ success: true, tournament });
+    } catch (error) {
+      console.error("Tournament create error:", error);
+      res.status(500).json({ error: "An internal error occurred." });
+    }
+  },
+);
+
+app.post(
+  "/api/tournaments/:code/laps",
+  requireAdmin,
+  [
+    body("label").trim().notEmpty().withMessage("Lap label required"),
+    body("name").trim().notEmpty().withMessage("Event name required"),
+    body("releaseTime").isISO8601().withMessage("Valid release time required"),
+    body("lat").isFloat({ min: -90, max: 90 }),
+    body("lng").isFloat({ min: -180, max: 180 }),
+    body("registrationDeadline")
+      .isISO8601()
+      .withMessage("Valid registration deadline required"),
+  ],
+  async (req, res) => {
+    try {
+      const errors = validationResult(req);
+      if (!errors.isEmpty()) {
+        return res.status(400).json({ error: errors.array()[0].msg });
+      }
+      const tournament = await Tournament.findOne({ code: req.params.code });
+      if (!tournament) {
+        return res.status(404).json({ error: "Tournament not found" });
+      }
+      const { label, name, releaseTime, lat, lng, registrationDeadline } =
+        matchedData(req);
+      const release = new Date(releaseTime);
+      const deadline = new Date(registrationDeadline);
+      if (deadline >= release) {
+        return res.status(400).json({
+          error: "Registration deadline must be before the release time.",
+        });
+      }
+      const eventCode = await generateUniqueEventCode();
+      const lapIndex = tournament.laps.length + 1;
+      const event = await Event.create({
+        code: eventCode,
+        name: name.trim(),
+        releaseTime: release,
+        status: "Active",
+        lat: parseFloat(Number(lat).toFixed(6)),
+        lng: parseFloat(Number(lng).toFixed(6)),
+        state: "Draft",
+        registrationDeadline: deadline,
+        tournamentId: tournament.code,
+        lapIndex,
+      });
+      tournament.laps.push({
+        index: lapIndex,
+        label: label.trim(),
+        eventCode: event.code,
+      });
+      await tournament.save();
+      await Log.create({
+        message: `Admin added lap ${lapIndex} (${event.code}) to tournament ${tournament.code}`,
+      });
+      invalidateLiveCaches(event.code);
+      res.json({ success: true, tournament, event });
+    } catch (error) {
+      console.error("Tournament lap create error:", error);
+      res.status(500).json({ error: "An internal error occurred." });
+    }
+  },
+);
+
+app.get("/api/tournaments/:code/results", async (req, res) => {
+  try {
+    const tournament = await Tournament.findOne({
+      code: req.params.code,
+    }).lean();
+    if (!tournament) {
+      return res.status(404).json({ error: "Tournament not found" });
+    }
+    const laps = (tournament.laps || [])
+      .slice()
+      .sort((a, b) => a.index - b.index);
+    const birds = new Map();
+    const lapMeta = [];
+
+    for (const lap of laps) {
+      const rows = await loadResultsWithPigeons(lap.eventCode);
+      const completed = Array.isArray(rows) && rows.length > 0;
+      lapMeta.push({
+        index: lap.index,
+        label: lap.label,
+        eventCode: lap.eventCode,
+        completed,
+      });
+      if (!completed) continue;
+      rows.forEach((row, idx) => {
+        const key = tournamentPigeonKey(row);
+        const pigeon =
+          row.pigeonId && typeof row.pigeonId === "object" ? row.pigeonId : null;
+        if (!birds.has(key)) {
+          birds.set(key, {
+            playerId: row.userId,
+            playerName: row.userName,
+            pigeonId: pigeon
+              ? String(pigeon._id || "")
+              : String(row.pigeonId || ""),
+            ringNumber: pigeon?.ringNumber || "",
+            nickname: pigeon?.nickname || "",
+            avatarId: pigeon?.avatarId || "",
+            legs: {},
+          });
+        }
+        const bird = birds.get(key);
+        const speed = Number(row.speedMPM) || 0;
+        const pts =
+          idx < TOURNAMENT_LAP_POINTS.length ? TOURNAMENT_LAP_POINTS[idx] : 0;
+        bird.legs[lap.index] = { speedMPM: speed, points: pts };
+        if (!bird.ringNumber && pigeon?.ringNumber) {
+          bird.ringNumber = pigeon.ringNumber;
+        }
+        if (!bird.nickname && pigeon?.nickname) bird.nickname = pigeon.nickname;
+        if (!bird.avatarId && pigeon?.avatarId) bird.avatarId = pigeon.avatarId;
+        if (!bird.playerName) bird.playerName = row.userName;
+      });
+    }
+
+    const completedLaps = lapMeta.filter((l) => l.completed);
+    const standings = Array.from(birds.values()).map((bird) => {
+      let points = 0;
+      let totalSpeed = 0;
+      const legs = completedLaps.map((lap) => {
+        const cell = bird.legs[lap.index];
+        const speed = cell ? Number(cell.speedMPM) || 0 : 0;
+        const pts = cell ? Number(cell.points) || 0 : 0;
+        points += pts;
+        totalSpeed += speed;
+        return { index: lap.index, speedMPM: speed, points: pts };
+      });
+      return {
+        playerId: bird.playerId,
+        playerName: bird.playerName,
+        pigeonId: bird.pigeonId,
+        ringNumber: bird.ringNumber || "—",
+        nickname: bird.nickname || "",
+        avatarId: bird.avatarId || "",
+        points,
+        totalSpeed,
+        legs,
+      };
+    });
+
+    standings.sort((a, b) => {
+      if (b.points !== a.points) return b.points - a.points;
+      if (b.totalSpeed !== a.totalSpeed) return b.totalSpeed - a.totalSpeed;
+      return String(a.ringNumber || "").localeCompare(
+        String(b.ringNumber || ""),
+      );
+    });
+
+    res.json({
+      tournament: {
+        code: tournament.code,
+        name: tournament.name,
+        remarks: tournament.remarks || "",
+        clubName: "Malinao Racing Pigeon Club (MRPC)",
+      },
+      laps: lapMeta,
+      rows: standings.map((row, i) => ({ ...row, rank: i + 1 })),
+    });
+  } catch (error) {
+    console.error("Tournament results error:", error);
+    res.status(500).json({ error: "An internal error occurred." });
+  }
+});
 
 app.put(
   "/api/events/:code",

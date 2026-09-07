@@ -8,7 +8,7 @@
     />
     <title>Wingsync - Pigeon Clocking System</title>
     <link rel="manifest" href="manifest.json" />
-    <link rel="stylesheet" href="style.css?v=37" />
+    <link rel="stylesheet" href="style.css?v=38" />
     <meta name="theme-color" content="#2a7a62" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="mobile-web-app-capable" content="yes" />
@@ -46,7 +46,7 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
 
-    <link rel="stylesheet" href="style.css?v=37" />
+    <link rel="stylesheet" href="style.css?v=38" />
     <style>
       /* ===== ADDITIONAL STYLES FOR UI COMPONENTS ===== */
       .pigeons-grid {
@@ -542,6 +542,9 @@
           <li onclick="app.navigate('results')" id="nav-results">
             <i class="fas fa-trophy"></i> Event Results
           </li>
+          <li onclick="app.navigate('tournament-results')" id="nav-tournament-results">
+            <i class="fas fa-flag-checkered"></i> Tournament Results
+          </li>
           <li onclick="app.navigate('logs')" id="nav-logs">
             <i class="fas fa-history"></i> App Logs
           </li>
@@ -559,6 +562,13 @@
             class="admin-only hidden"
           >
             <i class="fas fa-calendar-alt"></i> Manage Events
+          </li>
+          <li
+            onclick="app.navigate('admin-tournaments')"
+            id="nav-admin-tournaments"
+            class="admin-only hidden"
+          >
+            <i class="fas fa-flag"></i> Manage Tournaments
           </li>
           <li
             onclick="app.navigate('event-review')"
@@ -1314,6 +1324,45 @@
             </div>
           </div>
 
+          <!-- ===== TOURNAMENT RESULTS ===== -->
+          <div id="view-tournament-results" class="view-section hidden">
+            <div class="card">
+              <div class="dashboard-header">
+                <h2><i class="fas fa-flag-checkered"></i> Tournament Result</h2>
+              </div>
+              <div class="tournament-meta" id="tournament-meta">
+                <p><strong>CLUB NAME:</strong> Malinao Racing Pigeon Club (MRPC)</p>
+                <p><strong>TOURNAMENT NAME:</strong> <span id="tournament-meta-name">—</span></p>
+                <p><strong>REMARKS:</strong> <span id="tournament-meta-remarks">—</span></p>
+              </div>
+              <div class="admin-search-bar" style="margin-top: 12px">
+                <select
+                  id="tournament-results-select"
+                  class="form-control"
+                  onchange="app.loadTournamentResults()"
+                >
+                  <option value="">Select a tournament</option>
+                </select>
+                <input
+                  id="tournament-results-search"
+                  type="text"
+                  placeholder="Search player or ring..."
+                  oninput="app.filterTournamentResultsTable()"
+                />
+              </div>
+              <p class="tournament-points-hint">
+                Points per completed lap: 1st 10 · 2nd 8 · 3rd 6 · 4th 5 · 5th 4 · 6th 3 · 7th 2 · 8th 1.
+                Tied points are broken by higher accumulated speed.
+              </p>
+              <div class="tournament-table-wrap">
+                <table id="tournament-results-table">
+                  <thead id="tournament-results-head"></thead>
+                  <tbody id="tournament-results-body"></tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+
           <!-- ===== LOGS ===== -->
           <div id="view-logs" class="view-section hidden">
             <div class="card">
@@ -1413,6 +1462,24 @@
                 class="table-pagination"
                 aria-label="Events table pagination"
               ></div>
+            </div>
+          </div>
+
+          <!-- ===== MANAGE TOURNAMENTS ===== -->
+          <div id="view-admin-tournaments" class="view-section hidden admin-only">
+            <div class="card">
+              <div class="dashboard-header">
+                <h2><i class="fas fa-flag"></i> Manage Tournaments</h2>
+                <button
+                  class="btn btn-primary"
+                  onclick="app.openCreateTournamentModal()"
+                >
+                  <i class="fas fa-plus"></i> Create Tournament
+                </button>
+              </div>
+              <div id="admin-tournaments-list">
+                <p style="color: var(--text-muted)">Loading tournaments...</p>
+              </div>
             </div>
           </div>
 
@@ -1866,6 +1933,114 @@
       </div>
     </div>
 
+    <!-- Create Tournament Modal -->
+    <div id="modal-tournament" class="modal-overlay">
+      <div class="modal-content" style="max-width: 480px">
+        <div class="modal-header">
+          <h3><i class="fas fa-flag"></i> Create Tournament</h3>
+          <button class="close-modal" onclick="app.closeTournamentModal()">
+            <i class="fas fa-times"></i>
+          </button>
+        </div>
+        <div class="form-group">
+          <label>Tournament Name</label>
+          <input
+            type="text"
+            id="modal-t-name"
+            class="form-control"
+            placeholder="e.g., 3 LAPS SPRINT RACE (GOA, PILI, NAGA)"
+          />
+        </div>
+        <div class="form-group">
+          <label>Remarks</label>
+          <input
+            type="text"
+            id="modal-t-remarks"
+            class="form-control"
+            placeholder="e.g., Sprint Race"
+          />
+        </div>
+        <button
+          class="btn btn-success"
+          style="width: 100%"
+          onclick="app.saveTournament()"
+        >
+          <i class="fas fa-save"></i> Create Tournament
+        </button>
+      </div>
+    </div>
+
+    <!-- Add Tournament Lap Modal -->
+    <div id="modal-tournament-lap" class="modal-overlay">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h3><i class="fas fa-plus"></i> Add Lap Event</h3>
+          <button class="close-modal" onclick="app.closeTournamentLapModal()">
+            <i class="fas fa-times"></i>
+          </button>
+        </div>
+        <input type="hidden" id="lap-tournament-code" />
+        <p>
+          <strong>Tournament:</strong>
+          <span id="lap-tournament-name"></span>
+        </p>
+        <div class="form-group">
+          <label>Lap Label</label>
+          <input
+            type="text"
+            id="lap-label"
+            class="form-control"
+            placeholder="e.g., 1st Lap Sprint Race Goa"
+          />
+        </div>
+        <div class="form-group">
+          <label>Event Name</label>
+          <input
+            type="text"
+            id="lap-event-name"
+            class="form-control"
+            placeholder="e.g., Goa Sprint Leg 1"
+          />
+        </div>
+        <div class="form-group">
+          <label>Release Date &amp; Time</label>
+          <input type="datetime-local" id="lap-e-time" class="form-control" />
+        </div>
+        <div class="form-group">
+          <label>Registration Deadline</label>
+          <input
+            type="datetime-local"
+            id="lap-e-deadline"
+            class="form-control"
+          />
+        </div>
+        <div class="form-group">
+          <label><i class="fas fa-search"></i> Search Location</label>
+          <input
+            type="text"
+            id="lap-event-search-box"
+            class="form-control"
+            placeholder="e.g., Malinao, Albay"
+          />
+        </div>
+        <div class="form-group">
+          <label>Pinpoint Release Location on Map</label>
+          <div id="lap-event-map" class="map-container"></div>
+          <small
+            ><i class="fas fa-location-dot"></i> Coordinates:
+            <span id="lap-event-coords-text">None selected</span></small
+          >
+        </div>
+        <button
+          class="btn btn-success"
+          style="width: 100%"
+          onclick="app.saveTournamentLap()"
+        >
+          <i class="fas fa-save"></i> Create Lap Event
+        </button>
+      </div>
+    </div>
+
     <!-- Edit Player Modal -->
     <div id="modal-edit-player" class="modal-overlay">
       <div class="modal-content">
@@ -2249,6 +2424,6 @@
       </div>
     </div>
 
-    <script src="app.js?v=39"></script>
+    <script src="app.js?v=40"></script>
   </body>
 </html>
