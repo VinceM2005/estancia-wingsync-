@@ -1,4 +1,4 @@
-const CACHE_NAME = "wingsync-v138"; // Increment on every deployment
+const CACHE_NAME = "wingsync-v139"; // Increment on every deployment
 const urlsToCache = ["/index.html", "/app.js", "/style.css", "/manifest.json", "/wingsync-logo.png", "/logo.png", "/wingsync_cert-temp.png"];
 
 self.addEventListener("install", (event) => {
@@ -60,6 +60,24 @@ self.addEventListener("fetch", (event) => {
     url.pathname.endsWith(".css");
 
   if (isAppShell) {
+    // #region agent log
+    fetch("http://127.0.0.1:7494/ingest/ea5b293e-e31b-435b-a70b-697b12b82dad", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-Debug-Session-Id": "ac65a1",
+      },
+      body: JSON.stringify({
+        sessionId: "ac65a1",
+        runId: "pre-fix",
+        hypothesisId: "D",
+        location: "sw.js:fetch",
+        message: "sw app-shell network-first",
+        data: { path: url.pathname, mode: event.request.mode },
+        timestamp: Date.now(),
+      }),
+    }).catch(() => {});
+    // #endregion
     event.respondWith(
       fetch(event.request)
         .then((networkResponse) => {

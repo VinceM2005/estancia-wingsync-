@@ -2,6 +2,37 @@
 // ===== API Configuration =====
 const API_URL = "https://estancia-wingsync-backend.onrender.com/api";
 
+// #region agent log
+function __wsDbg(location, message, data, hypothesisId) {
+  fetch("http://127.0.0.1:7494/ingest/ea5b293e-e31b-435b-a70b-697b12b82dad", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "X-Debug-Session-Id": "ac65a1",
+    },
+    body: JSON.stringify({
+      sessionId: "ac65a1",
+      runId: "pre-fix",
+      hypothesisId,
+      location,
+      message,
+      data,
+      timestamp: Date.now(),
+    }),
+  }).catch(() => {});
+}
+__wsDbg(
+  "app.js:top",
+  "app.js parsed",
+  {
+    readyState: document.readyState,
+    href: location.pathname,
+    hasApp: typeof window.app !== "undefined",
+  },
+  "A",
+);
+// #endregion
+
 // ===== PIGEON AVATAR LIBRARY =====
 const PIGEON_AVATARS = [
   {
@@ -164,6 +195,19 @@ function fetchWithAuth(url, options = {}) {
     ...options,
     headers,
   }).then((res) => {
+    // #region agent log
+    __wsDbg(
+      "app.js:fetchWithAuth",
+      "api response",
+      {
+        status: res.status,
+        path: String(url).replace(API_URL, ""),
+        method,
+        willReload: res.status === 401,
+      },
+      "C",
+    );
+    // #endregion
     if (res.status === 401) {
       sessionStorage.removeItem("wingsync_token");
       sessionStorage.removeItem("wingsync_user");
@@ -855,6 +899,17 @@ const app = {
   _adminCertRefreshInterval: null,
 
   init() {
+    // #region agent log
+    __wsDbg(
+      "app.js:init",
+      "init start",
+      {
+        hasToken: !!sessionStorage.getItem("wingsync_token"),
+        path: location.pathname,
+      },
+      "B",
+    );
+    // #endregion
     this.loadTheme();
     this.setupVisibilityListener();
     this.syncServerTime();
@@ -8501,9 +8556,33 @@ if ("serviceWorker" in navigator) {
 window.app = app;
 
 function bootWingsync() {
+  // #region agent log
+  __wsDbg(
+    "app.js:boot",
+    "bootWingsync",
+    {
+      readyState: document.readyState,
+      hasApp: !!window.app,
+      booted: !!(window.app && window.app._booted),
+    },
+    "E",
+  );
+  // #endregion
   if (!window.app || window.app._booted) return;
   window.app._booted = true;
-  window.app.init();
+  try {
+    window.app.init();
+  } catch (err) {
+    // #region agent log
+    __wsDbg(
+      "app.js:boot",
+      "init threw",
+      { err: String(err && err.message ? err.message : err) },
+      "B",
+    );
+    // #endregion
+    throw err;
+  }
 }
 
 if (document.readyState === "loading") {
