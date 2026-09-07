@@ -2071,6 +2071,63 @@ app.post(
   },
 );
 
+app.post(
+  "/api/tournaments/:code/laps/attach",
+  requireAdmin,
+  [
+    body("label").trim().notEmpty().withMessage("Lap label required"),
+    body("eventCode").trim().notEmpty().withMessage("Event code required"),
+  ],
+  async (req, res) => {
+    try {
+      const errors = validationResult(req);
+      if (!errors.isEmpty()) {
+        return res.status(400).json({ error: errors.array()[0].msg });
+      }
+      const tournament = await Tournament.findOne({ code: req.params.code });
+      if (!tournament) {
+        return res.status(404).json({ error: "Tournament not found" });
+      }
+      const { label, eventCode } = matchedData(req);
+      const event = await Event.findOne({ code: String(eventCode).trim() });
+      if (!event) {
+        return res.status(404).json({ error: "Event not found" });
+      }
+      if (event.tournamentId) {
+        return res.status(400).json({
+          error: `This event is already a lap of tournament ${event.tournamentId}.`,
+        });
+      }
+      const alreadyLinked = await Tournament.findOne({
+        "laps.eventCode": event.code,
+      });
+      if (alreadyLinked) {
+        return res.status(400).json({
+          error: `This event is already attached to ${alreadyLinked.name} (${alreadyLinked.code}).`,
+        });
+      }
+      const lapIndex = tournament.laps.length + 1;
+      event.tournamentId = tournament.code;
+      event.lapIndex = lapIndex;
+      await event.save();
+      tournament.laps.push({
+        index: lapIndex,
+        label: String(label).trim(),
+        eventCode: event.code,
+      });
+      await tournament.save();
+      await Log.create({
+        message: `Admin attached event ${event.code} as lap ${lapIndex} of tournament ${tournament.code}`,
+      });
+      invalidateLiveCaches(event.code);
+      res.json({ success: true, tournament, event });
+    } catch (error) {
+      console.error("Tournament lap attach error:", error);
+      res.status(500).json({ error: "An internal error occurred." });
+    }
+  },
+);
+
 app.get("/api/tournaments/:code/results", async (req, res) => {
   try {
     const tournament = await Tournament.findOne({

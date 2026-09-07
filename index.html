@@ -8,7 +8,7 @@
     />
     <title>Wingsync - Pigeon Clocking System</title>
     <link rel="manifest" href="manifest.json" />
-    <link rel="stylesheet" href="style.css?v=39" />
+    <link rel="stylesheet" href="style.css?v=40" />
     <meta name="theme-color" content="#2a7a62" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="mobile-web-app-capable" content="yes" />
@@ -46,7 +46,7 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
 
-    <link rel="stylesheet" href="style.css?v=39" />
+    <link rel="stylesheet" href="style.css?v=40" />
     <style>
       /* ===== ADDITIONAL STYLES FOR UI COMPONENTS ===== */
       .pigeons-grid {
@@ -1511,6 +1511,12 @@
                   <i class="fas fa-plus"></i> Create Tournament
                 </button>
               </div>
+              <p class="tournament-attach-hint">
+                Already have lap races in Manage Events? Open a tournament and
+                use <strong>Attach Event</strong> to add those existing races
+                (including imported results). Use <strong>Add Lap</strong> only
+                when you need a brand-new empty event.
+              </p>
               <div id="admin-tournaments-list">
                 <p style="color: var(--text-muted)">Loading tournaments...</p>
               </div>
@@ -2075,6 +2081,52 @@
       </div>
     </div>
 
+    <!-- Attach Existing Event as Tournament Lap -->
+    <div id="modal-tournament-attach" class="modal-overlay">
+      <div class="modal-content" style="max-width: 480px">
+        <div class="modal-header">
+          <h3><i class="fas fa-link"></i> Attach Existing Event</h3>
+          <button
+            class="close-modal"
+            onclick="app.closeAttachLapModal()"
+          >
+            <i class="fas fa-times"></i>
+          </button>
+        </div>
+        <input type="hidden" id="attach-tournament-code" />
+        <p>
+          <strong>Tournament:</strong>
+          <span id="attach-tournament-name"></span>
+        </p>
+        <p class="tournament-attach-hint" style="margin: 8px 0 14px">
+          Pick a race that already exists in Manage Events. Clock-ins and
+          imported results stay on that event and appear in Tournament Results.
+        </p>
+        <div class="form-group">
+          <label>Existing Event</label>
+          <select id="attach-event-select" class="form-control">
+            <option value="">Select an event</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label>Lap Label</label>
+          <input
+            type="text"
+            id="attach-lap-label"
+            class="form-control"
+            placeholder="e.g., 1st Lap Sprint Race Goa"
+          />
+        </div>
+        <button
+          class="btn btn-success"
+          style="width: 100%"
+          onclick="app.saveAttachLap()"
+        >
+          <i class="fas fa-link"></i> Attach as Lap
+        </button>
+      </div>
+    </div>
+
     <!-- Edit Player Modal -->
     <div id="modal-edit-player" class="modal-overlay">
       <div class="modal-content">
@@ -2458,6 +2510,6 @@
       </div>
     </div>
 
-    <script src="app.js?v=41"></script>
+    <script src="app.js?v=42"></script>
   </body>
 </html>

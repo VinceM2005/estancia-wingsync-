@@ -5060,7 +5060,10 @@ const app = {
                   <h3>${this._escapeCertHtml(t.name)}</h3>
                   <p>${this._escapeCertHtml(t.remarks || "")} · ${this._escapeCertHtml(t.code)}</p>
                 </div>
-                <button class="btn btn-sm btn-primary" onclick="app.openAddLapModal('${this._escapeCertHtml(t.code)}', decodeURIComponent('${encodeURIComponent(t.name || "")}'))">Add Lap</button>
+                <div class="tournament-admin-actions">
+                  <button class="btn btn-sm btn-secondary" onclick="app.openAttachLapModal('${this._escapeCertHtml(t.code)}', decodeURIComponent('${encodeURIComponent(t.name || "")}'))">Attach Event</button>
+                  <button class="btn btn-sm btn-primary" onclick="app.openAddLapModal('${this._escapeCertHtml(t.code)}', decodeURIComponent('${encodeURIComponent(t.name || "")}'))">Add Lap</button>
+                </div>
               </div>
               ${lapRows}
             </div>`;
@@ -5098,6 +5101,92 @@ const app = {
     destroyLapEventMap();
     const modal = document.getElementById("modal-tournament-lap");
     if (modal) modal.classList.remove("show");
+  },
+
+  openAttachLapModal(code, name) {
+    document.getElementById("attach-tournament-code").value = code;
+    document.getElementById("attach-tournament-name").textContent = name || code;
+    document.getElementById("attach-lap-label").value = "";
+    const select = document.getElementById("attach-event-select");
+    select.innerHTML = `<option value="">Loading events...</option>`;
+    document.getElementById("modal-tournament-attach").classList.add("show");
+    this.fetchAllEvents(true).then((events) => {
+      const available = (events || []).filter((e) => !e.tournamentId);
+      if (!available.length) {
+        select.innerHTML = `<option value="">No unattached events found</option>`;
+        return;
+      }
+      select.innerHTML = `<option value="">Select an event</option>${available
+        .map(
+          (e) =>
+            `<option value="${this._escapeCertHtml(e.code)}">${this._escapeCertHtml(e.name)} (${this._escapeCertHtml(e.code)})</option>`,
+        )
+        .join("")}`;
+      select.onchange = () => {
+        const picked = available.find((e) => e.code === select.value);
+        const labelEl = document.getElementById("attach-lap-label");
+        if (picked && labelEl && !labelEl.value.trim()) {
+          labelEl.value = picked.name;
+        }
+      };
+    });
+  },
+
+  closeAttachLapModal() {
+    const modal = document.getElementById("modal-tournament-attach");
+    if (modal) modal.classList.remove("show");
+  },
+
+  saveAttachLap() {
+    const code = document.getElementById("attach-tournament-code").value;
+    const eventCode = document.getElementById("attach-event-select").value;
+    const label = document.getElementById("attach-lap-label").value.trim();
+    if (!eventCode || !label) {
+      this.showModal({
+        title: "Incomplete",
+        message: "Choose an existing event and enter a lap label.",
+        icon: "❌",
+        iconColor: "#c0392b",
+      });
+      return;
+    }
+    fetchWithAuth(
+      `${API_URL}/tournaments/${encodeURIComponent(code)}/laps/attach`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ eventCode, label }),
+      },
+    )
+      .then((res) => res.json())
+      .then((data) => {
+        if (data.success) {
+          this.closeAttachLapModal();
+          this.renderAdminTournaments();
+          this.fetchAllEvents(true);
+          this.showModal({
+            title: "Event Attached",
+            message: `${data.event.name} (${data.event.code}) is now a lap. Open Tournament Results to see standings.`,
+            icon: "✅",
+            iconColor: "#27ae60",
+          });
+        } else {
+          this.showModal({
+            title: "Attach Failed",
+            message: data.error || "Failed to attach event.",
+            icon: "❌",
+            iconColor: "#c0392b",
+          });
+        }
+      })
+      .catch(() => {
+        this.showModal({
+          title: "Connection Error",
+          message: "Unable to connect to the server.",
+          icon: "⚠️",
+          iconColor: "#e67e22",
+        });
+      });
   },
 
   saveTournamentLap() {

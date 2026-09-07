@@ -5468,6 +5468,18 @@ img {
   align-items: flex-start;
   margin-bottom: 8px;
 }
+.tournament-admin-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  flex-shrink: 0;
+}
+.tournament-attach-hint {
+  margin: 0 0 16px;
+  font-size: 13px;
+  color: var(--text-muted);
+  line-height: 1.5;
+}
 .tournament-admin-head h3 {
   margin: 0 0 4px;
   font-size: 16px;
