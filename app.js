@@ -5058,6 +5058,7 @@ const app = {
     const wrap = document.getElementById("admin-tournaments-list");
     if (!wrap) return;
     wrap.innerHTML = "<p style=\"color: var(--text-muted)\">Loading tournaments...</p>";
+    this._bindTournamentPdfImport();
     fetchWithAuth(`${API_URL}/tournaments`)
       .then((res) => res.json())
       .then((list) => {
@@ -5099,6 +5100,7 @@ const app = {
                   <p>${this._escapeCertHtml(t.remarks || "")} · ${this._escapeCertHtml(t.code)}</p>
                 </div>
                 <div class="tournament-admin-actions">
+                  <button class="btn btn-sm btn-secondary" onclick="app.openImportTournamentPdf('${this._escapeCertHtml(t.code)}', decodeURIComponent('${nameEnc}'))"><i class="fas fa-file-pdf"></i> Import PDF</button>
                   <button class="btn btn-sm btn-secondary" onclick="app.openAttachLapModal('${this._escapeCertHtml(t.code)}', decodeURIComponent('${nameEnc}'))">Attach Event</button>
                   <button class="btn btn-sm btn-primary" onclick="app.openAddLapModal('${this._escapeCertHtml(t.code)}', decodeURIComponent('${nameEnc}'))">Add Lap</button>
                   <button class="btn btn-sm btn-secondary" onclick="app.openEditTournamentModal('${this._escapeCertHtml(t.code)}', decodeURIComponent('${nameEnc}'), decodeURIComponent('${remarksEnc}'))">Edit</button>
@@ -5147,6 +5149,8 @@ const app = {
     document.getElementById("attach-tournament-code").value = code;
     document.getElementById("attach-tournament-name").textContent = name || code;
     document.getElementById("attach-lap-label").value = "";
+    const pdfInput = document.getElementById("attach-pdf-file");
+    if (pdfInput) pdfInput.value = "";
     const select = document.getElementById("attach-event-select");
     select.innerHTML = `<option value="">Loading events...</option>`;
     document.getElementById("modal-tournament-attach").classList.add("show");
@@ -5175,6 +5179,199 @@ const app = {
   closeAttachLapModal() {
     const modal = document.getElementById("modal-tournament-attach");
     if (modal) modal.classList.remove("show");
+  },
+
+  _bindTournamentPdfImport() {
+    const input = document.getElementById("tournament-pdf-import");
+    if (!input || input.dataset.bound === "1") return;
+    input.dataset.bound = "1";
+    input.addEventListener("change", () => {
+      const files = Array.from(input.files || []);
+      input.value = "";
+      this.handleTournamentPdfImport(files);
+    });
+  },
+
+  _loadPdfJs() {
+    if (window.pdfjsLib) {
+      if (!window.pdfjsLib.GlobalWorkerOptions.workerSrc) {
+        window.pdfjsLib.GlobalWorkerOptions.workerSrc =
+          "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js";
+      }
+      return Promise.resolve(window.pdfjsLib);
+    }
+    if (this._pdfJsLoading) return this._pdfJsLoading;
+    this._pdfJsLoading = new Promise((resolve, reject) => {
+      const script = document.createElement("script");
+      script.src =
+        "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js";
+      script.onload = () => {
+        if (!window.pdfjsLib) {
+          reject(new Error("PDF reader did not load."));
+          return;
+        }
+        window.pdfjsLib.GlobalWorkerOptions.workerSrc =
+          "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js";
+        resolve(window.pdfjsLib);
+      };
+      script.onerror = () =>
+        reject(new Error("Could not load the PDF reader. Check your connection."));
+      document.head.appendChild(script);
+    });
+    return this._pdfJsLoading;
+  },
+
+  async _extractEventResultsPdfMeta(file) {
+    if (!file) throw new Error("No file selected.");
+    const name = file.name || "file.pdf";
+    if (!/\.pdf$/i.test(name) && file.type !== "application/pdf") {
+      throw new Error(`${name} is not a PDF file.`);
+    }
+    if (file.size > 15 * 1024 * 1024) {
+      throw new Error(`${name} is larger than 15 MB.`);
+    }
+    const pdfjsLib = await this._loadPdfJs();
+    const data = new Uint8Array(await file.arrayBuffer());
+    const pdf = await pdfjsLib.getDocument({ data }).promise;
+    const pages = [];
+    for (let i = 1; i <= pdf.numPages; i += 1) {
+      const page = await pdf.getPage(i);
+      const content = await page.getTextContent();
+      pages.push(content.items.map((item) => item.str).join(" "));
+    }
+    const text = pages.join("\n").replace(/\s+/g, " ").trim();
+    const idMatch = text.match(/Event ID:\s*([A-Za-z0-9]+)/i);
+    let eventCode = idMatch ? String(idMatch[1]).trim().toUpperCase() : "";
+    if (!eventCode) {
+      const fileMatch = name.match(
+        /MRPC_EventResults_.+_([A-Za-z0-9]+)\.pdf$/i,
+      );
+      if (fileMatch) eventCode = String(fileMatch[1]).trim().toUpperCase();
+    }
+    const isResults =
+      /EVENT RESULTS/i.test(text) &&
+      /MALINAO RACING PIGEON CLUB|WingSync Event Results/i.test(text);
+    return { eventCode, isResults, fileName: name };
+  },
+
+  async _resolvePdfEvent(meta, events) {
+    if (!meta?.isResults) {
+      throw new Error(
+        `${meta?.fileName || "PDF"} is not a WingSync Event Results file. Export it from Manage Events.`,
+      );
+    }
+    if (!meta.eventCode) {
+      throw new Error(
+        `${meta.fileName}: no Event ID found inside the PDF.`,
+      );
+    }
+    const event = (events || []).find(
+      (e) => String(e.code).toUpperCase() === meta.eventCode,
+    );
+    if (!event) {
+      throw new Error(
+        `${meta.fileName}: event ${meta.eventCode} is not in Manage Events.`,
+      );
+    }
+    return event;
+  },
+
+  openImportTournamentPdf(code, name) {
+    this._pdfImportTournament = { code, name };
+    this._bindTournamentPdfImport();
+    const input = document.getElementById("tournament-pdf-import");
+    if (!input) {
+      this.showModal({
+        title: "Import Unavailable",
+        message: "PDF import control is missing. Please refresh the page.",
+        icon: "❌",
+        iconColor: "#c0392b",
+      });
+      return;
+    }
+    input.value = "";
+    input.click();
+  },
+
+  async handleTournamentPdfImport(files) {
+    const target = this._pdfImportTournament;
+    if (!target?.code) return;
+    if (!files || !files.length) return;
+    const events = await this.fetchAllEvents(true);
+    const lines = [];
+    let attached = 0;
+    for (const file of files) {
+      try {
+        const meta = await this._extractEventResultsPdfMeta(file);
+        const event = await this._resolvePdfEvent(meta, events);
+        const res = await fetchWithAuth(
+          `${API_URL}/tournaments/${encodeURIComponent(target.code)}/laps/attach`,
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              eventCode: event.code,
+              label: event.name,
+            }),
+          },
+        );
+        const data = await res.json();
+        if (!data.success) {
+          throw new Error(data.error || `Failed to attach ${event.code}`);
+        }
+        attached += 1;
+        lines.push(`Attached ${event.name} (${event.code}) from ${file.name}`);
+      } catch (err) {
+        lines.push(err.message || `Failed to import ${file.name}`);
+      }
+    }
+    this.renderAdminTournaments();
+    this.fetchAllEvents(true);
+    this.showModal({
+      title: attached ? "PDF Imported" : "Import Failed",
+      message: lines.join("\n"),
+      icon: attached ? "✅" : "❌",
+      iconColor: attached ? "#27ae60" : "#c0392b",
+    });
+  },
+
+  async onAttachPdfFileChosen(input) {
+    const file = input?.files?.[0];
+    if (!file) return;
+    try {
+      const events = await this.fetchAllEvents(true);
+      const meta = await this._extractEventResultsPdfMeta(file);
+      const event = await this._resolvePdfEvent(meta, events);
+      const select = document.getElementById("attach-event-select");
+      const labelEl = document.getElementById("attach-lap-label");
+      if (select) {
+        const exists = Array.from(select.options).some(
+          (opt) => opt.value === event.code,
+        );
+        if (!exists) {
+          const opt = document.createElement("option");
+          opt.value = event.code;
+          opt.textContent = `${event.name} (${event.code})`;
+          select.appendChild(opt);
+        }
+        select.value = event.code;
+      }
+      if (labelEl && !labelEl.value.trim()) labelEl.value = event.name;
+      this.showModal({
+        title: "PDF Read",
+        message: `Found ${event.name} (${event.code}). Review the lap label, then click Attach as Lap.`,
+        icon: "✅",
+        iconColor: "#27ae60",
+      });
+    } catch (err) {
+      if (input) input.value = "";
+      this.showModal({
+        title: "PDF Not Imported",
+        message: err.message || "Could not read that PDF.",
+        icon: "❌",
+        iconColor: "#c0392b",
+      });
+    }
   },
 
   openEditLapModal(code, eventCode, label, tournamentName) {

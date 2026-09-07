@@ -8,7 +8,7 @@
     />
     <title>Wingsync - Pigeon Clocking System</title>
     <link rel="manifest" href="manifest.json" />
-    <link rel="stylesheet" href="style.css?v=42" />
+    <link rel="stylesheet" href="style.css?v=43" />
     <meta name="theme-color" content="#2a7a62" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="mobile-web-app-capable" content="yes" />
@@ -46,7 +46,7 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
 
-    <link rel="stylesheet" href="style.css?v=42" />
+    <link rel="stylesheet" href="style.css?v=43" />
     <style>
       /* ===== ADDITIONAL STYLES FOR UI COMPONENTS ===== */
       .pigeons-grid {
@@ -1512,11 +1512,17 @@
                 </button>
               </div>
               <p class="tournament-attach-hint">
-                Already have lap races in Manage Events? Open a tournament and
-                use <strong>Attach Event</strong> to add those existing races
-                (including imported results). Use <strong>Add Lap</strong> only
-                when you need a brand-new empty event.
+                Import a lap from an <strong>Event Results PDF</strong> exported
+                in Manage Events (Export PDF). You can also attach an existing
+                race from the list, or use Add Lap for a brand-new empty event.
               </p>
+              <input
+                type="file"
+                id="tournament-pdf-import"
+                class="hidden"
+                accept="application/pdf,.pdf"
+                multiple
+              />
               <div id="admin-tournaments-list">
                 <p style="color: var(--text-muted)">Loading tournaments...</p>
               </div>
@@ -2101,9 +2107,23 @@
           <span id="attach-tournament-name"></span>
         </p>
         <p class="tournament-attach-hint" style="margin: 8px 0 14px">
-          Pick a race that already exists in Manage Events. Clock-ins and
-          imported results stay on that event and appear in Tournament Results.
+          Upload the Event Results PDF from Manage Events, or pick the race from
+          the list. Clock-ins stay on that event and appear in Tournament Results.
         </p>
+        <div class="form-group">
+          <label><i class="fas fa-file-pdf"></i> Event Results PDF</label>
+          <input
+            type="file"
+            id="attach-pdf-file"
+            class="form-control"
+            accept="application/pdf,.pdf"
+            onchange="app.onAttachPdfFileChosen(this)"
+          />
+          <small
+            >Use the file named like
+            <code>MRPC_EventResults_…_EVENTCODE.pdf</code></small
+          >
+        </div>
         <div class="form-group">
           <label>Existing Event</label>
           <select id="attach-event-select" class="form-control">
@@ -2563,6 +2583,6 @@
       </div>
     </div>
 
-    <script src="app.js?v=44"></script>
+    <script src="app.js?v=45"></script>
   </body>
 </html>
