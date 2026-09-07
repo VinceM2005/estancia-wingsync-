@@ -1,5 +1,5 @@
-const CACHE_NAME = "wingsync-v139"; // Increment on every deployment
-const urlsToCache = ["/index.html", "/app.js", "/style.css", "/manifest.json", "/wingsync-logo.png", "/logo.png", "/wingsync_cert-temp.png"];
+const CACHE_NAME = "wingsync-v141"; // Increment on every deployment
+const urlsToCache = ["/index.html", "/app.js", "/style.css", "/manifest.json", "/wingsync-logo.png", "/logo.png", "/wingsync_cert-temp.png", "/tournament-cert-bg.jpg"];
 
 self.addEventListener("install", (event) => {
   event.waitUntil(

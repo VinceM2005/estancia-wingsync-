@@ -376,6 +376,14 @@ const CertificateSchema = new mongoose.Schema({
   distance: { type: Number, required: true },
   issueDate: { type: Date, default: Date.now },
   qrHash: { type: String, required: true, unique: true },
+  kind: { type: String, default: "event" },
+  tournamentId: { type: String, default: null, index: true },
+  points: { type: Number, default: 0 },
+  playerName: { type: String, default: "" },
+  ringNumber: { type: String, default: "" },
+  nickname: { type: String, default: "" },
+  avatarId: { type: String, default: "" },
+  tournamentName: { type: String, default: "" },
 });
 CertificateSchema.index({ playerId: 1, eventId: 1 });
 
@@ -396,6 +404,12 @@ const TournamentSchema = new mongoose.Schema({
   code: { type: String, required: true, unique: true },
   name: { type: String, required: true },
   remarks: { type: String, default: "" },
+  state: {
+    type: String,
+    enum: ["In Progress", "Result Verification"],
+    default: "In Progress",
+  },
+  certificatesGenerated: { type: Boolean, default: false },
   laps: [
     {
       index: { type: Number, required: true },
@@ -2129,6 +2143,151 @@ async function loadTournamentLapRows(lap) {
   }
   if (!lap.eventCode || String(lap.eventCode).startsWith("PDF")) return [];
   return loadResultsWithPigeons(lap.eventCode);
+}
+
+async function getTournamentLastLapAnchor(tournament) {
+  let latest = tournament.createdAt ? new Date(tournament.createdAt) : null;
+  const eventCodes = (tournament.laps || [])
+    .filter(
+      (lap) =>
+        lap.source !== "pdf" &&
+        lap.eventCode &&
+        !String(lap.eventCode).startsWith("PDF"),
+    )
+    .map((lap) => lap.eventCode);
+  if (eventCodes.length) {
+    const events = await Event.find({ code: { $in: eventCodes } })
+      .select("releaseTime")
+      .lean();
+    events.forEach((ev) => {
+      const t = ev.releaseTime ? new Date(ev.releaseTime) : null;
+      if (t && !Number.isNaN(t.getTime()) && (!latest || t > latest)) {
+        latest = t;
+      }
+    });
+  }
+  return latest && !Number.isNaN(latest.getTime()) ? latest : new Date();
+}
+
+async function getTournamentCertificateGate(tournament) {
+  const now = await getCurrentTime();
+  const laps = tournament.laps || [];
+  const unfinishedLaps = [];
+  let completedLaps = 0;
+  for (const lap of laps) {
+    const rows = await loadTournamentLapRows(lap);
+    if (Array.isArray(rows) && rows.length > 0) {
+      completedLaps += 1;
+    } else {
+      unfinishedLaps.push(lap.label || `Lap ${lap.index}`);
+    }
+  }
+  const totalLaps = laps.length;
+  const allLapsComplete = totalLaps > 0 && unfinishedLaps.length === 0;
+
+  const anchor = await getTournamentLastLapAnchor(tournament);
+  const unlockAt = new Date(anchor.getTime() + 12 * 60 * 60 * 1000);
+  const timeOk = now.getTime() >= unlockAt.getTime();
+  let state = tournament.state || "In Progress";
+  if (allLapsComplete && timeOk) state = "Result Verification";
+  const canGenerate =
+    !tournament.certificatesGenerated &&
+    allLapsComplete &&
+    (state === "Result Verification" || timeOk);
+  const msLeft = Math.max(0, unlockAt.getTime() - now.getTime());
+  return {
+    now,
+    anchor,
+    unlockAt,
+    timeOk,
+    state,
+    canGenerate,
+    certificatesGenerated: !!tournament.certificatesGenerated,
+    hoursRemaining: Math.ceil(msLeft / (60 * 60 * 1000)),
+    msRemaining: msLeft,
+    allLapsComplete,
+    completedLaps,
+    totalLaps,
+    unfinishedLaps,
+  };
+}
+
+async function buildTournamentStandingsForCertificates(tournament) {
+  const laps = (tournament.laps || []).slice().sort((a, b) => a.index - b.index);
+  const birds = new Map();
+  const lapMeta = [];
+  for (const lap of laps) {
+    const rows = await loadTournamentLapRows(lap);
+    const completed = Array.isArray(rows) && rows.length > 0;
+    lapMeta.push({ index: lap.index, completed });
+    if (!completed) continue;
+    const ranked = rows.slice().sort((a, b) => {
+      const speedDiff = (Number(b.speedMPM) || 0) - (Number(a.speedMPM) || 0);
+      if (speedDiff !== 0) return speedDiff;
+      const aTime = a.arrivalTime ? new Date(a.arrivalTime).getTime() : 0;
+      const bTime = b.arrivalTime ? new Date(b.arrivalTime).getTime() : 0;
+      if (aTime && bTime && aTime !== bTime) return aTime - bTime;
+      return (Number(a.pdfRank) || 9999) - (Number(b.pdfRank) || 9999);
+    });
+    ranked.forEach((row, idx) => {
+      const key = tournamentPigeonKey(row);
+      const pigeon =
+        row.pigeonId && typeof row.pigeonId === "object" ? row.pigeonId : null;
+      if (!birds.has(key)) {
+        birds.set(key, {
+          playerId: row.userId,
+          playerName: row.userName,
+          pigeonId: pigeon
+            ? String(pigeon._id || "")
+            : String(row.pigeonId || ""),
+          ringNumber: pigeon?.ringNumber || row.ringNumber || "",
+          nickname: pigeon?.nickname || row.nickname || "",
+          avatarId: pigeon?.avatarId || "",
+          legs: {},
+        });
+      }
+      const bird = birds.get(key);
+      const speed = Number(row.speedMPM) || 0;
+      const pts =
+        idx < TOURNAMENT_LAP_POINTS.length ? TOURNAMENT_LAP_POINTS[idx] : 0;
+      bird.legs[lap.index] = { speedMPM: speed, points: pts };
+      if (!bird.ringNumber) {
+        bird.ringNumber = pigeon?.ringNumber || row.ringNumber || "";
+      }
+      if (!bird.nickname) {
+        bird.nickname = pigeon?.nickname || row.nickname || "";
+      }
+      if (!bird.avatarId && pigeon?.avatarId) bird.avatarId = pigeon.avatarId;
+      if (!bird.playerName) bird.playerName = row.userName;
+      if (!bird.playerId) bird.playerId = row.userId;
+    });
+  }
+  const completedLaps = lapMeta.filter((l) => l.completed);
+  const standings = Array.from(birds.values()).map((bird) => {
+    let points = 0;
+    let totalSpeed = 0;
+    completedLaps.forEach((lap) => {
+      const cell = bird.legs[lap.index];
+      points += cell ? Number(cell.points) || 0 : 0;
+      totalSpeed += cell ? Number(cell.speedMPM) || 0 : 0;
+    });
+    return {
+      playerId: bird.playerId,
+      playerName: bird.playerName,
+      pigeonId: bird.pigeonId,
+      ringNumber: bird.ringNumber || "—",
+      nickname: bird.nickname || "",
+      avatarId: bird.avatarId || "",
+      points,
+      totalSpeed,
+    };
+  });
+  standings.sort((a, b) => {
+    if (b.points !== a.points) return b.points - a.points;
+    if (b.totalSpeed !== a.totalSpeed) return b.totalSpeed - a.totalSpeed;
+    return String(a.ringNumber || "").localeCompare(String(b.ringNumber || ""));
+  });
+  return standings.map((row, i) => ({ ...row, rank: i + 1 }));
 }
 
 app.get("/api/tournaments", async (req, res) => {
@@ -3888,6 +4047,139 @@ app.post(
     } catch (error) {
       console.error("Certificate generation error:", error);
       res.status(500).json({ error: "Failed to generate certificates." });
+    }
+  },
+);
+
+app.get(
+  "/api/admin/tournaments/:code/certificate-status",
+  requireAdmin,
+  async (req, res) => {
+    try {
+      const tournament = await Tournament.findOne({ code: req.params.code });
+      if (!tournament) {
+        return res.status(404).json({ error: "Tournament not found" });
+      }
+      const gate = await getTournamentCertificateGate(tournament);
+      if (gate.state !== tournament.state) {
+        tournament.state = gate.state;
+        await tournament.save();
+      }
+      res.json({
+        success: true,
+        code: tournament.code,
+        name: tournament.name,
+        state: gate.state,
+        canGenerate: gate.canGenerate,
+        certificatesGenerated: gate.certificatesGenerated,
+        unlockAt: gate.unlockAt,
+        hoursRemaining: gate.hoursRemaining,
+        allLapsComplete: gate.allLapsComplete,
+        completedLaps: gate.completedLaps,
+        totalLaps: gate.totalLaps,
+        unfinishedLaps: gate.unfinishedLaps,
+      });
+    } catch (error) {
+      console.error("Tournament certificate status error:", error);
+      res.status(500).json({ error: "Failed to load tournament certificate status." });
+    }
+  },
+);
+
+app.post(
+  "/api/admin/tournaments/:code/generate-certificates",
+  requireAdmin,
+  async (req, res) => {
+    try {
+      const tournament = await Tournament.findOne({ code: req.params.code });
+      if (!tournament) {
+        return res.status(404).json({ error: "Tournament not found" });
+      }
+      const gate = await getTournamentCertificateGate(tournament);
+      if (gate.state !== tournament.state) {
+        tournament.state = gate.state;
+        await tournament.save();
+      }
+      if (tournament.certificatesGenerated) {
+        return res.status(400).json({
+          error: "Certificates already generated for this tournament.",
+        });
+      }
+      if (!gate.canGenerate) {
+        if (!gate.totalLaps) {
+          return res.status(400).json({
+            error: "Add at least one lap before generating tournament certificates.",
+          });
+        }
+        if (!gate.allLapsComplete) {
+          const pending = (gate.unfinishedLaps || []).join(", ") || "unfinished laps";
+          return res.status(400).json({
+            error: `Complete all laps before generating certificates (${gate.completedLaps}/${gate.totalLaps}). Waiting on: ${pending}.`,
+          });
+        }
+        const hours = gate.hoursRemaining || 1;
+        return res.status(400).json({
+          error: `Tournament certificates unlock in Result Verification, or ${hours} hour${hours === 1 ? "" : "s"} after the last lap.`,
+        });
+      }
+      const standings = await buildTournamentStandingsForCertificates(tournament);
+      const eligible = standings.filter((row) => Number(row.points) > 0);
+      if (!eligible.length) {
+        return res.status(400).json({
+          error: "No players with tournament points to generate certificates for.",
+        });
+      }
+      const eventId = `TOURNAMENT:${tournament.code}`;
+      const created = [];
+      for (const row of eligible) {
+        const certNumber = await generateCertificateNumber();
+        const playerId =
+          row.playerId ||
+          `pdf:${String(row.playerName || row.ringNumber || certNumber)
+            .toLowerCase()
+            .replace(/\s+/g, "-")
+            .slice(0, 80)}`;
+        const rawPigeon = String(row.pigeonId || "");
+        const pigeonId =
+          rawPigeon &&
+          !rawPigeon.startsWith("ring:") &&
+          !rawPigeon.startsWith("legacy:") &&
+          !rawPigeon.startsWith("TOURNAMENT:")
+            ? rawPigeon
+            : `TOURNAMENT:${tournament.code}:${row.ringNumber || playerId}:${row.rank}`;
+        const qrHash = generateQRHash(certNumber, eventId, playerId);
+        const cert = new Certificate({
+          certificateNumber: certNumber,
+          eventId,
+          playerId,
+          pigeonId,
+          rank: row.rank,
+          speed: roundRace(row.totalSpeed) || 0,
+          distance: 0,
+          issueDate: new Date(),
+          qrHash,
+          kind: "tournament",
+          tournamentId: tournament.code,
+          points: Number(row.points) || 0,
+          playerName: row.playerName || "",
+          ringNumber: row.ringNumber || "",
+          nickname: row.nickname || "",
+          avatarId: row.avatarId || "",
+          tournamentName: tournament.name,
+        });
+        await cert.save();
+        created.push(cert);
+      }
+      tournament.certificatesGenerated = true;
+      tournament.state = "Result Verification";
+      await tournament.save();
+      await Log.create({
+        message: `Admin generated ${created.length} tournament certificates for ${tournament.name} (${tournament.code}).`,
+      });
+      res.json({ success: true, count: created.length });
+    } catch (error) {
+      console.error("Tournament certificate generation error:", error);
+      res.status(500).json({ error: "Failed to generate tournament certificates." });
     }
   },
 );

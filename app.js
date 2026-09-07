@@ -8555,6 +8555,406 @@ if ("serviceWorker" in navigator) {
 
 window.app = app;
 
+(function attachTournamentCertificates() {
+  const origRender = app._renderCertificateDetail.bind(app);
+  app._renderCertificateDetail = function (cert) {
+    if (cert && (cert.kind === "tournament" || cert.tournamentId)) {
+      return app._renderTournamentCertificateDetail(cert);
+    }
+    return origRender(cert);
+  };
+
+  const origPopulate = app._populateAdminCertEventFilter.bind(app);
+  app._populateAdminCertEventFilter = async function () {
+    await origPopulate();
+    await app.populateAdminCertTournamentFilter();
+  };
+
+  const origLoadAdmin = app.loadAdminCertificates.bind(app);
+  app.loadAdminCertificates = async function () {
+    const tcode =
+      document.getElementById("admin-cert-tournament-filter")?.value || "";
+    if (tcode) {
+      await app.loadAdminTournamentCertificates(tcode);
+      await app.populateAdminCertTournamentFilter();
+      return;
+    }
+    await origLoadAdmin();
+    await app.populateAdminCertTournamentFilter();
+  };
+
+  app._tournamentRankBanner = function (rank) {
+    const n = Number(rank) || 0;
+    const j = n % 10;
+    const k = n % 100;
+    if (j === 1 && k !== 11) return `${n}ST`;
+    if (j === 2 && k !== 12) return `${n}ND`;
+    if (j === 3 && k !== 13) return `${n}RD`;
+    return `${n}TH`;
+  };
+
+  app.populateAdminCertTournamentFilter = async function () {
+    const select = document.getElementById("admin-cert-tournament-filter");
+    if (!select) return;
+    const current = select.value;
+    try {
+      const res = await fetchWithAuth(`${API_URL}/tournaments`);
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const list = await res.json();
+      const tournaments = Array.isArray(list) ? list : [];
+      select.innerHTML = `<option value="">All Tournaments</option>`;
+      tournaments.forEach((t) => {
+        const opt = document.createElement("option");
+        opt.value = t.code;
+        opt.textContent = t.name;
+        select.appendChild(opt);
+      });
+      if (current) select.value = current;
+      await app.syncAdminTournamentCertGate();
+    } catch (err) {
+      console.error("Failed to load tournaments for certificates:", err);
+    }
+  };
+
+  app.onAdminCertTournamentFilterChange = async function () {
+    await app.syncAdminTournamentCertGate();
+    await app.loadAdminCertificates();
+  };
+
+  app.syncAdminTournamentCertGate = async function () {
+    const code =
+      document.getElementById("admin-cert-tournament-filter")?.value || "";
+    const btn = document.getElementById("admin-cert-generate-tournament");
+    const hint = document.getElementById("admin-cert-tournament-gate");
+    if (!btn) return;
+    if (!code) {
+      btn.disabled = true;
+      if (hint) {
+        hint.style.display = "none";
+        hint.textContent = "";
+      }
+      return;
+    }
+    try {
+      const res = await fetchWithAuth(
+        `${API_URL}/admin/tournaments/${encodeURIComponent(code)}/certificate-status`,
+      );
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
+      btn.disabled = !data.canGenerate;
+      if (hint) {
+        hint.style.display = "block";
+        if (data.certificatesGenerated) {
+          hint.textContent =
+            "Tournament certificates already generated for this series.";
+        } else if (!data.totalLaps) {
+          hint.textContent =
+            "Add at least one lap before generating tournament certificates.";
+        } else if (!data.allLapsComplete) {
+          const pending = (data.unfinishedLaps || []).join(", ");
+          hint.textContent = pending
+            ? `Waiting for all laps (${data.completedLaps}/${data.totalLaps} complete). Unfinished: ${pending}.`
+            : `Waiting for all laps (${data.completedLaps}/${data.totalLaps} complete).`;
+        } else if (data.canGenerate) {
+          hint.textContent =
+            "All laps complete. Ready: Result Verification / 12 hours after last lap. Generates one certificate per scoring pigeon for every player (all ranks).";
+        } else {
+          const hours = data.hoursRemaining || 1;
+          hint.textContent = `All laps complete. Locked until Result Verification, or about ${hours} hour${hours === 1 ? "" : "s"} after the last lap.`;
+        }
+      }
+    } catch (err) {
+      btn.disabled = true;
+      if (hint) {
+        hint.style.display = "block";
+        hint.textContent =
+          err.message || "Unable to check tournament certificate status.";
+      }
+    }
+  };
+
+  app.generateTournamentCertificates = async function () {
+    const code =
+      document.getElementById("admin-cert-tournament-filter")?.value || "";
+    if (!code) {
+      app.showModal({
+        title: "Select a tournament",
+        message: "Choose a tournament from the dropdown first.",
+        icon: "⚠️",
+        iconColor: "#e67e22",
+      });
+      return;
+    }
+    const btn = document.getElementById("admin-cert-generate-tournament");
+    if (btn) {
+      btn.disabled = true;
+      btn.innerHTML =
+        '<i class="fas fa-spinner fa-spin"></i> Generating...';
+    }
+    try {
+      const res = await fetchWithAuth(
+        `${API_URL}/admin/tournaments/${encodeURIComponent(code)}/generate-certificates`,
+        { method: "POST" },
+      );
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Failed to generate certificates");
+      app.showModal({
+        title: "Tournament Certificates",
+        message: `Generated ${data.count} certificate${data.count === 1 ? "" : "s"} for every scoring player (all ranks).`,
+        icon: "✅",
+        iconColor: "#27ae60",
+      });
+      await app.syncAdminTournamentCertGate();
+      await app.loadAdminCertificates();
+    } catch (err) {
+      app.showModal({
+        title: "Generate Failed",
+        message: err.message || "Unable to generate tournament certificates.",
+        icon: "❌",
+        iconColor: "#c0392b",
+      });
+      await app.syncAdminTournamentCertGate();
+    } finally {
+      if (btn) {
+        btn.innerHTML =
+          '<i class="fas fa-file-certificate"></i> Generate Tournament';
+      }
+    }
+  };
+
+  app.loadAdminTournamentCertificates = async function (code) {
+    const container = document.getElementById("admin-certificates-list");
+    const searchTerm =
+      document.getElementById("admin-cert-search")?.value || "";
+    if (container) {
+      container.innerHTML = `<div style="text-align:center;padding:20px;color:var(--text-muted);">Loading tournament certificates...</div>`;
+    }
+    try {
+      let url = `${API_URL}/admin/certificates?limit=200`;
+      if (searchTerm) url += `&search=${encodeURIComponent(searchTerm)}`;
+      const res = await fetchWithAuth(url);
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const data = await res.json();
+      const certs = (data.certificates || []).filter(
+        (c) => c.tournamentId === code,
+      );
+      const totalEl = document.getElementById("admin-cert-total-count");
+      if (totalEl) totalEl.textContent = String(certs.length);
+      if (!certs.length) {
+        container.innerHTML = `<div style="text-align:center;padding:40px;color:var(--text-muted);">
+          <i class="fas fa-award" style="font-size:48px;display:block;margin-bottom:12px;"></i>
+          <p>No tournament certificates yet. Generate after every lap is complete, then 12 hours or Result Verification.</p>
+        </div>`;
+        return;
+      }
+      let html = `<div style="overflow-x:auto;"><table style="width:100%;font-size:13px;">
+        <thead><tr>
+          <th>Certificate #</th>
+          <th>Player</th>
+          <th>Pigeon</th>
+          <th>Tournament</th>
+          <th>Rank</th>
+          <th>Points</th>
+          <th>Speed (m/min)</th>
+          <th>Issued</th>
+          <th>Actions</th>
+        </tr></thead><tbody>`;
+      certs.forEach((c) => {
+        const playerName =
+          c.playerName || c.playerId?.name || "Unknown";
+        const ring = c.ringNumber || c.pigeonId?.ringNumber || "—";
+        const nickname = c.nickname || c.pigeonId?.nickname || "";
+        const pigeonLabel = nickname ? `${nickname} (${ring})` : ring;
+        const avatarId = c.avatarId || c.pigeonId?.avatarId || "";
+        const avatarHTML = avatarId
+          ? getPigeonAvatarSVG(avatarId, 24)
+          : getDefaultPigeonSVG(24);
+        const issueDate = new Date(c.issueDate).toLocaleDateString();
+        html += `<tr>
+          <td data-label="Certificate">${c.certificateNumber}</td>
+          <td data-label="Player">${playerName}</td>
+          <td data-label="Pigeon">
+            <div style="display:flex;align-items:center;gap:6px;justify-content:flex-end;">
+              <span style="width:28px;height:28px;display:inline-block;border-radius:50%;overflow:hidden;flex-shrink:0;">${avatarHTML}</span>
+              ${pigeonLabel}
+            </div>
+          </td>
+          <td data-label="Tournament">${c.tournamentName || "—"}</td>
+          <td data-label="Rank">${app._tournamentRankBanner(c.rank)}</td>
+          <td data-label="Points">${c.points || 0}</td>
+          <td data-label="Speed">${formatSpeedMpm(c.speed)}</td>
+          <td data-label="Issued">${issueDate}</td>
+          <td data-label="Actions">
+            <button class="btn btn-sm btn-primary" onclick="app.viewAdminCertificate('${c._id}')"><i class="fas fa-eye"></i></button>
+            <button class="btn btn-sm btn-secondary" onclick="app.reprintCertificate('${c._id}')"><i class="fas fa-print"></i></button>
+            <button class="btn btn-sm btn-success" onclick="app.downloadAdminCertificate('${c._id}')"><i class="fas fa-file-pdf"></i></button>
+          </td>
+        </tr>`;
+      });
+      html += `</tbody></table></div>`;
+      container.innerHTML = html;
+    } catch (err) {
+      console.error("Load tournament certificates error:", err);
+      if (container) {
+        container.innerHTML = `<p style="color:red;">Failed to load tournament certificates.</p>`;
+      }
+    }
+  };
+
+  app._renderTournamentCertificateDetail = function (cert) {
+    const container = document.getElementById("certificate-detail");
+    if (!container) return;
+    const esc = (s) => app._escapeCertHtml(s);
+    const nickname = (
+      cert.nickname ||
+      cert.pigeonId?.nickname ||
+      ""
+    ).trim();
+    const ringNumber =
+      cert.ringNumber || cert.pigeonId?.ringNumber || "—";
+    const pigeonDisplay = nickname
+      ? `${nickname} (${ringNumber})`
+      : ringNumber;
+    const ownerName = (
+      cert.playerName ||
+      (typeof cert.playerId === "object" && cert.playerId?.name) ||
+      ""
+    ).trim() || "—";
+    const tournamentName =
+      cert.tournamentName || cert.eventId?.name || "Tournament";
+    const speed = formatSpeedMpm(cert.speed);
+    const points = Number(cert.points) || 0;
+    const rankBanner = app._tournamentRankBanner(cert.rank);
+    const issueDate = new Date(cert.issueDate);
+    const formattedDate = issueDate.toLocaleDateString("en-PH", {
+      year: "numeric",
+      month: "long",
+      day: "numeric",
+    });
+    const avatarId = cert.avatarId || cert.pigeonId?.avatarId || "";
+    const avatarHTML = avatarId
+      ? getPigeonAvatarSVG(avatarId, 200)
+      : getDefaultPigeonSVG(200);
+    const verifyUrl = `${window.location.origin}/verify/${cert.qrHash || ""}`;
+    const cornerSvg = `
+      <svg viewBox="0 0 80 80" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+        <path d="M6 36C6 14 14 6 36 6" stroke="currentColor" stroke-width="2.4"/>
+        <path d="M10 42C10 20 20 10 42 10" stroke="currentColor" stroke-width="1.3" opacity="0.75"/>
+        <circle cx="12" cy="12" r="2.4" fill="currentColor"/>
+      </svg>`;
+    const flourishSvg = `
+      <svg viewBox="0 0 120 16" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+        <path d="M4 8c18-7 36-7 52 0 16 7 34 7 52 0" fill="none" stroke="#b8963e" stroke-width="1.3"/>
+        <path d="M50 8c4-5 10-5 14 0-4 5-10 5-14 0z" fill="#b8963e"/>
+      </svg>`;
+    const laurelSvg = `
+      <svg viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+        <g fill="#b8963e">
+          <ellipse cx="34" cy="78" rx="6" ry="13" transform="rotate(-55 34 78)"/>
+          <ellipse cx="30" cy="98" rx="6.5" ry="13" transform="rotate(-40 30 98)"/>
+          <ellipse cx="32" cy="118" rx="6.5" ry="13" transform="rotate(-25 32 118)"/>
+          <ellipse cx="40" cy="136" rx="6.5" ry="13" transform="rotate(-10 40 136)"/>
+          <ellipse cx="54" cy="150" rx="6.5" ry="13" transform="rotate(8 54 150)"/>
+          <ellipse cx="166" cy="78" rx="6" ry="13" transform="rotate(55 166 78)"/>
+          <ellipse cx="170" cy="98" rx="6.5" ry="13" transform="rotate(40 170 98)"/>
+          <ellipse cx="168" cy="118" rx="6.5" ry="13" transform="rotate(25 168 118)"/>
+          <ellipse cx="160" cy="136" rx="6.5" ry="13" transform="rotate(10 160 136)"/>
+          <ellipse cx="146" cy="150" rx="6.5" ry="13" transform="rotate(-8 146 150)"/>
+        </g>
+      </svg>`;
+
+    container.innerHTML = `
+      <div class="certificate-wrapper">
+        <div class="certificate-sheet tournament-cert-sheet" id="certificate-sheet">
+          <div class="tcert-frame cert-frame">
+            <div class="cert-corner cert-corner-tl">${cornerSvg}</div>
+            <div class="cert-corner cert-corner-tr">${cornerSvg}</div>
+            <div class="cert-corner cert-corner-bl">${cornerSvg}</div>
+            <div class="cert-corner cert-corner-br">${cornerSvg}</div>
+            <div class="tcert-header">
+              <div class="cert-logo-wrap">
+                <img src="wingsync-logo.png" alt="WingSync" class="cert-logo-img" crossorigin="anonymous" decoding="async" />
+              </div>
+              <div class="tcert-powered">POWERED BY WINGSYNC</div>
+              <div class="tcert-club">MALINAO RACING PIGEON CLUB</div>
+              <div class="tcert-mrpc">◆ MRPC ◆</div>
+              <h1 class="tcert-title">CERTIFICATE OF ACHIEVEMENT</h1>
+              <div class="cert-title-flourish">${flourishSvg}</div>
+            </div>
+            <div class="tcert-main">
+              <div class="cert-avatar-col">
+                <div class="cert-avatar-wrap">
+                  <div class="cert-avatar-outer-ring" aria-hidden="true"></div>
+                  <div class="cert-laurel">${laurelSvg}</div>
+                  <div class="cert-avatar-ring">${avatarHTML}</div>
+                </div>
+              </div>
+              <div class="tcert-text">
+                <p class="tcert-intro">This is to certify that</p>
+                <p class="tcert-name">${esc(pigeonDisplay)}</p>
+                <div class="tcert-rank-row">
+                  <span class="tcert-won">has won</span>
+                  <span class="tcert-banner">${esc(rankBanner)}</span>
+                  <span class="tcert-won">overall in</span>
+                </div>
+                <p class="tcert-event">${esc(tournamentName)}</p>
+                <p class="tcert-stats">
+                  with a total speed of <strong>${esc(speed)}</strong> m/min
+                  and earned <strong>${esc(String(points))}</strong> points.
+                </p>
+              </div>
+            </div>
+            <div class="tcert-bred">
+              <span class="tcert-bred-label">Raced and Bred by:</span>
+              <span class="tcert-bred-name">${esc(ownerName)}</span>
+            </div>
+            <div class="tcert-footer">
+              <div>
+                <div class="cert-signed-date">${esc(formattedDate)}</div>
+                <div class="cert-signed-label">Signed on</div>
+              </div>
+              <div class="cert-ornament" aria-hidden="true"></div>
+              <div class="cert-sigs">
+                <div class="cert-sig">
+                  <span class="tcert-sig-name">Ash Cargullo</span>
+                  <span class="tcert-sig-title">Club Vice President</span>
+                </div>
+                <div class="cert-sig">
+                  <span class="tcert-sig-name">Vincent Macuayam</span>
+                  <span class="tcert-sig-title">Club President</span>
+                </div>
+              </div>
+            </div>
+            <div class="cert-qr" id="cert-qr-container"></div>
+          </div>
+        </div>
+      </div>
+    `;
+
+    app._generateQRCodeForCert(verifyUrl);
+    const logoImg = container.querySelector(".cert-logo-img");
+    if (logoImg) {
+      if (logoImg.complete) app._processCertLogoImg(logoImg);
+      else logoImg.onload = () => app._processCertLogoImg(logoImg);
+    }
+    if (app.currentUser?.role === "admin") {
+      const actionsDiv = document.createElement("div");
+      actionsDiv.className = "certificate-actions";
+      const printBtn = document.createElement("button");
+      printBtn.className = "btn btn-primary";
+      printBtn.innerHTML = '<i class="fas fa-print"></i> Print';
+      printBtn.onclick = () => app.printCertificate();
+      const pdfBtn = document.createElement("button");
+      pdfBtn.className = "btn btn-success";
+      pdfBtn.innerHTML = '<i class="fas fa-file-pdf"></i> Download PDF';
+      pdfBtn.onclick = () => app.downloadCertificatePDF();
+      actionsDiv.appendChild(printBtn);
+      actionsDiv.appendChild(pdfBtn);
+      container.appendChild(actionsDiv);
+    }
+  };
+})();
+
 function bootWingsync() {
   // #region agent log
   __wsDbg(
