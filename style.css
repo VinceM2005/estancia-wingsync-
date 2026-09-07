@@ -88,10 +88,7 @@ body,
 #main-content > header,
 .login-box,
 .btn,
-.form-control,
-table,
-th,
-td {
+.form-control {
   transition:
     background-color var(--transition),
     color var(--transition),
@@ -104,6 +101,8 @@ html {
   height: 100%;
   -webkit-text-size-adjust: 100%;
   text-size-adjust: 100%;
+  overflow-x: hidden;
+  -webkit-tap-highlight-color: rgba(42, 122, 98, 0.18);
 }
 
 /* ===== BODY ===== */
@@ -241,6 +240,7 @@ body.sidebar-open {
   background: #f1f4f8;
   color: var(--text);
   font-family: inherit;
+  touch-action: manipulation;
 }
 .btn:hover {
   background: #e2e6ec;
@@ -553,6 +553,7 @@ body.sidebar-open {
   overflow-y: auto;
   overflow-x: hidden;
   -webkit-overflow-scrolling: touch;
+  overscroll-behavior: contain;
 }
 
 .view-section {
@@ -577,7 +578,7 @@ body.sidebar-open {
   padding: clamp(14px, 2.2vw, 24px);
   margin-bottom: clamp(14px, 2vw, 24px);
   border: 1px solid var(--border);
-  transition: all var(--transition);
+  transition: box-shadow var(--transition), border-color var(--transition);
   width: 100%;
   max-width: 100%;
 }
@@ -764,6 +765,8 @@ tr:hover td {
 /* ===== MAPS ===== */
 .map-container {
   height: 280px;
+  width: 100%;
+  max-width: 100%;
   border-radius: 8px;
   border: 1px solid var(--border);
   margin: 8px 0 4px;
@@ -840,6 +843,11 @@ tr:hover td {
   color: var(--text-muted);
   transition: 0.15s;
   padding: 0 4px;
+  min-width: 44px;
+  min-height: 44px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
 }
 .close-modal:hover {
   color: var(--danger);
@@ -5013,24 +5021,6 @@ img {
     max-width: 100%;
   }
 
-  .modal-overlay,
-  .clockin-overlay {
-    padding: max(8px, env(safe-area-inset-top))
-      max(8px, env(safe-area-inset-right)) max(8px, env(safe-area-inset-bottom))
-      max(8px, env(safe-area-inset-left));
-    align-items: flex-end;
-  }
-  .clockin-card,
-  .modal-content {
-    width: 100%;
-    max-width: 100%;
-    max-height: min(92dvh, 92vh);
-  }
-  .modal-content {
-    padding: 18px 16px;
-    border-radius: 16px 16px 10px 10px;
-  }
-
   .sticker-controls,
   .sticker-event-selector {
     flex-direction: column;
@@ -5060,10 +5050,6 @@ img {
     flex: 1 1 auto;
   }
 
-  .dashboard-header .btn {
-    width: 100%;
-  }
-
   .admin-search-bar input,
   .results-table-wrapper .search-bar input {
     width: 100%;
@@ -5075,6 +5061,28 @@ img {
 }
 
 @media (max-width: 768px) {
+  .dashboard-header .btn {
+    width: 100%;
+  }
+
+  .modal-overlay,
+  .clockin-overlay {
+    padding: max(8px, env(safe-area-inset-top))
+      max(8px, env(safe-area-inset-right)) max(8px, env(safe-area-inset-bottom))
+      max(8px, env(safe-area-inset-left));
+    align-items: flex-end;
+  }
+  .clockin-card,
+  .modal-content {
+    width: 100%;
+    max-width: 100%;
+    max-height: min(92dvh, 92vh);
+  }
+  .modal-content {
+    padding: 18px 16px;
+    border-radius: 16px 16px 10px 10px;
+  }
+
   .content-area table:has(td[data-label]) {
     border-collapse: separate;
     border-spacing: 0 10px;
@@ -5104,6 +5112,7 @@ img {
     border-bottom: 1px solid var(--border);
     padding: 8px 0;
     background: transparent !important;
+    white-space: normal;
   }
   .content-area table:has(td[data-label]) td::before {
     content: attr(data-label);
@@ -5419,11 +5428,42 @@ img {
   background: var(--border);
   color: var(--text);
 }
-@media (max-width: 768px) {
+@media (max-width: 900px) {
   .tournament-filter-bar {
     grid-template-columns: 1fr;
     padding: 12px;
     gap: 10px;
+  }
+}
+@media (max-width: 768px) {
+  .tournament-filter-select,
+  .tournament-filter-input {
+    height: 44px;
+    font-size: 16px;
+  }
+  .tournament-admin-head,
+  .tournament-lap-item {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .tournament-admin-actions,
+  .tournament-lap-actions {
+    width: 100%;
+  }
+  .tournament-admin-actions .btn,
+  .tournament-lap-actions .btn {
+    flex: 1 1 calc(50% - 8px);
+  }
+  .tournament-meta {
+    font-size: 13px;
+    word-break: break-word;
+  }
+  #tournament-results-table th,
+  #tournament-results-table td {
+    white-space: nowrap;
+  }
+  .content-area #tournament-results-table td {
+    white-space: normal;
   }
 }
 .tournament-points-hint {
@@ -5433,6 +5473,9 @@ img {
 }
 .tournament-table-wrap {
   overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior-x: contain;
+  max-width: 100%;
 }
 #tournament-results-table {
   width: 100%;
@@ -5520,6 +5563,32 @@ img {
   margin: 0;
   color: var(--text-muted);
   font-size: 13px;
+}
+
+@media (hover: none) {
+  .btn:hover,
+  .btn-primary:hover,
+  .btn-success:hover {
+    transform: none;
+    box-shadow: none;
+  }
+  .card:hover {
+    box-shadow: var(--shadow);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
 }
 
 

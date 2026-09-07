@@ -8,7 +8,7 @@
     />
     <title>Wingsync - Pigeon Clocking System</title>
     <link rel="manifest" href="manifest.json" />
-    <link rel="stylesheet" href="style.css?v=43" />
+    <link rel="stylesheet" href="style.css?v=45" />
     <meta name="theme-color" content="#2a7a62" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="mobile-web-app-capable" content="yes" />
@@ -32,7 +32,6 @@
       rel="stylesheet"
     />
 
-    <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
     <!-- Google Maps API -->
     <script
       src="https://maps.googleapis.com/maps/api/js?key=AIzaSyBrEWXV135IN7v1hM6Dwd_ynoKAK5t7TL8&libraries=places&loading=async"
@@ -40,13 +39,6 @@
       defer
     ></script>
 
-    <!-- QR Code + Barcode + PDF + Canvas -->
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.6/dist/JsBarcode.all.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
-
-    <link rel="stylesheet" href="style.css?v=43" />
     <style>
       /* ===== ADDITIONAL STYLES FOR UI COMPONENTS ===== */
       .pigeons-grid {
@@ -1512,9 +1504,10 @@
                 </button>
               </div>
               <p class="tournament-attach-hint">
-                Import a lap from an <strong>Event Results PDF</strong> exported
-                in Manage Events (Export PDF). You can also attach an existing
-                race from the list, or use Add Lap for a brand-new empty event.
+                Import a lap from an Event Results PDF. Tournament standings use
+                the player, ring, and speed values <strong>inside that file</strong>,
+                including edits you made. They are not taken from Event ID or
+                live clock-ins.
               </p>
               <input
                 type="file"
@@ -2107,8 +2100,9 @@
           <span id="attach-tournament-name"></span>
         </p>
         <p class="tournament-attach-hint" style="margin: 8px 0 14px">
-          Upload the Event Results PDF from Manage Events, or pick the race from
-          the list. Clock-ins stay on that event and appear in Tournament Results.
+          Upload the Event Results PDF (including a ChatGPT-edited copy). The
+          table in the file becomes this lap. Or pick a live event from the list
+          instead.
         </p>
         <div class="form-group">
           <label><i class="fas fa-file-pdf"></i> Event Results PDF</label>
@@ -2160,15 +2154,25 @@
         </div>
         <input type="hidden" id="edit-lap-tournament-code" />
         <input type="hidden" id="edit-lap-event-code" />
+        <input type="hidden" id="edit-lap-source" />
         <p>
           <strong>Tournament:</strong>
           <span id="edit-lap-tournament-name"></span>
         </p>
         <p class="tournament-attach-hint" style="margin: 8px 0 14px">
-          Change the linked Manage Events race, or delete this attachment. The
-          event itself is not deleted.
+          For a PDF lap, upload a new file to replace the table. Live event
+          attachments can still be switched below.
         </p>
-        <div class="form-group">
+        <div class="form-group" id="edit-lap-pdf-wrap">
+          <label><i class="fas fa-file-pdf"></i> Replace PDF table</label>
+          <input
+            type="file"
+            id="edit-lap-pdf-file"
+            class="form-control"
+            accept="application/pdf,.pdf"
+          />
+        </div>
+        <div class="form-group" id="edit-lap-event-wrap">
           <label>Attached Event</label>
           <select id="edit-lap-event-select" class="form-control">
             <option value="">Select an event</option>
@@ -2583,6 +2587,11 @@
       </div>
     </div>
 
-    <script src="app.js?v=45"></script>
+    <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js" defer></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js" defer></script>
+    <script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.6/dist/JsBarcode.all.min.js" defer></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js" defer></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js" defer></script>
+    <script src="app.js?v=47" defer></script>
   </body>
 </html>

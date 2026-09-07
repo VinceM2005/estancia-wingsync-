@@ -401,6 +401,20 @@ const TournamentSchema = new mongoose.Schema({
       index: { type: Number, required: true },
       label: { type: String, required: true },
       eventCode: { type: String, required: true },
+      source: { type: String, default: "event" },
+      importedFileName: { type: String, default: "" },
+      importedRows: [
+        {
+          playerName: { type: String, default: "" },
+          nickname: { type: String, default: "" },
+          ringNumber: { type: String, default: "" },
+          speedMPM: { type: Number, default: 0 },
+          distanceKm: { type: Number, default: 0 },
+          arrivalTime: { type: String, default: "" },
+          flightTimeHours: { type: Number, default: 0 },
+          pdfRank: { type: Number, default: 0 },
+        },
+      ],
     },
   ],
   createdAt: { type: Date, default: Date.now },
@@ -1958,7 +1972,163 @@ function tournamentPigeonKey(row) {
     if (id) return String(id);
   }
   if (raw && !String(raw).startsWith("LEGACY_")) return String(raw);
-  return `legacy:${row.userId}:${row.clockInCode}`;
+  const ring = String(row.ringNumber || "")
+    .replace(/\s+/g, "")
+    .toUpperCase();
+  if (ring && ring !== "—") return `ring:${ring}`;
+  return `legacy:${row.userId}:${row.clockInCode || row.userName || ""}`;
+}
+
+function escapeRegex(value) {
+  return String(value || "").replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+function sanitizeImportedPdfRows(raw) {
+  if (!Array.isArray(raw)) return [];
+  return raw
+    .slice(0, 2000)
+    .map((row, idx) => {
+      const playerName = String(row?.playerName || "")
+        .replace(/\s+/g, " ")
+        .trim()
+        .slice(0, 120);
+      const nickname = String(row?.nickname || "")
+        .replace(/\s+/g, " ")
+        .trim()
+        .slice(0, 80);
+      const ringNumber = String(row?.ringNumber || "")
+        .replace(/\s+/g, " ")
+        .trim()
+        .slice(0, 60);
+      const speedMPM = Number(row?.speedMPM);
+      const distanceKm = Number(row?.distanceKm);
+      const flightTimeHours = Number(row?.flightTimeHours);
+      const pdfRank = Number(row?.pdfRank);
+      return {
+        playerName,
+        nickname,
+        ringNumber,
+        speedMPM: Number.isFinite(speedMPM) && speedMPM >= 0 ? speedMPM : 0,
+        distanceKm:
+          Number.isFinite(distanceKm) && distanceKm >= 0 ? distanceKm : 0,
+        arrivalTime: String(row?.arrivalTime || "").trim().slice(0, 80),
+        flightTimeHours:
+          Number.isFinite(flightTimeHours) && flightTimeHours >= 0
+            ? flightTimeHours
+            : 0,
+        pdfRank: Number.isFinite(pdfRank) && pdfRank > 0 ? pdfRank : idx + 1,
+      };
+    })
+    .filter((row) => row.playerName || row.ringNumber);
+}
+
+function serializeTournamentLap(lap, index) {
+  return {
+    index,
+    label: lap.label,
+    eventCode: lap.eventCode,
+    source: lap.source || "event",
+    importedFileName: lap.importedFileName || "",
+    importedRows: Array.isArray(lap.importedRows) ? lap.importedRows : [],
+  };
+}
+
+async function loadImportedLapRows(imported) {
+  const rings = [
+    ...new Set(
+      imported
+        .map((r) => String(r.ringNumber || "").trim())
+        .filter((r) => r && r !== "—"),
+    ),
+  ];
+  const ringVariants = [
+    ...new Set(
+      rings.flatMap((r) => [
+        r,
+        r.toUpperCase(),
+        r.replace(/\s+/g, " ").trim(),
+        r.replace(/\s+/g, "").toUpperCase(),
+      ]),
+    ),
+  ];
+  const pigeons = ringVariants.length
+    ? await Pigeon.find({ ringNumber: { $in: ringVariants } })
+        .select("ringNumber nickname avatarId ownerId")
+        .lean()
+    : [];
+  const pigeonByRing = {};
+  pigeons.forEach((p) => {
+    pigeonByRing[String(p.ringNumber || "").toUpperCase()] = p;
+    pigeonByRing[String(p.ringNumber || "").replace(/\s+/g, "").toUpperCase()] =
+      p;
+  });
+  const names = [
+    ...new Set(
+      imported
+        .map((r) => String(r.playerName || "").replace(/[….]+$/, "").trim())
+        .filter(Boolean),
+    ),
+  ].slice(0, 400);
+  const users = names.length
+    ? await User.find({
+        $or: names.map((n) => ({
+          name: { $regex: `^${escapeRegex(n)}`, $options: "i" },
+        })),
+      })
+        .select("id name")
+        .lean()
+    : [];
+  const userByName = {};
+  users.forEach((u) => {
+    userByName[String(u.name || "").trim().toLowerCase()] = u;
+  });
+  return imported.map((row, i) => {
+    const ringKey = String(row.ringNumber || "")
+      .replace(/\s+/g, "")
+      .toUpperCase();
+    const pigeon = pigeonByRing[ringKey] || null;
+    const nameKey = String(row.playerName || "")
+      .replace(/[….]+$/, "")
+      .trim()
+      .toLowerCase();
+    const user =
+      userByName[String(row.playerName || "").trim().toLowerCase()] ||
+      users.find((u) =>
+        String(u.name || "")
+          .trim()
+          .toLowerCase()
+          .startsWith(nameKey),
+      ) ||
+      null;
+    return {
+      userId: user?.id || `pdf:${nameKey || ringKey || i}`,
+      userName: row.playerName || user?.name || "—",
+      pigeonId: pigeon
+        ? {
+            _id: pigeon._id,
+            ringNumber: pigeon.ringNumber,
+            nickname: pigeon.nickname || "",
+            avatarId: pigeon.avatarId || "",
+          }
+        : null,
+      ringNumber: pigeon?.ringNumber || row.ringNumber || "",
+      nickname: pigeon?.nickname || row.nickname || "",
+      speedMPM: Number(row.speedMPM) || 0,
+      arrivalTime: row.arrivalTime || null,
+      distanceKm: Number(row.distanceKm) || 0,
+      flightTimeHours: Number(row.flightTimeHours) || 0,
+      pdfRank: Number(row.pdfRank) || i + 1,
+      clockInCode: `PDF-${i + 1}`,
+    };
+  });
+}
+
+async function loadTournamentLapRows(lap) {
+  if (lap.source === "pdf" && Array.isArray(lap.importedRows) && lap.importedRows.length) {
+    return loadImportedLapRows(lap.importedRows);
+  }
+  if (!lap.eventCode || String(lap.eventCode).startsWith("PDF")) return [];
+  return loadResultsWithPigeons(lap.eventCode);
 }
 
 app.get("/api/tournaments", async (req, res) => {
@@ -2089,6 +2259,21 @@ app.put(
         return res.status(404).json({ error: "Lap not found" });
       }
       const label = String(req.body.label || "").trim();
+      const importedRows = sanitizeImportedPdfRows(req.body.rows);
+      if (importedRows.length) {
+        lap.label = label;
+        lap.source = "pdf";
+        lap.importedRows = importedRows;
+        lap.importedFileName = String(req.body.fileName || lap.importedFileName || "")
+          .trim()
+          .slice(0, 180);
+        tournament.markModified("laps");
+        await tournament.save();
+        await Log.create({
+          message: `Admin replaced PDF results for lap ${lap.index} (${lap.eventCode}) on tournament ${tournament.code}`,
+        });
+        return res.json({ success: true, tournament, importedCount: importedRows.length });
+      }
       const nextCode = String(req.body.eventCode || oldCode).trim();
       if (nextCode === oldCode) {
         lap.label = label;
@@ -2171,11 +2356,7 @@ app.delete(
       tournament.laps = (tournament.laps || [])
         .filter((l) => l.eventCode !== eventCode)
         .sort((a, b) => a.index - b.index)
-        .map((l, i) => ({
-          index: i + 1,
-          label: l.label,
-          eventCode: l.eventCode,
-        }));
+        .map((l, i) => serializeTournamentLap(l, i + 1));
       tournament.markModified("laps");
       await tournament.save();
       await Event.updateOne(
@@ -2322,6 +2503,68 @@ app.post(
   },
 );
 
+app.post(
+  "/api/tournaments/:code/laps/import-pdf",
+  requireAdmin,
+  [
+    body("label").trim().notEmpty().withMessage("Lap label required"),
+    body("rows").isArray({ min: 1 }).withMessage("PDF results are required"),
+  ],
+  async (req, res) => {
+    try {
+      const errors = validationResult(req);
+      if (!errors.isEmpty()) {
+        return res.status(400).json({ error: errors.array()[0].msg });
+      }
+      const tournament = await Tournament.findOne({ code: req.params.code });
+      if (!tournament) {
+        return res.status(404).json({ error: "Tournament not found" });
+      }
+      const rows = sanitizeImportedPdfRows(req.body.rows);
+      if (!rows.length) {
+        return res.status(400).json({
+          error: "No player rows could be read from that PDF.",
+        });
+      }
+      const label = String(req.body.label || "").trim();
+      const fileName = String(req.body.fileName || "").trim().slice(0, 180);
+      let eventCode =
+        "PDF" + Date.now().toString(36).toUpperCase() +
+        Math.random().toString(36).substring(2, 5).toUpperCase();
+      while (
+        (tournament.laps || []).some((l) => l.eventCode === eventCode)
+      ) {
+        eventCode =
+          "PDF" +
+          Date.now().toString(36).toUpperCase() +
+          Math.random().toString(36).substring(2, 5).toUpperCase();
+      }
+      const lapIndex = tournament.laps.length + 1;
+      tournament.laps.push({
+        index: lapIndex,
+        label,
+        eventCode,
+        source: "pdf",
+        importedFileName: fileName,
+        importedRows: rows,
+      });
+      await tournament.save();
+      await Log.create({
+        message: `Admin imported ${rows.length} PDF results as lap ${lapIndex} of tournament ${tournament.code}`,
+      });
+      res.json({
+        success: true,
+        tournament,
+        importedCount: rows.length,
+        eventCode,
+      });
+    } catch (error) {
+      console.error("Tournament PDF import error:", error);
+      res.status(500).json({ error: "An internal error occurred." });
+    }
+  },
+);
+
 app.get("/api/tournaments/:code/results", async (req, res) => {
   try {
     const tournament = await Tournament.findOne({
@@ -2337,21 +2580,26 @@ app.get("/api/tournaments/:code/results", async (req, res) => {
     const lapMeta = [];
 
     for (const lap of laps) {
-      const rows = await loadResultsWithPigeons(lap.eventCode);
+      const rows = await loadTournamentLapRows(lap);
       const completed = Array.isArray(rows) && rows.length > 0;
       lapMeta.push({
         index: lap.index,
         label: lap.label,
-        eventCode: lap.eventCode,
+        eventCode:
+          lap.source === "pdf"
+            ? lap.importedFileName || "PDF"
+            : lap.eventCode,
+        source: lap.source || "event",
         completed,
       });
       if (!completed) continue;
       const ranked = rows.slice().sort((a, b) => {
         const speedDiff = (Number(b.speedMPM) || 0) - (Number(a.speedMPM) || 0);
         if (speedDiff !== 0) return speedDiff;
-        return (
-          new Date(a.arrivalTime).getTime() - new Date(b.arrivalTime).getTime()
-        );
+        const aTime = a.arrivalTime ? new Date(a.arrivalTime).getTime() : 0;
+        const bTime = b.arrivalTime ? new Date(b.arrivalTime).getTime() : 0;
+        if (aTime && bTime && aTime !== bTime) return aTime - bTime;
+        return (Number(a.pdfRank) || 9999) - (Number(b.pdfRank) || 9999);
       });
       ranked.forEach((row, idx) => {
         const key = tournamentPigeonKey(row);
@@ -2364,8 +2612,8 @@ app.get("/api/tournaments/:code/results", async (req, res) => {
             pigeonId: pigeon
               ? String(pigeon._id || "")
               : String(row.pigeonId || ""),
-            ringNumber: pigeon?.ringNumber || "",
-            nickname: pigeon?.nickname || "",
+            ringNumber: pigeon?.ringNumber || row.ringNumber || "",
+            nickname: pigeon?.nickname || row.nickname || "",
             avatarId: pigeon?.avatarId || "",
             legs: {},
           });
@@ -2375,10 +2623,12 @@ app.get("/api/tournaments/:code/results", async (req, res) => {
         const pts =
           idx < TOURNAMENT_LAP_POINTS.length ? TOURNAMENT_LAP_POINTS[idx] : 0;
         bird.legs[lap.index] = { speedMPM: speed, points: pts };
-        if (!bird.ringNumber && pigeon?.ringNumber) {
-          bird.ringNumber = pigeon.ringNumber;
+        if (!bird.ringNumber) {
+          bird.ringNumber = pigeon?.ringNumber || row.ringNumber || "";
         }
-        if (!bird.nickname && pigeon?.nickname) bird.nickname = pigeon.nickname;
+        if (!bird.nickname) {
+          bird.nickname = pigeon?.nickname || row.nickname || "";
+        }
         if (!bird.avatarId && pigeon?.avatarId) bird.avatarId = pigeon.avatarId;
         if (!bird.playerName) bird.playerName = row.userName;
       });

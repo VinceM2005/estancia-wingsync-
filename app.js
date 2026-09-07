@@ -2847,6 +2847,8 @@ const app = {
           this.renderResults();
         } else if (id === "view-dashboard") {
           this.renderDashboard();
+        } else if (id === "view-tournament-results") {
+          this.loadTournamentResults();
         }
       }
     }, LIVE_POLL_MS);
@@ -5079,14 +5081,22 @@ const app = {
                   .map((l) => {
                     const tCode = this._escapeCertHtml(t.code);
                     const eCode = this._escapeCertHtml(l.eventCode);
+                    const source = l.source === "pdf" ? "pdf" : "event";
                     const labelEnc = encodeURIComponent(l.label || "");
+                    const birdCount = Array.isArray(l.importedRows)
+                      ? l.importedRows.length
+                      : 0;
+                    const pdfNote =
+                      source === "pdf"
+                        ? ` · PDF ${this._escapeCertHtml(l.importedFileName || "import")} (${birdCount} birds)`
+                        : "";
                     return `<li class="tournament-lap-item">
                       <div>
                         Leg ${l.index} — ${this._escapeCertHtml(l.label)}
-                        <span class="tournament-lap-code">${eCode}</span>
+                        <span class="tournament-lap-code">${source === "pdf" ? pdfNote : eCode}</span>
                       </div>
                       <div class="tournament-lap-actions">
-                        <button class="btn btn-sm btn-secondary" onclick="app.openEditLapModal('${tCode}', '${eCode}', decodeURIComponent('${labelEnc}'), decodeURIComponent('${nameEnc}'))">Edit Attachment</button>
+                        <button class="btn btn-sm btn-secondary" onclick="app.openEditLapModal('${tCode}', '${eCode}', decodeURIComponent('${labelEnc}'), decodeURIComponent('${nameEnc}'), '${source}')">Edit Attachment</button>
                         <button class="btn btn-sm btn-danger" onclick="app.deleteTournamentLap('${tCode}', '${eCode}', decodeURIComponent('${labelEnc}'))">Delete Attachment</button>
                       </div>
                     </li>`;
@@ -5149,6 +5159,7 @@ const app = {
     document.getElementById("attach-tournament-code").value = code;
     document.getElementById("attach-tournament-name").textContent = name || code;
     document.getElementById("attach-lap-label").value = "";
+    this._pendingPdfImport = null;
     const pdfInput = document.getElementById("attach-pdf-file");
     if (pdfInput) pdfInput.value = "";
     const select = document.getElementById("attach-event-select");
@@ -5167,6 +5178,7 @@ const app = {
         )
         .join("")}`;
       select.onchange = () => {
+        this._pendingPdfImport = null;
         const picked = available.find((e) => e.code === select.value);
         const labelEl = document.getElementById("attach-lap-label");
         if (picked && labelEl && !labelEl.value.trim()) {
@@ -5177,6 +5189,7 @@ const app = {
   },
 
   closeAttachLapModal() {
+    this._pendingPdfImport = null;
     const modal = document.getElementById("modal-tournament-attach");
     if (modal) modal.classList.remove("show");
   },
@@ -5221,7 +5234,170 @@ const app = {
     return this._pdfJsLoading;
   },
 
-  async _extractEventResultsPdfMeta(file) {
+  _pdfItemX(item) {
+    return Number(item?.transform?.[4]) || 0;
+  },
+
+  _pdfItemY(item) {
+    return Number(item?.transform?.[5]) || 0;
+  },
+
+  _pdfGroupRows(items, yTol = 4) {
+    const rows = [];
+    const sorted = (items || [])
+      .map((item) => ({
+        str: String(item.str || "").replace(/\s+/g, " ").trim(),
+        x: this._pdfItemX(item),
+        y: this._pdfItemY(item),
+      }))
+      .filter((item) => item.str)
+      .sort((a, b) => b.y - a.y || a.x - b.x);
+    sorted.forEach((item) => {
+      const row = rows.find((r) => Math.abs(r.y - item.y) <= yTol);
+      if (row) row.items.push(item);
+      else rows.push({ y: item.y, items: [item] });
+    });
+    rows.forEach((row) => row.items.sort((a, b) => a.x - b.x));
+    return rows;
+  },
+
+  _pdfRowText(row) {
+    return (row.items || [])
+      .map((i) => i.str)
+      .join(" ")
+      .replace(/\s+/g, " ")
+      .trim();
+  },
+
+  _pdfIsNoiseRow(text) {
+    const t = String(text || "").toLowerCase();
+    return /event results|malinao racing|wingsync event results|page \d|exported:|release point|birds clocked|event id:|^status:|^release:|^— mrpc —/.test(
+      t,
+    );
+  },
+
+  _pdfDetectColumns(row) {
+    const joined = this._pdfRowText(row).toLowerCase();
+    if (!/rank/.test(joined) || !/(speed|ring|player)/.test(joined)) return null;
+    const cols = [];
+    const add = (key, re) => {
+      const hit = row.items.find((it) => re.test(it.str));
+      if (hit) cols.push({ key, x: hit.x });
+    };
+    add("rank", /^rank$/i);
+    add("player", /player/i);
+    if (!cols.some((c) => c.key === "player")) add("player", /^name$/i);
+    add("pigeon", /pigeon/i);
+    add("ring", /ring/i);
+    add("dist", /dist|km/i);
+    add("arrival", /arrival/i);
+    add("flight", /flight/i);
+    add("speed", /speed|m\/min/i);
+    if (
+      !cols.some((c) => c.key === "player") &&
+      !cols.some((c) => c.key === "ring")
+    ) {
+      return null;
+    }
+    cols.sort((a, b) => a.x - b.x);
+    return cols;
+  },
+
+  _pdfAssignColumns(row, cols) {
+    const buckets = {};
+    cols.forEach((c) => {
+      buckets[c.key] = [];
+    });
+    row.items.forEach((item) => {
+      let chosen = cols[0];
+      let best = Infinity;
+      cols.forEach((col) => {
+        const dist = Math.abs(item.x - col.x);
+        if (item.x + 8 >= col.x && dist <= best) {
+          chosen = col;
+          best = dist;
+        }
+      });
+      if (chosen) buckets[chosen.key].push(item.str);
+    });
+    const pick = (key) =>
+      (buckets[key] || []).join(" ").replace(/\s+/g, " ").trim();
+    return {
+      rank: pick("rank"),
+      player: pick("player"),
+      pigeon: pick("pigeon"),
+      ring: pick("ring"),
+      dist: pick("dist"),
+      arrival: pick("arrival"),
+      flight: pick("flight"),
+      speed: pick("speed"),
+    };
+  },
+
+  _pdfParseNumber(value) {
+    const n = Number(
+      String(value || "").replace(/,/g, "").replace(/[^\d.-]/g, ""),
+    );
+    return Number.isFinite(n) ? n : 0;
+  },
+
+  _pdfGuessLabel(text, fileName) {
+    const fromFile = String(fileName || "")
+      .replace(/^MRPC_EventResults_/i, "")
+      .replace(/_[A-Za-z0-9]+\.pdf$/i, "")
+      .replace(/\.pdf$/i, "")
+      .replace(/_/g, " ")
+      .trim();
+    const nameMatch = String(text || "").match(
+      /EVENT RESULTS[\s\S]{0,160}?([A-Za-z0-9][A-Za-z0-9 ,()\-]{3,80})\s+(?:Event ID|Status|Release)/i,
+    );
+    const named = nameMatch ? nameMatch[1].trim() : "";
+    if (named && !/malinao racing|event results/i.test(named)) return named;
+    return fromFile || "Imported lap";
+  },
+
+  _pdfParseFallbackRow(row) {
+    const tokens = (row.items || []).map((i) => i.str);
+    if (!tokens.length || !/^\d+$/.test(tokens[0])) return null;
+    const last = tokens[tokens.length - 1].replace(/,/g, "");
+    if (!/^\d+(\.\d+)?$/.test(last)) return null;
+    const middle = tokens.slice(1, -1);
+    let ring = "";
+    let ringIdx = -1;
+    middle.forEach((tok, i) => {
+      if (/[A-Za-z]/.test(tok) && /\d/.test(tok) && tok.length >= 4) {
+        ring = tok;
+        ringIdx = i;
+      }
+    });
+    if (ringIdx < 0) {
+      for (let i = 0; i < middle.length - 1; i += 1) {
+        const pair = `${middle[i]} ${middle[i + 1]}`;
+        if (/[A-Za-z]/.test(pair) && /\d/.test(pair) && pair.length >= 6) {
+          ring = pair;
+          ringIdx = i;
+          break;
+        }
+      }
+    }
+    const player = (ringIdx >= 0 ? middle.slice(0, ringIdx) : middle)
+      .join(" ")
+      .replace(/\s+/g, " ")
+      .trim();
+    if (!player && !ring) return null;
+    return {
+      pdfRank: Number(tokens[0]) || 0,
+      playerName: player,
+      nickname: "",
+      ringNumber: ring,
+      speedMPM: this._pdfParseNumber(last),
+      distanceKm: 0,
+      arrivalTime: "",
+      flightTimeHours: 0,
+    };
+  },
+
+  async _extractEventResultsPdfData(file) {
     if (!file) throw new Error("No file selected.");
     const name = file.name || "file.pdf";
     if (!/\.pdf$/i.test(name) && file.type !== "application/pdf") {
@@ -5233,47 +5409,77 @@ const app = {
     const pdfjsLib = await this._loadPdfJs();
     const data = new Uint8Array(await file.arrayBuffer());
     const pdf = await pdfjsLib.getDocument({ data }).promise;
-    const pages = [];
+    let cols = null;
+    const parsed = [];
+    const allText = [];
     for (let i = 1; i <= pdf.numPages; i += 1) {
       const page = await pdf.getPage(i);
       const content = await page.getTextContent();
-      pages.push(content.items.map((item) => item.str).join(" "));
+      const rows = this._pdfGroupRows(content.items);
+      rows.forEach((row) => {
+        const text = this._pdfRowText(row);
+        allText.push(text);
+        const detected = this._pdfDetectColumns(row);
+        if (detected) {
+          cols = detected;
+          return;
+        }
+        if (!text || this._pdfIsNoiseRow(text)) return;
+        let record = null;
+        if (cols) {
+          const mapped = this._pdfAssignColumns(row, cols);
+          const player = mapped.player;
+          const ring = mapped.ring;
+          if (!player && !ring) return;
+          if (/^rank$/i.test(player) || /player name/i.test(player)) return;
+          record = {
+            pdfRank: this._pdfParseNumber(mapped.rank) || parsed.length + 1,
+            playerName: player,
+            nickname: mapped.pigeon,
+            ringNumber: ring,
+            speedMPM: this._pdfParseNumber(mapped.speed),
+            distanceKm: this._pdfParseNumber(mapped.dist),
+            arrivalTime: mapped.arrival,
+            flightTimeHours: this._pdfParseNumber(mapped.flight),
+          };
+        } else {
+          record = this._pdfParseFallbackRow(row);
+        }
+        if (record) parsed.push(record);
+      });
     }
-    const text = pages.join("\n").replace(/\s+/g, " ").trim();
-    const idMatch = text.match(/Event ID:\s*([A-Za-z0-9]+)/i);
-    let eventCode = idMatch ? String(idMatch[1]).trim().toUpperCase() : "";
-    if (!eventCode) {
-      const fileMatch = name.match(
-        /MRPC_EventResults_.+_([A-Za-z0-9]+)\.pdf$/i,
+    const rows = parsed.filter((r) => r.playerName || r.ringNumber);
+    if (!rows.length) {
+      throw new Error(
+        `${name}: no result rows found. Use a table with player, ring, and speed columns.`,
       );
-      if (fileMatch) eventCode = String(fileMatch[1]).trim().toUpperCase();
     }
-    const isResults =
-      /EVENT RESULTS/i.test(text) &&
-      /MALINAO RACING PIGEON CLUB|WingSync Event Results/i.test(text);
-    return { eventCode, isResults, fileName: name };
+    return {
+      fileName: name,
+      label: this._pdfGuessLabel(allText.join(" "), name),
+      rows,
+    };
   },
 
-  async _resolvePdfEvent(meta, events) {
-    if (!meta?.isResults) {
-      throw new Error(
-        `${meta?.fileName || "PDF"} is not a WingSync Event Results file. Export it from Manage Events.`,
-      );
-    }
-    if (!meta.eventCode) {
-      throw new Error(
-        `${meta.fileName}: no Event ID found inside the PDF.`,
-      );
-    }
-    const event = (events || []).find(
-      (e) => String(e.code).toUpperCase() === meta.eventCode,
+  async _importPdfRowsToTournament(code, parsed, extraLabel) {
+    const label = (extraLabel || parsed.label || "Imported lap").trim();
+    const res = await fetchWithAuth(
+      `${API_URL}/tournaments/${encodeURIComponent(code)}/laps/import-pdf`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          label,
+          fileName: parsed.fileName,
+          rows: parsed.rows,
+        }),
+      },
     );
-    if (!event) {
-      throw new Error(
-        `${meta.fileName}: event ${meta.eventCode} is not in Manage Events.`,
-      );
+    const data = await res.json();
+    if (!data.success) {
+      throw new Error(data.error || `Failed to import ${parsed.fileName}`);
     }
-    return event;
+    return data;
   },
 
   openImportTournamentPdf(code, name) {
@@ -5297,41 +5503,26 @@ const app = {
     const target = this._pdfImportTournament;
     if (!target?.code) return;
     if (!files || !files.length) return;
-    const events = await this.fetchAllEvents(true);
     const lines = [];
-    let attached = 0;
+    let imported = 0;
     for (const file of files) {
       try {
-        const meta = await this._extractEventResultsPdfMeta(file);
-        const event = await this._resolvePdfEvent(meta, events);
-        const res = await fetchWithAuth(
-          `${API_URL}/tournaments/${encodeURIComponent(target.code)}/laps/attach`,
-          {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              eventCode: event.code,
-              label: event.name,
-            }),
-          },
+        const parsed = await this._extractEventResultsPdfData(file);
+        const data = await this._importPdfRowsToTournament(target.code, parsed);
+        imported += 1;
+        lines.push(
+          `${file.name}: imported ${data.importedCount} birds from the PDF table.`,
         );
-        const data = await res.json();
-        if (!data.success) {
-          throw new Error(data.error || `Failed to attach ${event.code}`);
-        }
-        attached += 1;
-        lines.push(`Attached ${event.name} (${event.code}) from ${file.name}`);
       } catch (err) {
         lines.push(err.message || `Failed to import ${file.name}`);
       }
     }
     this.renderAdminTournaments();
-    this.fetchAllEvents(true);
     this.showModal({
-      title: attached ? "PDF Imported" : "Import Failed",
+      title: imported ? "PDF Imported" : "Import Failed",
       message: lines.join("\n"),
-      icon: attached ? "✅" : "❌",
-      iconColor: attached ? "#27ae60" : "#c0392b",
+      icon: imported ? "✅" : "❌",
+      iconColor: imported ? "#27ae60" : "#c0392b",
     });
   },
 
@@ -5339,50 +5530,49 @@ const app = {
     const file = input?.files?.[0];
     if (!file) return;
     try {
-      const events = await this.fetchAllEvents(true);
-      const meta = await this._extractEventResultsPdfMeta(file);
-      const event = await this._resolvePdfEvent(meta, events);
+      const parsed = await this._extractEventResultsPdfData(file);
+      this._pendingPdfImport = parsed;
       const select = document.getElementById("attach-event-select");
+      if (select) select.value = "";
       const labelEl = document.getElementById("attach-lap-label");
-      if (select) {
-        const exists = Array.from(select.options).some(
-          (opt) => opt.value === event.code,
-        );
-        if (!exists) {
-          const opt = document.createElement("option");
-          opt.value = event.code;
-          opt.textContent = `${event.name} (${event.code})`;
-          select.appendChild(opt);
-        }
-        select.value = event.code;
-      }
-      if (labelEl && !labelEl.value.trim()) labelEl.value = event.name;
+      if (labelEl && !labelEl.value.trim()) labelEl.value = parsed.label;
       this.showModal({
-        title: "PDF Read",
-        message: `Found ${event.name} (${event.code}). Review the lap label, then click Attach as Lap.`,
+        title: "PDF Table Ready",
+        message: `Read ${parsed.rows.length} birds from ${file.name}. Tournament Results will use these speeds, not Event ID or live clock-ins. Click Attach as Lap to save.`,
         icon: "✅",
         iconColor: "#27ae60",
       });
     } catch (err) {
+      this._pendingPdfImport = null;
       if (input) input.value = "";
       this.showModal({
         title: "PDF Not Imported",
-        message: err.message || "Could not read that PDF.",
+        message: err.message || "Could not read result rows from that PDF.",
         icon: "❌",
         iconColor: "#c0392b",
       });
     }
   },
 
-  openEditLapModal(code, eventCode, label, tournamentName) {
+  openEditLapModal(code, eventCode, label, tournamentName, source) {
     document.getElementById("edit-lap-tournament-code").value = code || "";
     document.getElementById("edit-lap-event-code").value = eventCode || "";
+    document.getElementById("edit-lap-source").value = source || "event";
     const nameEl = document.getElementById("edit-lap-tournament-name");
     if (nameEl) nameEl.textContent = tournamentName || code || "—";
     document.getElementById("edit-lap-label").value = label || "";
-    const select = document.getElementById("edit-lap-event-select");
-    select.innerHTML = `<option value="">Loading events...</option>`;
+    const pdfWrap = document.getElementById("edit-lap-pdf-wrap");
+    const eventWrap = document.getElementById("edit-lap-event-wrap");
+    const pdfFile = document.getElementById("edit-lap-pdf-file");
+    if (pdfFile) pdfFile.value = "";
+    const isPdf = source === "pdf";
+    if (pdfWrap) pdfWrap.classList.toggle("hidden", !isPdf);
+    if (eventWrap) eventWrap.classList.toggle("hidden", isPdf);
     document.getElementById("modal-tournament-edit-lap").classList.add("show");
+    if (isPdf) return;
+    const select = document.getElementById("edit-lap-event-select");
+    if (!select) return;
+    select.innerHTML = `<option value="">Loading events...</option>`;
     this.fetchAllEvents(true).then((events) => {
       const list = events || [];
       const current = list.find((e) => e.code === eventCode);
@@ -5415,28 +5605,59 @@ const app = {
     if (modal) modal.classList.remove("show");
   },
 
-  saveEditLap() {
+  async saveEditLap() {
     const code = document.getElementById("edit-lap-tournament-code").value;
     const currentEventCode = document.getElementById("edit-lap-event-code")
       .value;
-    const nextEventCode = document.getElementById("edit-lap-event-select")
-      .value;
+    const source = document.getElementById("edit-lap-source")?.value || "event";
     const label = document.getElementById("edit-lap-label").value.trim();
-    if (!code || !currentEventCode || !nextEventCode || !label) {
+    if (!code || !currentEventCode || !label) {
       this.showModal({
         title: "Incomplete",
-        message: "Choose an event and enter a lap label.",
+        message: "Lap label is required.",
         icon: "❌",
         iconColor: "#c0392b",
       });
       return;
+    }
+    const payload = { label };
+    if (source === "pdf") {
+      const file = document.getElementById("edit-lap-pdf-file")?.files?.[0];
+      if (file) {
+        try {
+          const parsed = await this._extractEventResultsPdfData(file);
+          payload.rows = parsed.rows;
+          payload.fileName = parsed.fileName;
+        } catch (err) {
+          this.showModal({
+            title: "PDF Not Imported",
+            message: err.message || "Could not read result rows from that PDF.",
+            icon: "❌",
+            iconColor: "#c0392b",
+          });
+          return;
+        }
+      }
+    } else {
+      const nextEventCode = document.getElementById("edit-lap-event-select")
+        ?.value;
+      if (!nextEventCode) {
+        this.showModal({
+          title: "Incomplete",
+          message: "Choose an event and enter a lap label.",
+          icon: "❌",
+          iconColor: "#c0392b",
+        });
+        return;
+      }
+      payload.eventCode = nextEventCode;
     }
     fetchWithAuth(
       `${API_URL}/tournaments/${encodeURIComponent(code)}/laps/${encodeURIComponent(currentEventCode)}`,
       {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ label, eventCode: nextEventCode }),
+        body: JSON.stringify(payload),
       },
     )
       .then((res) => res.json())
@@ -5447,10 +5668,9 @@ const app = {
           this.fetchAllEvents(true);
           this.showModal({
             title: "Attachment Updated",
-            message:
-              nextEventCode === currentEventCode
-                ? "Lap label was saved."
-                : `${nextEventCode} is now attached to this lap. The previous event is back in Manage Events.`,
+            message: data.importedCount
+              ? `PDF table replaced with ${data.importedCount} birds.`
+              : "Lap was saved.",
             icon: "✅",
             iconColor: "#27ae60",
           });
@@ -5566,10 +5786,42 @@ const app = {
     const code = document.getElementById("attach-tournament-code").value;
     const eventCode = document.getElementById("attach-event-select").value;
     const label = document.getElementById("attach-lap-label").value.trim();
+    const pending = this._pendingPdfImport;
+    if (pending?.rows?.length) {
+      if (!label) {
+        this.showModal({
+          title: "Incomplete",
+          message: "Enter a lap label for the imported PDF.",
+          icon: "❌",
+          iconColor: "#c0392b",
+        });
+        return;
+      }
+      this._importPdfRowsToTournament(code, pending, label)
+        .then((data) => {
+          this.closeAttachLapModal();
+          this.renderAdminTournaments();
+          this.showModal({
+            title: "PDF Imported",
+            message: `${data.importedCount} birds from ${pending.fileName} are now this lap. Tournament Results uses the PDF table, not Event ID.`,
+            icon: "✅",
+            iconColor: "#27ae60",
+          });
+        })
+        .catch((err) => {
+          this.showModal({
+            title: "Import Failed",
+            message: err.message || "Failed to import PDF results.",
+            icon: "❌",
+            iconColor: "#c0392b",
+          });
+        });
+      return;
+    }
     if (!eventCode || !label) {
       this.showModal({
         title: "Incomplete",
-        message: "Choose an existing event and enter a lap label.",
+        message: "Upload an Event Results PDF or choose an existing event, and enter a lap label.",
         icon: "❌",
         iconColor: "#c0392b",
       });
@@ -5815,16 +6067,17 @@ const app = {
           .map((l) => {
             const cell = (r.legs || []).find((x) => x.index === l.index);
             const speed = cell ? Number(cell.speedMPM) || 0 : 0;
-            return `<td>${speed.toFixed(6)}</td>`;
+            const legLabel = `Leg ${l.index} (m/min)`;
+            return `<td data-label="${this._escapeCertHtml(legLabel)}">${speed.toFixed(6)}</td>`;
           })
           .join("");
         return `<tr>
-          <td>${r.rank}</td>
-          <td>${this._escapeCertHtml(r.playerName || "—")}</td>
-          <td class="tournament-pigeon-cell">${avatarHTML}<span>${this._escapeCertHtml(pigeonName)}</span></td>
-          <td>${this._escapeCertHtml(r.ringNumber || "—")}</td>
-          <td>${Number(r.points || 0).toFixed(2)}</td>
-          <td>${Number(r.totalSpeed || 0).toFixed(6)}</td>
+          <td data-label="Rank">${r.rank}</td>
+          <td data-label="Player Name">${this._escapeCertHtml(r.playerName || "—")}</td>
+          <td class="tournament-pigeon-cell" data-label="Pigeon">${avatarHTML}<span>${this._escapeCertHtml(pigeonName)}</span></td>
+          <td data-label="Ring Band No">${this._escapeCertHtml(r.ringNumber || "—")}</td>
+          <td data-label="Points">${Number(r.points || 0).toFixed(2)}</td>
+          <td data-label="Total Speed (m/min)">${Number(r.totalSpeed || 0).toFixed(6)}</td>
           ${legs}
         </tr>`;
       })
