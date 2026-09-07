@@ -8498,4 +8498,16 @@ if ("serviceWorker" in navigator) {
     );
 }
 
-window.onload = () => app.init();
+window.app = app;
+
+function bootWingsync() {
+  if (!window.app || window.app._booted) return;
+  window.app._booted = true;
+  window.app.init();
+}
+
+if (document.readyState === "loading") {
+  document.addEventListener("DOMContentLoaded", bootWingsync);
+} else {
+  bootWingsync();
+}

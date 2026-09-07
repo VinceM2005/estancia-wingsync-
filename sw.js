@@ -1,4 +1,4 @@
-const CACHE_NAME = "wingsync-v137"; // Increment on every deployment
+const CACHE_NAME = "wingsync-v138"; // Increment on every deployment
 const urlsToCache = ["/index.html", "/app.js", "/style.css", "/manifest.json", "/wingsync-logo.png", "/logo.png", "/wingsync_cert-temp.png"];
 
 self.addEventListener("install", (event) => {
@@ -50,6 +50,35 @@ self.addEventListener("fetch", (event) => {
 
   if (event.request.method !== "GET") {
     event.respondWith(fetch(event.request));
+    return;
+  }
+
+  const isAppShell =
+    event.request.mode === "navigate" ||
+    url.pathname.endsWith(".html") ||
+    url.pathname.endsWith(".js") ||
+    url.pathname.endsWith(".css");
+
+  if (isAppShell) {
+    event.respondWith(
+      fetch(event.request)
+        .then((networkResponse) => {
+          const responseClone = networkResponse.clone();
+          caches.open(CACHE_NAME).then((cache) => {
+            cache.put(event.request, responseClone);
+          });
+          return networkResponse;
+        })
+        .catch(() =>
+          caches.match(event.request).then((cachedResponse) => {
+            if (cachedResponse) return cachedResponse;
+            return new Response("Offline – please check your connection.", {
+              status: 503,
+              statusText: "Service Unavailable",
+            });
+          }),
+        ),
+    );
     return;
   }
 
