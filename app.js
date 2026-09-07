@@ -4972,8 +4972,24 @@ const app = {
   },
 
   openCreateTournamentModal() {
+    document.getElementById("modal-t-code").value = "";
     document.getElementById("modal-t-name").value = "";
     document.getElementById("modal-t-remarks").value = "";
+    document.getElementById("modal-t-title").innerHTML =
+      '<i class="fas fa-flag"></i> Create Tournament';
+    document.getElementById("modal-t-save-btn").innerHTML =
+      '<i class="fas fa-save"></i> Create Tournament';
+    document.getElementById("modal-tournament").classList.add("show");
+  },
+
+  openEditTournamentModal(code, name, remarks) {
+    document.getElementById("modal-t-code").value = code || "";
+    document.getElementById("modal-t-name").value = name || "";
+    document.getElementById("modal-t-remarks").value = remarks || "";
+    document.getElementById("modal-t-title").innerHTML =
+      '<i class="fas fa-edit"></i> Edit Tournament';
+    document.getElementById("modal-t-save-btn").innerHTML =
+      '<i class="fas fa-save"></i> Save Changes';
     document.getElementById("modal-tournament").classList.add("show");
   },
 
@@ -4983,6 +4999,7 @@ const app = {
   },
 
   saveTournament() {
+    const code = document.getElementById("modal-t-code").value.trim();
     const name = document.getElementById("modal-t-name").value.trim();
     const remarks = document.getElementById("modal-t-remarks").value.trim();
     if (!name) {
@@ -4994,8 +5011,12 @@ const app = {
       });
       return;
     }
-    fetchWithAuth(`${API_URL}/tournaments`, {
-      method: "POST",
+    const isEdit = !!code;
+    const url = isEdit
+      ? `${API_URL}/tournaments/${encodeURIComponent(code)}`
+      : `${API_URL}/tournaments`;
+    fetchWithAuth(url, {
+      method: isEdit ? "PUT" : "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ name, remarks }),
     })
@@ -5005,15 +5026,19 @@ const app = {
           this.closeTournamentModal();
           this.renderAdminTournaments();
           this.showModal({
-            title: "Tournament Created",
+            title: isEdit ? "Tournament Updated" : "Tournament Created",
             message: `${data.tournament.name} (${data.tournament.code})`,
             icon: "✅",
             iconColor: "#27ae60",
           });
         } else {
           this.showModal({
-            title: "Create Failed",
-            message: data.error || "Failed to create tournament.",
+            title: isEdit ? "Update Failed" : "Create Failed",
+            message:
+              data.error ||
+              (isEdit
+                ? "Failed to update tournament."
+                : "Failed to create tournament."),
             icon: "❌",
             iconColor: "#c0392b",
           });
@@ -5046,12 +5071,25 @@ const app = {
             const laps = (t.laps || [])
               .slice()
               .sort((a, b) => a.index - b.index);
+            const nameEnc = encodeURIComponent(t.name || "");
+            const remarksEnc = encodeURIComponent(t.remarks || "");
             const lapRows = laps.length
               ? `<ul class="tournament-lap-list">${laps
-                  .map(
-                    (l) =>
-                      `<li>Leg ${l.index} — ${this._escapeCertHtml(l.label)} <span class="tournament-lap-code">${this._escapeCertHtml(l.eventCode)}</span></li>`,
-                  )
+                  .map((l) => {
+                    const tCode = this._escapeCertHtml(t.code);
+                    const eCode = this._escapeCertHtml(l.eventCode);
+                    const labelEnc = encodeURIComponent(l.label || "");
+                    return `<li class="tournament-lap-item">
+                      <div>
+                        Leg ${l.index} — ${this._escapeCertHtml(l.label)}
+                        <span class="tournament-lap-code">${eCode}</span>
+                      </div>
+                      <div class="tournament-lap-actions">
+                        <button class="btn btn-sm btn-secondary" onclick="app.openEditLapModal('${tCode}', '${eCode}', decodeURIComponent('${labelEnc}'), decodeURIComponent('${nameEnc}'))">Edit Attachment</button>
+                        <button class="btn btn-sm btn-danger" onclick="app.deleteTournamentLap('${tCode}', '${eCode}', decodeURIComponent('${labelEnc}'))">Delete Attachment</button>
+                      </div>
+                    </li>`;
+                  })
                   .join("")}</ul>`
               : `<p class="tournament-lap-empty">No laps yet.</p>`;
             return `<div class="tournament-admin-card">
@@ -5061,8 +5099,10 @@ const app = {
                   <p>${this._escapeCertHtml(t.remarks || "")} · ${this._escapeCertHtml(t.code)}</p>
                 </div>
                 <div class="tournament-admin-actions">
-                  <button class="btn btn-sm btn-secondary" onclick="app.openAttachLapModal('${this._escapeCertHtml(t.code)}', decodeURIComponent('${encodeURIComponent(t.name || "")}'))">Attach Event</button>
-                  <button class="btn btn-sm btn-primary" onclick="app.openAddLapModal('${this._escapeCertHtml(t.code)}', decodeURIComponent('${encodeURIComponent(t.name || "")}'))">Add Lap</button>
+                  <button class="btn btn-sm btn-secondary" onclick="app.openAttachLapModal('${this._escapeCertHtml(t.code)}', decodeURIComponent('${nameEnc}'))">Attach Event</button>
+                  <button class="btn btn-sm btn-primary" onclick="app.openAddLapModal('${this._escapeCertHtml(t.code)}', decodeURIComponent('${nameEnc}'))">Add Lap</button>
+                  <button class="btn btn-sm btn-secondary" onclick="app.openEditTournamentModal('${this._escapeCertHtml(t.code)}', decodeURIComponent('${nameEnc}'), decodeURIComponent('${remarksEnc}'))">Edit</button>
+                  <button class="btn btn-sm btn-danger" onclick="app.deleteTournament('${this._escapeCertHtml(t.code)}', decodeURIComponent('${nameEnc}'))">Delete</button>
                 </div>
               </div>
               ${lapRows}
@@ -5135,6 +5175,194 @@ const app = {
   closeAttachLapModal() {
     const modal = document.getElementById("modal-tournament-attach");
     if (modal) modal.classList.remove("show");
+  },
+
+  openEditLapModal(code, eventCode, label, tournamentName) {
+    document.getElementById("edit-lap-tournament-code").value = code || "";
+    document.getElementById("edit-lap-event-code").value = eventCode || "";
+    const nameEl = document.getElementById("edit-lap-tournament-name");
+    if (nameEl) nameEl.textContent = tournamentName || code || "—";
+    document.getElementById("edit-lap-label").value = label || "";
+    const select = document.getElementById("edit-lap-event-select");
+    select.innerHTML = `<option value="">Loading events...</option>`;
+    document.getElementById("modal-tournament-edit-lap").classList.add("show");
+    this.fetchAllEvents(true).then((events) => {
+      const list = events || [];
+      const current = list.find((e) => e.code === eventCode);
+      const available = list.filter(
+        (e) => !e.tournamentId || e.code === eventCode,
+      );
+      if (current && !available.some((e) => e.code === eventCode)) {
+        available.unshift(current);
+      } else if (!current && eventCode) {
+        available.unshift({
+          code: eventCode,
+          name: label || eventCode,
+        });
+      }
+      if (!available.length) {
+        select.innerHTML = `<option value="">No events found</option>`;
+        return;
+      }
+      select.innerHTML = available
+        .map(
+          (e) =>
+            `<option value="${this._escapeCertHtml(e.code)}"${e.code === eventCode ? " selected" : ""}>${this._escapeCertHtml(e.name)} (${this._escapeCertHtml(e.code)})</option>`,
+        )
+        .join("");
+    });
+  },
+
+  closeEditLapModal() {
+    const modal = document.getElementById("modal-tournament-edit-lap");
+    if (modal) modal.classList.remove("show");
+  },
+
+  saveEditLap() {
+    const code = document.getElementById("edit-lap-tournament-code").value;
+    const currentEventCode = document.getElementById("edit-lap-event-code")
+      .value;
+    const nextEventCode = document.getElementById("edit-lap-event-select")
+      .value;
+    const label = document.getElementById("edit-lap-label").value.trim();
+    if (!code || !currentEventCode || !nextEventCode || !label) {
+      this.showModal({
+        title: "Incomplete",
+        message: "Choose an event and enter a lap label.",
+        icon: "❌",
+        iconColor: "#c0392b",
+      });
+      return;
+    }
+    fetchWithAuth(
+      `${API_URL}/tournaments/${encodeURIComponent(code)}/laps/${encodeURIComponent(currentEventCode)}`,
+      {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ label, eventCode: nextEventCode }),
+      },
+    )
+      .then((res) => res.json())
+      .then((data) => {
+        if (data.success) {
+          this.closeEditLapModal();
+          this.renderAdminTournaments();
+          this.fetchAllEvents(true);
+          this.showModal({
+            title: "Attachment Updated",
+            message:
+              nextEventCode === currentEventCode
+                ? "Lap label was saved."
+                : `${nextEventCode} is now attached to this lap. The previous event is back in Manage Events.`,
+            icon: "✅",
+            iconColor: "#27ae60",
+          });
+        } else {
+          this.showModal({
+            title: "Update Failed",
+            message: data.error || "Failed to update attachment.",
+            icon: "❌",
+            iconColor: "#c0392b",
+          });
+        }
+      })
+      .catch(() => {
+        this.showModal({
+          title: "Connection Error",
+          message: "Unable to connect to the server.",
+          icon: "⚠️",
+          iconColor: "#e67e22",
+        });
+      });
+  },
+
+  deleteCurrentAttachment() {
+    const code = document.getElementById("edit-lap-tournament-code").value;
+    const eventCode = document.getElementById("edit-lap-event-code").value;
+    const label = document.getElementById("edit-lap-label").value.trim();
+    this.closeEditLapModal();
+    this.deleteTournamentLap(code, eventCode, label);
+  },
+
+  deleteTournament(code, name) {
+    if (
+      !confirm(
+        `Delete "${name || code}"?\n\nLap events stay in Manage Events. They are only unlinked from this tournament.`,
+      )
+    )
+      return;
+    fetchWithAuth(`${API_URL}/tournaments/${encodeURIComponent(code)}`, {
+      method: "DELETE",
+    })
+      .then((res) => res.json())
+      .then((data) => {
+        if (data.success) {
+          this.renderAdminTournaments();
+          this.fetchAllEvents(true);
+          this.showModal({
+            title: "Tournament Deleted",
+            message: `${name || code} was removed.`,
+            icon: "🗑️",
+            iconColor: "#c0392b",
+          });
+        } else {
+          this.showModal({
+            title: "Delete Failed",
+            message: data.error || "Failed to delete tournament.",
+            icon: "❌",
+            iconColor: "#c0392b",
+          });
+        }
+      })
+      .catch(() => {
+        this.showModal({
+          title: "Connection Error",
+          message: "Unable to connect to the server.",
+          icon: "⚠️",
+          iconColor: "#e67e22",
+        });
+      });
+  },
+
+  deleteTournamentLap(code, eventCode, label) {
+    if (
+      !confirm(
+        `Delete this attachment?\n\n"${label || eventCode}" will leave the tournament. The event stays in Manage Events with its results.`,
+      )
+    )
+      return;
+    fetchWithAuth(
+      `${API_URL}/tournaments/${encodeURIComponent(code)}/laps/${encodeURIComponent(eventCode)}`,
+      { method: "DELETE" },
+    )
+      .then((res) => res.json())
+      .then((data) => {
+        if (data.success) {
+          this.renderAdminTournaments();
+          this.fetchAllEvents(true);
+          this.showModal({
+            title: "Attachment Deleted",
+            message: `${label || eventCode} is no longer attached to this tournament.`,
+            icon: "🗑️",
+            iconColor: "#c0392b",
+          });
+        } else {
+          this.showModal({
+            title: "Remove Failed",
+            message: data.error || "Failed to remove lap.",
+            icon: "❌",
+            iconColor: "#c0392b",
+          });
+        }
+      })
+      .catch(() => {
+        this.showModal({
+          title: "Connection Error",
+          message: "Unable to connect to the server.",
+          icon: "⚠️",
+          iconColor: "#e67e22",
+        });
+      });
   },
 
   saveAttachLap() {

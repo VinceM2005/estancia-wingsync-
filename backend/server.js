@@ -2007,6 +2007,200 @@ app.post(
   },
 );
 
+app.put(
+  "/api/tournaments/:code",
+  requireAdmin,
+  [body("name").trim().notEmpty().withMessage("Tournament name required")],
+  async (req, res) => {
+    try {
+      const errors = validationResult(req);
+      if (!errors.isEmpty()) {
+        return res.status(400).json({ error: errors.array()[0].msg });
+      }
+      const tournament = await Tournament.findOne({ code: req.params.code });
+      if (!tournament) {
+        return res.status(404).json({ error: "Tournament not found" });
+      }
+      tournament.name = String(req.body.name || "").trim();
+      tournament.remarks = String(req.body.remarks || "").trim();
+      await tournament.save();
+      await Log.create({
+        message: `Admin updated tournament ${tournament.name} (${tournament.code})`,
+      });
+      res.json({ success: true, tournament });
+    } catch (error) {
+      console.error("Tournament update error:", error);
+      res.status(500).json({ error: "An internal error occurred." });
+    }
+  },
+);
+
+app.delete("/api/tournaments/:code", requireAdmin, async (req, res) => {
+  try {
+    const tournament = await Tournament.findOne({ code: req.params.code });
+    if (!tournament) {
+      return res.status(404).json({ error: "Tournament not found" });
+    }
+    const eventCodes = (tournament.laps || [])
+      .map((l) => l.eventCode)
+      .filter(Boolean);
+    await Event.updateMany(
+      {
+        $or: [
+          { tournamentId: tournament.code },
+          ...(eventCodes.length ? [{ code: { $in: eventCodes } }] : []),
+        ],
+      },
+      { $set: { tournamentId: null, lapIndex: null } },
+    );
+    await Tournament.deleteOne({ code: tournament.code });
+    await Log.create({
+      message: `Admin deleted tournament ${tournament.name} (${tournament.code})`,
+    });
+    eventCodes.forEach((code) => invalidateLiveCaches(code));
+    invalidateLiveCaches();
+    res.json({ success: true });
+  } catch (error) {
+    console.error("Tournament delete error:", error);
+    res.status(500).json({ error: "An internal error occurred." });
+  }
+});
+
+app.put(
+  "/api/tournaments/:code/laps/:eventCode",
+  requireAdmin,
+  [
+    body("label").trim().notEmpty().withMessage("Lap label required"),
+    body("eventCode").optional({ values: "falsy" }).trim(),
+  ],
+  async (req, res) => {
+    try {
+      const errors = validationResult(req);
+      if (!errors.isEmpty()) {
+        return res.status(400).json({ error: errors.array()[0].msg });
+      }
+      const tournament = await Tournament.findOne({ code: req.params.code });
+      if (!tournament) {
+        return res.status(404).json({ error: "Tournament not found" });
+      }
+      const oldCode = String(req.params.eventCode || "").trim();
+      const lap = (tournament.laps || []).find((l) => l.eventCode === oldCode);
+      if (!lap) {
+        return res.status(404).json({ error: "Lap not found" });
+      }
+      const label = String(req.body.label || "").trim();
+      const nextCode = String(req.body.eventCode || oldCode).trim();
+      if (nextCode === oldCode) {
+        lap.label = label;
+        await tournament.save();
+        await Log.create({
+          message: `Admin updated lap ${lap.index} (${lap.eventCode}) on tournament ${tournament.code}`,
+        });
+        invalidateLiveCaches(lap.eventCode);
+        return res.json({ success: true, tournament });
+      }
+      const nextEvent = await Event.findOne({ code: nextCode });
+      if (!nextEvent) {
+        return res.status(404).json({ error: "Event not found" });
+      }
+      if (
+        nextEvent.tournamentId &&
+        nextEvent.tournamentId !== tournament.code
+      ) {
+        return res.status(400).json({
+          error: `This event is already a lap of tournament ${nextEvent.tournamentId}.`,
+        });
+      }
+      const usedHere = (tournament.laps || []).some(
+        (l) => l.eventCode === nextCode && l.eventCode !== oldCode,
+      );
+      if (usedHere) {
+        return res.status(400).json({
+          error: "This event is already attached to another lap in this tournament.",
+        });
+      }
+      const alreadyLinked = await Tournament.findOne({
+        code: { $ne: tournament.code },
+        "laps.eventCode": nextCode,
+      });
+      if (alreadyLinked) {
+        return res.status(400).json({
+          error: `This event is already attached to ${alreadyLinked.name} (${alreadyLinked.code}).`,
+        });
+      }
+      lap.label = label;
+      lap.eventCode = nextCode;
+      tournament.markModified("laps");
+      await tournament.save();
+      await Event.updateOne(
+        { code: oldCode },
+        { $set: { tournamentId: null, lapIndex: null } },
+      );
+      nextEvent.tournamentId = tournament.code;
+      nextEvent.lapIndex = lap.index;
+      await nextEvent.save();
+      await Log.create({
+        message: `Admin changed lap ${lap.index} of tournament ${tournament.code} from ${oldCode} to ${nextCode}`,
+      });
+      invalidateLiveCaches(oldCode);
+      invalidateLiveCaches(nextCode);
+      res.json({ success: true, tournament, event: nextEvent });
+    } catch (error) {
+      console.error("Tournament lap update error:", error);
+      res.status(500).json({ error: "An internal error occurred." });
+    }
+  },
+);
+
+app.delete(
+  "/api/tournaments/:code/laps/:eventCode",
+  requireAdmin,
+  async (req, res) => {
+    try {
+      const tournament = await Tournament.findOne({ code: req.params.code });
+      if (!tournament) {
+        return res.status(404).json({ error: "Tournament not found" });
+      }
+      const eventCode = req.params.eventCode;
+      const existing = (tournament.laps || []).find(
+        (l) => l.eventCode === eventCode,
+      );
+      if (!existing) {
+        return res.status(404).json({ error: "Lap not found" });
+      }
+      tournament.laps = (tournament.laps || [])
+        .filter((l) => l.eventCode !== eventCode)
+        .sort((a, b) => a.index - b.index)
+        .map((l, i) => ({
+          index: i + 1,
+          label: l.label,
+          eventCode: l.eventCode,
+        }));
+      tournament.markModified("laps");
+      await tournament.save();
+      await Event.updateOne(
+        { code: eventCode },
+        { $set: { tournamentId: null, lapIndex: null } },
+      );
+      for (const lap of tournament.laps) {
+        await Event.updateOne(
+          { code: lap.eventCode },
+          { $set: { tournamentId: tournament.code, lapIndex: lap.index } },
+        );
+        invalidateLiveCaches(lap.eventCode);
+      }
+      invalidateLiveCaches(eventCode);
+      await Log.create({
+        message: `Admin removed event ${eventCode} from tournament ${tournament.code}`,
+      });
+      res.json({ success: true, tournament });
+    } catch (error) {
+      console.error("Tournament lap delete error:", error);
+      res.status(500).json({ error: "An internal error occurred." });
+    }
+  },
+);
+
 app.post(
   "/api/tournaments/:code/laps",
   requireAdmin,

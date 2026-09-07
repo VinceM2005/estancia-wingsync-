@@ -8,7 +8,7 @@
     />
     <title>Wingsync - Pigeon Clocking System</title>
     <link rel="manifest" href="manifest.json" />
-    <link rel="stylesheet" href="style.css?v=40" />
+    <link rel="stylesheet" href="style.css?v=42" />
     <meta name="theme-color" content="#2a7a62" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="mobile-web-app-capable" content="yes" />
@@ -46,7 +46,7 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
 
-    <link rel="stylesheet" href="style.css?v=40" />
+    <link rel="stylesheet" href="style.css?v=42" />
     <style>
       /* ===== ADDITIONAL STYLES FOR UI COMPONENTS ===== */
       .pigeons-grid {
@@ -1973,15 +1973,16 @@
       </div>
     </div>
 
-    <!-- Create Tournament Modal -->
+    <!-- Create / Edit Tournament Modal -->
     <div id="modal-tournament" class="modal-overlay">
       <div class="modal-content" style="max-width: 480px">
         <div class="modal-header">
-          <h3><i class="fas fa-flag"></i> Create Tournament</h3>
+          <h3 id="modal-t-title"><i class="fas fa-flag"></i> Create Tournament</h3>
           <button class="close-modal" onclick="app.closeTournamentModal()">
             <i class="fas fa-times"></i>
           </button>
         </div>
+        <input type="hidden" id="modal-t-code" />
         <div class="form-group">
           <label>Tournament Name</label>
           <input
@@ -2001,6 +2002,7 @@
           />
         </div>
         <button
+          id="modal-t-save-btn"
           class="btn btn-success"
           style="width: 100%"
           onclick="app.saveTournament()"
@@ -2123,6 +2125,57 @@
           onclick="app.saveAttachLap()"
         >
           <i class="fas fa-link"></i> Attach as Lap
+        </button>
+      </div>
+    </div>
+
+    <!-- Edit Tournament Attachment -->
+    <div id="modal-tournament-edit-lap" class="modal-overlay">
+      <div class="modal-content" style="max-width: 480px">
+        <div class="modal-header">
+          <h3><i class="fas fa-edit"></i> Edit Attachment</h3>
+          <button class="close-modal" onclick="app.closeEditLapModal()">
+            <i class="fas fa-times"></i>
+          </button>
+        </div>
+        <input type="hidden" id="edit-lap-tournament-code" />
+        <input type="hidden" id="edit-lap-event-code" />
+        <p>
+          <strong>Tournament:</strong>
+          <span id="edit-lap-tournament-name"></span>
+        </p>
+        <p class="tournament-attach-hint" style="margin: 8px 0 14px">
+          Change the linked Manage Events race, or delete this attachment. The
+          event itself is not deleted.
+        </p>
+        <div class="form-group">
+          <label>Attached Event</label>
+          <select id="edit-lap-event-select" class="form-control">
+            <option value="">Select an event</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label>Lap Label</label>
+          <input
+            type="text"
+            id="edit-lap-label"
+            class="form-control"
+            placeholder="e.g., 1st Lap Sprint Race Goa"
+          />
+        </div>
+        <button
+          class="btn btn-success"
+          style="width: 100%"
+          onclick="app.saveEditLap()"
+        >
+          <i class="fas fa-save"></i> Save Attachment
+        </button>
+        <button
+          class="btn btn-danger"
+          style="width: 100%; margin-top: 8px"
+          onclick="app.deleteCurrentAttachment()"
+        >
+          <i class="fas fa-unlink"></i> Delete Attachment
         </button>
       </div>
     </div>
@@ -2510,6 +2563,6 @@
       </div>
     </div>
 
-    <script src="app.js?v=42"></script>
+    <script src="app.js?v=44"></script>
   </body>
 </html>
