@@ -8,7 +8,7 @@
     />
     <title>Wingsync - Pigeon Clocking System</title>
     <link rel="manifest" href="manifest.json" />
-    <link rel="stylesheet" href="style.css?v=38" />
+    <link rel="stylesheet" href="style.css?v=39" />
     <meta name="theme-color" content="#2a7a62" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="mobile-web-app-capable" content="yes" />
@@ -46,7 +46,7 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
 
-    <link rel="stylesheet" href="style.css?v=38" />
+    <link rel="stylesheet" href="style.css?v=39" />
     <style>
       /* ===== ADDITIONAL STYLES FOR UI COMPONENTS ===== */
       .pigeons-grid {
@@ -1335,20 +1335,53 @@
                 <p><strong>TOURNAMENT NAME:</strong> <span id="tournament-meta-name">—</span></p>
                 <p><strong>REMARKS:</strong> <span id="tournament-meta-remarks">—</span></p>
               </div>
-              <div class="admin-search-bar" style="margin-top: 12px">
-                <select
-                  id="tournament-results-select"
-                  class="form-control"
-                  onchange="app.loadTournamentResults()"
-                >
-                  <option value="">Select a tournament</option>
-                </select>
-                <input
-                  id="tournament-results-search"
-                  type="text"
-                  placeholder="Search player or ring..."
-                  oninput="app.filterTournamentResultsTable()"
-                />
+              <div class="tournament-filter-bar">
+                <div class="tournament-filter-field">
+                  <label for="tournament-results-select">Tournament</label>
+                  <div class="tournament-filter-control">
+                    <i
+                      class="fas fa-flag tournament-filter-icon"
+                      aria-hidden="true"
+                    ></i>
+                    <select
+                      id="tournament-results-select"
+                      class="tournament-filter-select"
+                      onchange="app.loadTournamentResults()"
+                      aria-label="Select tournament"
+                    >
+                      <option value="">Select a tournament</option>
+                    </select>
+                  </div>
+                </div>
+                <div class="tournament-filter-field tournament-filter-field--search">
+                  <label for="tournament-results-search">Search standings</label>
+                  <div class="tournament-filter-control">
+                    <i
+                      class="fas fa-search tournament-filter-icon"
+                      aria-hidden="true"
+                    ></i>
+                    <input
+                      id="tournament-results-search"
+                      class="tournament-filter-input"
+                      type="text"
+                      placeholder="Player name, nickname, or ring number"
+                      autocomplete="off"
+                      spellcheck="false"
+                      oninput="app.filterTournamentResultsTable()"
+                      onkeydown="if(event.key==='Escape')app.clearTournamentResultsSearch()"
+                      aria-label="Search player or ring"
+                    />
+                    <button
+                      type="button"
+                      id="tournament-results-search-clear"
+                      class="tournament-filter-clear hidden"
+                      onclick="app.clearTournamentResultsSearch()"
+                      aria-label="Clear search"
+                    >
+                      <i class="fas fa-times" aria-hidden="true"></i>
+                    </button>
+                  </div>
+                </div>
               </div>
               <p class="tournament-points-hint">
                 Each lap is ranked by speed (m/min). Points: 1st 10 · 2nd 8 ·
@@ -2425,6 +2458,6 @@
       </div>
     </div>
 
-    <script src="app.js?v=40"></script>
+    <script src="app.js?v=41"></script>
   </body>
 </html>

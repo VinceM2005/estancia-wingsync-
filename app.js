@@ -5231,7 +5231,22 @@ const app = {
       });
   },
 
+  _syncTournamentResultsSearchClear() {
+    const input = document.getElementById("tournament-results-search");
+    const clearBtn = document.getElementById("tournament-results-search-clear");
+    if (clearBtn) {
+      clearBtn.classList.toggle("hidden", !(input?.value || "").trim());
+    }
+  },
+
+  clearTournamentResultsSearch() {
+    const input = document.getElementById("tournament-results-search");
+    if (input) input.value = "";
+    this.filterTournamentResultsTable();
+  },
+
   filterTournamentResultsTable() {
+    this._syncTournamentResultsSearchClear();
     const payload = this._tournamentResultsPayload;
     const head = document.getElementById("tournament-results-head");
     const body = document.getElementById("tournament-results-body");
