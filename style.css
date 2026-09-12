@@ -5218,14 +5218,26 @@ img {
     width: 100%;
   }
 
-  .modal-overlay,
-  .clockin-overlay {
+  .modal-overlay {
     padding: max(8px, env(safe-area-inset-top))
       max(8px, env(safe-area-inset-right)) max(8px, env(safe-area-inset-bottom))
       max(8px, env(safe-area-inset-left));
     align-items: flex-end;
   }
-  .clockin-card,
+  .clockin-overlay {
+    padding: max(12px, env(safe-area-inset-top))
+      max(12px, env(safe-area-inset-right)) max(12px, env(safe-area-inset-bottom))
+      max(12px, env(safe-area-inset-left));
+    align-items: center;
+    justify-content: center;
+  }
+  .clockin-card {
+    width: min(100%, 420px);
+    max-width: calc(100vw - 24px);
+    max-height: min(86dvh, 86vh);
+    margin: 0 auto;
+    border-radius: 16px;
+  }
   .modal-content {
     width: 100%;
     max-width: 100%;
