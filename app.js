@@ -8566,6 +8566,43 @@ if ("serviceWorker" in navigator) {
 
 window.app = app;
 
+(function attachClockInSuccessFeedback() {
+  app._playClockInSuccessFeedback = function () {
+    try {
+      if (typeof navigator.vibrate === "function") {
+        navigator.vibrate(80);
+      }
+    } catch (_) {}
+    try {
+      const AudioCtx = window.AudioContext || window.webkitAudioContext;
+      if (!AudioCtx) return;
+      const ctx = new AudioCtx();
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.type = "sine";
+      osc.frequency.value = 880;
+      gain.gain.setValueAtTime(0.07, ctx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.14);
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.start();
+      osc.stop(ctx.currentTime + 0.15);
+      osc.onended = function () {
+        try {
+          ctx.close();
+        } catch (_) {}
+      };
+    } catch (_) {}
+  };
+
+  const origSuccess = app.showClockInSuccessModal.bind(app);
+  app.showClockInSuccessModal = function (data) {
+    const modal = origSuccess(data);
+    app._playClockInSuccessFeedback();
+    return modal;
+  };
+})();
+
 (function attachTournamentCertificates() {
   const origRender = app._renderCertificateDetail.bind(app);
   app._renderCertificateDetail = function (cert) {
