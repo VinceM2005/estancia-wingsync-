@@ -8865,14 +8865,15 @@ window.app = app;
       : ringNumber;
     const ownerName = (
       cert.playerName ||
-      (typeof cert.playerId === "object" && cert.playerId?.name) ||
+      (typeof cert.playerId === "object" && (cert.playerId?.name || cert.playerId?.username)) ||
+      cert.ownerName ||
       ""
-    ).trim() || "—";
+    ).toString().trim() || "—";
     const tournamentName =
       cert.tournamentName || cert.eventId?.name || "Tournament";
     const speed = formatSpeedMpm(cert.speed);
     const points = Number(cert.points) || 0;
-    const rankBanner = app._tournamentRankBanner(cert.rank);
+    const rankBanner = `${app._tournamentRankBanner(cert.rank)} PLACE`;
     const issueDate = new Date(cert.issueDate);
     const formattedDate = issueDate.toLocaleDateString("en-PH", {
       year: "numeric",
@@ -8942,7 +8943,7 @@ window.app = app;
                 <p class="tcert-name">${esc(pigeonDisplay)}</p>
                 <div class="tcert-rank-row">
                   <span class="tcert-won">has won</span>
-                  <span class="tcert-banner">${esc(rankBanner)}</span>
+                  <span class="tcert-rank">${esc(rankBanner)}</span>
                   <span class="tcert-won">overall in</span>
                 </div>
                 <p class="tcert-event">${esc(tournamentName)}</p>
