@@ -2416,6 +2416,28 @@ tr:hover td {
   overflow: hidden;
 }
 
+.cert-frame::before {
+  content: "";
+  position: absolute;
+  left: 50%;
+  top: 52%;
+  width: min(46%, 340px);
+  height: min(68%, 340px);
+  transform: translate(-50%, -50%);
+  background: url("mrpc-seal.png") center / contain no-repeat;
+  opacity: 0.13;
+  mix-blend-mode: multiply;
+  pointer-events: none;
+  z-index: 0;
+  -webkit-print-color-adjust: exact;
+  print-color-adjust: exact;
+}
+
+.cert-frame > * {
+  position: relative;
+  z-index: 1;
+}
+
 .cert-corner {
   position: absolute;
   width: 72px;
