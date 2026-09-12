@@ -2421,11 +2421,11 @@ tr:hover td {
   position: absolute;
   left: 50%;
   top: 52%;
-  width: min(46%, 340px);
-  height: min(68%, 340px);
+  width: min(58%, 430px);
+  height: min(82%, 430px);
   transform: translate(-50%, -50%);
   background: url("mrpc-seal.png") center / contain no-repeat;
-  opacity: 0.13;
+  opacity: 0.07;
   mix-blend-mode: multiply;
   pointer-events: none;
   z-index: 0;
@@ -3019,7 +3019,7 @@ tr:hover td {
   display: flex;
   align-items: baseline;
   justify-content: center;
-  gap: 8px;
+  gap: 6px;
   flex-wrap: wrap;
   margin: 10px 8%;
 }
@@ -3032,16 +3032,17 @@ tr:hover td {
   box-shadow: none;
   font-family: Cinzel, "Times New Roman", serif;
   font-weight: 700;
-  font-size: clamp(16px, 2.1vw, 24px);
-  letter-spacing: 0.16em;
+  font-size: clamp(15px, 2vw, 22px);
+  letter-spacing: 0.04em;
   color: #8a6d2e;
-  text-transform: uppercase;
+  text-transform: none;
 }
 .tcert-stats {
   font-family: "Libre Baskerville", serif;
   font-size: 13px;
   color: #1a2420;
-  margin-top: 8px;
+  margin: 10px 8% 0;
+  line-height: 1.55;
 }
 .tcert-stats strong {
   color: #0a3d30;
@@ -3109,6 +3110,7 @@ tr:hover td {
   color: #8a6d2e;
   background: none;
   border: none;
+  text-transform: none;
 }
 [data-theme="dark"] .tcert-bred-name,
 [data-theme="dark"] .tcert-name,

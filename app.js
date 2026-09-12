@@ -8641,6 +8641,82 @@ window.app = app;
     return `${n}TH`;
   };
 
+  app._tournamentPlaceOverall = function (rank) {
+    const n = Number(rank) || 0;
+    const j = n % 10;
+    const k = n % 100;
+    let suffix = "th";
+    if (j === 1 && k !== 11) suffix = "st";
+    else if (j === 2 && k !== 12) suffix = "nd";
+    else if (j === 3 && k !== 13) suffix = "rd";
+    return `${n}${suffix} Place Overall`;
+  };
+
+  app._tournamentCertStatsHtml = function (esc, averageSpeed, distanceKm, points) {
+    const avg =
+      averageSpeed == null || !Number.isFinite(Number(averageSpeed))
+        ? "—"
+        : formatSpeedMpm(averageSpeed);
+    const dist =
+      distanceKm == null || !Number.isFinite(Number(distanceKm))
+        ? "—"
+        : formatDistanceKm(distanceKm);
+    const pts =
+      points == null || !Number.isFinite(Number(points))
+        ? "—"
+        : String(Number(points));
+    return `with an average speed of <strong>${esc(avg)}</strong> m/min<br>covering a total race distance of <strong>${esc(dist)}</strong> km and earned <strong>${esc(pts)}</strong> points.`;
+  };
+
+  app._matchTournamentCertMetrics = function (cert, rows) {
+    const list = Array.isArray(rows) ? rows : [];
+    const ring = String(
+      cert.ringNumber || cert.pigeonId?.ringNumber || "",
+    )
+      .trim()
+      .toLowerCase();
+    const pid = String(
+      (cert.pigeonId && typeof cert.pigeonId === "object"
+        ? cert.pigeonId._id
+        : cert.pigeonId) || "",
+    );
+    return (
+      list.find(
+        (row) =>
+          ring &&
+          String(row.ringNumber || "")
+            .trim()
+            .toLowerCase() === ring,
+      ) ||
+      list.find((row) => pid && String(row.pigeonId || "") === pid) ||
+      list.find((row) => Number(row.rank) === Number(cert.rank)) ||
+      null
+    );
+  };
+
+  app._fillTournamentCertificateStats = async function (cert, container) {
+    const statsEl = container?.querySelector(".tcert-stats");
+    if (!statsEl || !cert?.tournamentId) return;
+    try {
+      const res = await fetchWithAuth(
+        `${API_URL}/tournaments/${encodeURIComponent(cert.tournamentId)}/certificate-metrics`,
+      );
+      if (!res.ok) return;
+      const data = await res.json();
+      const row = app._matchTournamentCertMetrics(cert, data.rows);
+      if (!row) return;
+      const esc = (s) => app._escapeCertHtml(s);
+      statsEl.innerHTML = app._tournamentCertStatsHtml(
+        esc,
+        row.averageSpeed,
+        row.totalDistance,
+        row.points,
+      );
+    } catch (err) {
+      console.error("Failed to load tournament certificate stats:", err);
+    }
+  };
+
   app.populateAdminCertTournamentFilter = async function () {
     const select = document.getElementById("admin-cert-tournament-filter");
     if (!select) return;
@@ -8871,9 +8947,20 @@ window.app = app;
     ).toString().trim() || "—";
     const tournamentName =
       cert.tournamentName || cert.eventId?.name || "Tournament";
-    const speed = formatSpeedMpm(cert.speed);
     const points = Number(cert.points) || 0;
-    const rankBanner = `${app._tournamentRankBanner(cert.rank)} PLACE`;
+    const lapCount = Number(cert.lapCount) || 0;
+    const totalSpeed = Number(cert.speed);
+    const storedAvg =
+      lapCount > 0 && Number.isFinite(totalSpeed)
+        ? totalSpeed / lapCount
+        : null;
+    const storedDistance = Number(cert.distance);
+    const averageSpeed = storedAvg;
+    const totalDistance =
+      Number.isFinite(storedDistance) && storedDistance > 0
+        ? storedDistance
+        : null;
+    const rankBanner = app._tournamentPlaceOverall(cert.rank);
     const issueDate = new Date(cert.issueDate);
     const formattedDate = issueDate.toLocaleDateString("en-PH", {
       year: "numeric",
@@ -8942,15 +9029,12 @@ window.app = app;
                 <p class="tcert-intro">This is to certify that</p>
                 <p class="tcert-name">${esc(pigeonDisplay)}</p>
                 <div class="tcert-rank-row">
-                  <span class="tcert-won">has won</span>
+                  <span class="tcert-won">has achieved</span>
                   <span class="tcert-rank">${esc(rankBanner)}</span>
-                  <span class="tcert-won">overall in</span>
+                  <span class="tcert-won">in</span>
                 </div>
                 <p class="tcert-event">${esc(tournamentName)}</p>
-                <p class="tcert-stats">
-                  with a total speed of <strong>${esc(speed)}</strong> m/min
-                  and earned <strong>${esc(String(points))}</strong> points.
-                </p>
+                <p class="tcert-stats">${app._tournamentCertStatsHtml(esc, averageSpeed, totalDistance, points)}</p>
               </div>
             </div>
             <div class="tcert-bred">
@@ -8985,6 +9069,9 @@ window.app = app;
     if (logoImg) {
       if (logoImg.complete) app._processCertLogoImg(logoImg);
       else logoImg.onload = () => app._processCertLogoImg(logoImg);
+    }
+    if (!(lapCount > 0 && totalDistance != null)) {
+      app._fillTournamentCertificateStats(cert, container);
     }
     if (app.currentUser?.role === "admin") {
       const actionsDiv = document.createElement("div");

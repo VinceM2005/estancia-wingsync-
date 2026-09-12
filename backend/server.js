@@ -384,6 +384,7 @@ const CertificateSchema = new mongoose.Schema({
   nickname: { type: String, default: "" },
   avatarId: { type: String, default: "" },
   tournamentName: { type: String, default: "" },
+  lapCount: { type: Number, default: 0 },
 });
 CertificateSchema.index({ playerId: 1, eventId: 1 });
 
@@ -2261,7 +2262,11 @@ async function buildTournamentStandingsForCertificates(tournament) {
       const speed = Number(row.speedMPM) || 0;
       const pts =
         idx < TOURNAMENT_LAP_POINTS.length ? TOURNAMENT_LAP_POINTS[idx] : 0;
-      bird.legs[lap.index] = { speedMPM: speed, points: pts };
+      bird.legs[lap.index] = {
+        speedMPM: speed,
+        points: pts,
+        distanceKm: Number(row.distanceKm) || 0,
+      };
       if (!bird.ringNumber) {
         bird.ringNumber = pigeon?.ringNumber || row.ringNumber || "";
       }
@@ -2274,13 +2279,16 @@ async function buildTournamentStandingsForCertificates(tournament) {
     });
   }
   const completedLaps = lapMeta.filter((l) => l.completed);
+  const lapCount = completedLaps.length;
   const standings = Array.from(birds.values()).map((bird) => {
     let points = 0;
     let totalSpeed = 0;
+    let totalDistance = 0;
     completedLaps.forEach((lap) => {
       const cell = bird.legs[lap.index];
       points += cell ? Number(cell.points) || 0 : 0;
       totalSpeed += cell ? Number(cell.speedMPM) || 0 : 0;
+      totalDistance += cell ? Number(cell.distanceKm) || 0 : 0;
     });
     return {
       playerId: bird.playerId,
@@ -2291,6 +2299,9 @@ async function buildTournamentStandingsForCertificates(tournament) {
       avatarId: bird.avatarId || "",
       points,
       totalSpeed,
+      totalDistance,
+      lapCount,
+      averageSpeed: lapCount > 0 ? totalSpeed / lapCount : 0,
     };
   });
   standings.sort((a, b) => {
@@ -2300,6 +2311,33 @@ async function buildTournamentStandingsForCertificates(tournament) {
   });
   return standings.map((row, i) => ({ ...row, rank: i + 1 }));
 }
+
+app.get("/api/tournaments/:code/certificate-metrics", async (req, res) => {
+  try {
+    const tournament = await Tournament.findOne({
+      code: req.params.code,
+    }).lean();
+    if (!tournament) {
+      return res.status(404).json({ error: "Tournament not found" });
+    }
+    const standings = await buildTournamentStandingsForCertificates(tournament);
+    res.json({
+      rows: standings.map((row) => ({
+        pigeonId: row.pigeonId,
+        ringNumber: row.ringNumber,
+        rank: row.rank,
+        points: Number(row.points) || 0,
+        lapCount: Number(row.lapCount) || 0,
+        totalSpeed: roundRace(row.totalSpeed) || 0,
+        totalDistance: roundRace(row.totalDistance) || 0,
+        averageSpeed: roundRace(row.averageSpeed) || 0,
+      })),
+    });
+  } catch (error) {
+    console.error("Tournament certificate metrics error:", error);
+    res.status(500).json({ error: "An internal error occurred." });
+  }
+});
 
 app.get("/api/tournaments", async (req, res) => {
   try {
@@ -4166,12 +4204,13 @@ app.post(
           pigeonId,
           rank: row.rank,
           speed: roundRace(row.totalSpeed) || 0,
-          distance: 0,
+          distance: roundRace(row.totalDistance) || 0,
           issueDate: new Date(),
           qrHash,
           kind: "tournament",
           tournamentId: tournament.code,
           points: Number(row.points) || 0,
+          lapCount: Number(row.lapCount) || 0,
           playerName: row.playerName || "",
           ringNumber: row.ringNumber || "",
           nickname: row.nickname || "",
