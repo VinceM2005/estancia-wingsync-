@@ -3057,6 +3057,17 @@ const app = {
       .then((res) => res.json())
       .then((data) => {
         if (data.error) {
+          if (data.code === "ALREADY_CLOCKED") {
+            this.showModal({
+              title: "Pigeon Already Clocked",
+              message:
+                data.error ||
+                "This pigeon is already clocked. The sticker has already been used.",
+              icon: "ℹ️",
+              iconColor: "#1f6f8b",
+            });
+            return;
+          }
           this.showModal({
             title: "Clock In Failed",
             message: data.error,

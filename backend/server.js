@@ -1282,8 +1282,19 @@ app.post(
         { returnDocument: "after", session },
       );
       if (!raceCode) {
+        const existingCode = await RaceCode.findOne({ code: eventCode })
+          .select("status pigeonId userId eventId usedAt")
+          .session(session)
+          .lean();
         await session.abortTransaction();
         session.endSession();
+        if (existingCode && existingCode.status === "used") {
+          return res.status(409).json({
+            code: "ALREADY_CLOCKED",
+            error:
+              "This pigeon is already clocked. The sticker has already been used.",
+          });
+        }
         return res
           .status(400)
           .json({ error: "Invalid or already used race code." });
