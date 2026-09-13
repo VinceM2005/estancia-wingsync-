@@ -2783,28 +2783,33 @@ tr:hover td {
 
 .cert-signed {
   display: flex;
-  flex-direction: column-reverse;
+  flex-direction: column;
+  align-items: flex-start;
   text-align: left;
-  max-width: 190px;
+  width: max-content;
+  max-width: 100%;
   justify-self: start;
   align-self: end;
   margin: 0;
   padding: 0;
 }
 .cert-signed-date {
+  display: inline-block;
+  width: max-content;
+  max-width: 100%;
   font-family: "Libre Baskerville", Georgia, serif;
   font-size: clamp(10px, 1.05vw, 13px);
   font-weight: 700;
   color: var(--cert-ink);
-  border-bottom: none;
-  border-top: 1px solid rgba(40, 40, 40, 0.45);
-  padding: 3px 0 0;
+  border-top: none;
+  border-bottom: 1px solid rgba(40, 40, 40, 0.5);
+  padding: 0 1px 2px;
   min-height: 0;
   line-height: 1.25;
   white-space: nowrap;
 }
 .cert-signed-label {
-  margin: 0 0 2px;
+  margin: 4px 0 0;
   font-size: clamp(8px, 0.85vw, 11px);
   color: #444;
   font-family: "Libre Baskerville", Georgia, serif;
@@ -3090,9 +3095,11 @@ tr:hover td {
 }
 .tcert-footer > div:first-child {
   display: flex;
-  flex-direction: column-reverse;
+  flex-direction: column;
+  align-items: flex-start;
   text-align: left;
-  max-width: 190px;
+  width: max-content;
+  max-width: 100%;
   justify-self: start;
   align-self: end;
 }
