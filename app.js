@@ -9091,6 +9091,40 @@ window.app = app;
   };
 })();
 
+(function attachCertificatePdfA4Fit() {
+  const origCanvasToPdf = app._canvasToPDF.bind(app);
+  app._canvasToPDF = function (canvas) {
+    const { jsPDF } = window.jspdf;
+    if (!jsPDF || !canvas) return origCanvasToPdf(canvas);
+    const imgData = canvas.toDataURL("image/png");
+    const doc = new jsPDF({
+      orientation: "landscape",
+      unit: "mm",
+      format: "a4",
+    });
+    const pageWidth = doc.internal.pageSize.getWidth();
+    const pageHeight = doc.internal.pageSize.getHeight();
+    const margin = 2.5;
+    const maxW = pageWidth - margin * 2;
+    const maxH = pageHeight - margin * 2;
+    const ratio = Math.min(maxW / canvas.width, maxH / canvas.height);
+    const imgWidth = canvas.width * ratio;
+    const imgHeight = canvas.height * ratio;
+    const x = (pageWidth - imgWidth) / 2;
+    const y = (pageHeight - imgHeight) / 2;
+    doc.addImage(imgData, "PNG", x, y, imgWidth, imgHeight);
+    const cert = this._currentCert;
+    doc.save(`certificate_${cert.certificateNumber}.pdf`);
+    document.getElementById("custom-modal")?.remove();
+    this.showModal({
+      title: "✅ PDF Downloaded",
+      message: `Certificate ${cert.certificateNumber} has been downloaded.`,
+      icon: "✅",
+      iconColor: "#27ae60",
+    });
+  };
+})();
+
 function bootWingsync() {
   // #region agent log
   __wsDbg(
