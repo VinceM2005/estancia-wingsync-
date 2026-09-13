@@ -5687,9 +5687,18 @@ img {
     font-size: 16px;
   }
   .tournament-admin-head,
-  .tournament-lap-item {
+  .tournament-lap-item,
+  .tournament-lap-main {
     flex-direction: column;
     align-items: stretch;
+  }
+  .tournament-lap-manage {
+    margin-left: 0;
+    width: 100%;
+  }
+  .tournament-lap-manage .btn {
+    width: 100%;
+    justify-content: center;
   }
   .tournament-admin-actions,
   .tournament-lap-actions {
@@ -5861,6 +5870,92 @@ img {
   padding: 8px 0;
   border-bottom: 1px solid var(--border);
   font-size: 13px;
+}
+.tournament-lap-item--managed {
+  flex-direction: column;
+  align-items: stretch;
+  gap: 10px;
+  padding: 12px 0;
+}
+.tournament-lap-main {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+}
+.tournament-lap-race-bar {
+  margin: 0;
+  padding: 12px 14px;
+  gap: 12px 20px;
+}
+.tournament-lap-manage {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+}
+.tournament-registration-hint {
+  display: block;
+  margin-top: 8px;
+  color: var(--text-muted);
+  line-height: 1.45;
+}
+.race-status-badge.draft {
+  background: #eef1f4;
+  color: #4b5563;
+}
+.race-status-badge.registration-open {
+  background: #d4edda;
+  color: #155724;
+}
+.race-status-badge.registration-closed {
+  background: #f8d7da;
+  color: #721c24;
+}
+.race-status-badge.sticker-generated {
+  background: #d6eaf8;
+  color: #1a5276;
+}
+.race-status-badge.ready-for-release {
+  background: #fff3cd;
+  color: #856404;
+}
+.race-status-badge.live-race {
+  background: #d4edda;
+  color: #155724;
+}
+.race-status-badge.result-verification {
+  background: #e8daef;
+  color: #5b2c6f;
+}
+.race-status-badge.pdf {
+  background: #eaecef;
+  color: #4b5563;
+}
+[data-theme="dark"] .race-status-badge.draft,
+[data-theme="dark"] .race-status-badge.pdf {
+  background: #2a3038;
+  color: #c5ced8;
+}
+[data-theme="dark"] .race-status-badge.registration-open,
+[data-theme="dark"] .race-status-badge.live-race {
+  background: #1a3a2a;
+  color: #8dd9a0;
+}
+[data-theme="dark"] .race-status-badge.registration-closed {
+  background: #3a1a1a;
+  color: #f5a0a0;
+}
+[data-theme="dark"] .race-status-badge.sticker-generated {
+  background: #163044;
+  color: #8ec8ef;
+}
+[data-theme="dark"] .race-status-badge.ready-for-release {
+  background: #3a331a;
+  color: #f5d98a;
+}
+[data-theme="dark"] .race-status-badge.result-verification {
+  background: #2e1a38;
+  color: #d7b0e8;
 }
 .tournament-lap-item:last-child {
   border-bottom: none;

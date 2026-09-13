@@ -8,7 +8,7 @@
     />
     <title>Wingsync - Pigeon Clocking System</title>
     <link rel="manifest" href="manifest.json" />
-    <link rel="stylesheet" href="style.css?v=55" />
+    <link rel="stylesheet" href="style.css?v=56" />
     <meta name="theme-color" content="#2a7a62" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="mobile-web-app-capable" content="yes" />
@@ -1529,7 +1529,10 @@
                 Import a lap from an Event Results PDF. Tournament standings use
                 the player, ring, and speed values <strong>inside that file</strong>,
                 including edits you made. They are not taken from Event ID or
-                live clock-ins.
+                live clock-ins. Live laps use Manage Registration the same way
+                as events: Draft → Registration Open is manual, then the
+                deadline, stickers, Ready for Release, and Live Race update
+                automatically.
               </p>
               <input
                 type="file"
@@ -2417,6 +2420,47 @@
       </div>
     </div>
 
+    <!-- Manage Tournament Lap Registration Modal (Admin) -->
+    <div id="modal-manage-tournament-registration" class="modal-overlay">
+      <div class="modal-content" style="max-width: 500px">
+        <div class="modal-header">
+          <h3><i class="fas fa-sliders-h"></i> Manage Registration</h3>
+          <button
+            class="close-modal"
+            onclick="app.closeManageTournamentRegistrationModal()"
+          >
+            <i class="fas fa-times"></i>
+          </button>
+        </div>
+        <input type="hidden" id="manage-tournament-event-code" />
+        <p class="tournament-attach-hint" id="manage-tournament-lap-meta">—</p>
+        <div class="form-group">
+          <label>Lap State</label>
+          <select id="manage-tournament-state-select" class="form-control">
+            <option value="Draft">Draft</option>
+            <option value="Registration Open">Registration Open</option>
+            <option value="Registration Closed">Registration Closed</option>
+            <option value="Sticker Generated">Sticker Generated</option>
+            <option value="Ready for Release">Ready for Release</option>
+            <option value="Live Race">Live Race</option>
+            <option value="Result Verification">Result Verification</option>
+          </select>
+          <small class="tournament-registration-hint">
+            Draft → Registration Open is set here. Registration Closed happens
+            when the deadline is reached. Sticker Generated, Ready for Release,
+            and Live Race update automatically from the race clock.
+          </small>
+        </div>
+        <button
+          class="btn btn-success"
+          style="width: 100%"
+          onclick="app.saveTournamentRegistrationSettings()"
+        >
+          <i class="fas fa-save"></i> Save Settings
+        </button>
+      </div>
+    </div>
+
     <!-- ===== PIGEON MODAL (UPDATED with Avatar Selector) ===== -->
     <div id="modal-pigeon" class="modal-overlay">
       <div class="modal-content" style="max-width: 560px">
@@ -2652,7 +2696,7 @@
     </script>
     <!-- #endregion -->
     <script
-      src="app.js?v=56"
+      src="app.js?v=57"
       onerror="fetch('http://127.0.0.1:7494/ingest/ea5b293e-e31b-435b-a70b-697b12b82dad',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'ac65a1'},body:JSON.stringify({sessionId:'ac65a1',runId:'pre-fix',hypothesisId:'A',location:'index.html:appjs',message:'app.js failed to load',data:{},timestamp:Date.now()})}).catch(function(){})"
     ></script>
     <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>

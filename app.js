@@ -5127,49 +5127,40 @@ const app = {
     if (!wrap) return;
     wrap.innerHTML = "<p style=\"color: var(--text-muted)\">Loading tournaments...</p>";
     this._bindTournamentPdfImport();
-    fetchWithAuth(`${API_URL}/tournaments`)
-      .then((res) => res.json())
-      .then((list) => {
-        if (!Array.isArray(list) || list.length === 0) {
-          wrap.innerHTML =
-            "<p style=\"color: var(--text-muted)\">No tournaments yet. Create one to add laps.</p>";
-          return;
-        }
-        wrap.innerHTML = list
-          .map((t) => {
-            const laps = (t.laps || [])
-              .slice()
-              .sort((a, b) => a.index - b.index);
-            const nameEnc = encodeURIComponent(t.name || "");
-            const remarksEnc = encodeURIComponent(t.remarks || "");
-            const lapRows = laps.length
-              ? `<ul class="tournament-lap-list">${laps
-                  .map((l) => {
-                    const tCode = this._escapeCertHtml(t.code);
-                    const eCode = this._escapeCertHtml(l.eventCode);
-                    const source = l.source === "pdf" ? "pdf" : "event";
-                    const labelEnc = encodeURIComponent(l.label || "");
-                    const birdCount = Array.isArray(l.importedRows)
-                      ? l.importedRows.length
-                      : 0;
-                    const pdfNote =
-                      source === "pdf"
-                        ? ` · PDF ${this._escapeCertHtml(l.importedFileName || "import")} (${birdCount} birds)`
-                        : "";
-                    return `<li class="tournament-lap-item">
-                      <div>
-                        Lap ${l.index} — ${this._escapeCertHtml(l.label)}
-                        <span class="tournament-lap-code">${source === "pdf" ? pdfNote : eCode}</span>
-                      </div>
-                      <div class="tournament-lap-actions">
-                        <button class="btn btn-sm btn-secondary" onclick="app.openEditLapModal('${tCode}', '${eCode}', decodeURIComponent('${labelEnc}'), decodeURIComponent('${nameEnc}'), '${source}')">Edit Attachment</button>
-                        <button class="btn btn-sm btn-danger" onclick="app.deleteTournamentLap('${tCode}', '${eCode}', decodeURIComponent('${labelEnc}'))">Delete Attachment</button>
-                      </div>
-                    </li>`;
-                  })
-                  .join("")}</ul>`
-              : `<p class="tournament-lap-empty">No laps yet.</p>`;
-            return `<div class="tournament-admin-card">
+    Promise.all([
+      fetchWithAuth(`${API_URL}/tournaments`).then((res) => res.json()),
+      fetchWithAuth(`${API_URL}/events/all`)
+        .then((res) => (res.ok ? res.json() : []))
+        .catch(() => []),
+    ])
+      .then(([list, events]) => {
+        this._tournamentEventByCode = {};
+        (Array.isArray(events) ? events : []).forEach((e) => {
+          if (e && e.code) this._tournamentEventByCode[e.code] = e;
+        });
+        wrap.innerHTML = this._adminTournamentListHtml(list);
+      })
+      .catch(() => {
+        wrap.innerHTML =
+          "<p style=\"color: var(--text-muted)\">Unable to load tournaments.</p>";
+      });
+  },
+
+  _adminTournamentListHtml(list) {
+    if (!Array.isArray(list) || list.length === 0) {
+      return "<p style=\"color: var(--text-muted)\">No tournaments yet. Create one to add laps.</p>";
+    }
+    return list
+      .map((t) => {
+        const laps = (t.laps || []).slice().sort((a, b) => a.index - b.index);
+        const nameEnc = encodeURIComponent(t.name || "");
+        const remarksEnc = encodeURIComponent(t.remarks || "");
+        const lapRows = laps.length
+          ? `<ul class="tournament-lap-list">${laps
+              .map((l) => this._adminTournamentLapRowHtml(t, l, nameEnc))
+              .join("")}</ul>`
+          : `<p class="tournament-lap-empty">No laps yet.</p>`;
+        return `<div class="tournament-admin-card">
               <div class="tournament-admin-head">
                 <div>
                   <h3>${this._escapeCertHtml(t.name)}</h3>
@@ -5185,12 +5176,178 @@ const app = {
               </div>
               ${lapRows}
             </div>`;
-          })
-          .join("");
+      })
+      .join("");
+  },
+
+  _tournamentLapStateSlug(state) {
+    return String(state || "Draft")
+      .toLowerCase()
+      .replace(/\s+/g, "-");
+  },
+
+  _adminTournamentLapRowHtml(tournament, lap, nameEnc) {
+    const tCode = this._escapeCertHtml(tournament.code);
+    const eCode = this._escapeCertHtml(lap.eventCode);
+    const source = lap.source === "pdf" ? "pdf" : "event";
+    const labelEnc = encodeURIComponent(lap.label || "");
+    const birdCount = Array.isArray(lap.importedRows)
+      ? lap.importedRows.length
+      : 0;
+    const pdfNote =
+      source === "pdf"
+        ? ` · PDF ${this._escapeCertHtml(lap.importedFileName || "import")} (${birdCount} birds)`
+        : "";
+    const actions = `<div class="tournament-lap-actions">
+                        <button class="btn btn-sm btn-secondary" onclick="app.openEditLapModal('${tCode}', '${eCode}', decodeURIComponent('${labelEnc}'), decodeURIComponent('${nameEnc}'), '${source}')">Edit Attachment</button>
+                        <button class="btn btn-sm btn-danger" onclick="app.deleteTournamentLap('${tCode}', '${eCode}', decodeURIComponent('${labelEnc}'))">Delete Attachment</button>
+                      </div>`;
+    if (source === "pdf") {
+      return `<li class="tournament-lap-item tournament-lap-item--managed">
+                      <div class="tournament-lap-main">
+                        <div>
+                          Lap ${lap.index} — ${this._escapeCertHtml(lap.label)}
+                          <span class="tournament-lap-code">${pdfNote}</span>
+                        </div>
+                        ${actions}
+                      </div>
+                      <div class="race-info-bar tournament-lap-race-bar">
+                        <div class="race-info-item">
+                          <span class="race-info-label">📌 Status</span>
+                          <span class="race-status-badge pdf">PDF Results</span>
+                        </div>
+                        <div class="race-info-item">
+                          <span class="race-info-label">Standings</span>
+                          <span class="race-info-value">${birdCount} birds from file</span>
+                        </div>
+                      </div>
+                    </li>`;
+    }
+    const event = (this._tournamentEventByCode || {})[lap.eventCode] || {};
+    const state = event.state || event.status || "Draft";
+    const release = event.releaseTime
+      ? new Date(event.releaseTime).toLocaleString()
+      : "—";
+    const deadline = event.registrationDeadline
+      ? new Date(event.registrationDeadline).toLocaleString()
+      : "—";
+    const point =
+      Number.isFinite(Number(event.lat)) && Number.isFinite(Number(event.lng))
+        ? `${Number(event.lat).toFixed(6)}, ${Number(event.lng).toFixed(6)}`
+        : "—";
+    const slug = this._tournamentLapStateSlug(state);
+    return `<li class="tournament-lap-item tournament-lap-item--managed">
+                      <div class="tournament-lap-main">
+                        <div>
+                          Lap ${lap.index} — ${this._escapeCertHtml(lap.label)}
+                          <span class="tournament-lap-code">${eCode}</span>
+                        </div>
+                        ${actions}
+                      </div>
+                      <div class="race-info-bar tournament-lap-race-bar">
+                        <div class="race-info-item">
+                          <span class="race-info-label">🏁 Race</span>
+                          <span class="race-info-value">${this._escapeCertHtml(event.name || lap.label || "—")}</span>
+                        </div>
+                        <div class="race-info-item">
+                          <span class="race-info-label">📍 Release Point</span>
+                          <span class="race-info-value"><span class="coord">${this._escapeCertHtml(point)}</span></span>
+                        </div>
+                        <div class="race-info-item">
+                          <span class="race-info-label">🕐 Release Time</span>
+                          <span class="race-info-value">${this._escapeCertHtml(release)}</span>
+                        </div>
+                        <div class="race-info-item">
+                          <span class="race-info-label">⏳ Registration Deadline</span>
+                          <span class="race-info-value">${this._escapeCertHtml(deadline)}</span>
+                        </div>
+                        <div class="race-info-item">
+                          <span class="race-info-label">📌 Status</span>
+                          <span class="race-status-badge ${this._escapeCertHtml(slug)}">${this._escapeCertHtml(state)}</span>
+                        </div>
+                        <div class="tournament-lap-manage">
+                          <button class="btn btn-sm btn-primary" onclick="app.openManageTournamentRegistrationModal('${eCode}', ${Number(lap.index) || 0}, decodeURIComponent('${labelEnc}'))">⚙️ Manage Registration</button>
+                        </div>
+                      </div>
+                    </li>`;
+  },
+
+  openManageTournamentRegistrationModal(eventCode, lapIndex, lapLabel) {
+    const event =
+      (this._tournamentEventByCode || {})[eventCode] ||
+      (this.eventLookup || {})[eventCode];
+    if (!event) {
+      this.showModal({
+        title: "Error",
+        message: "Lap event not found.",
+        icon: "❌",
+        iconColor: "#c0392b",
+      });
+      return;
+    }
+    document.getElementById("manage-tournament-event-code").value =
+      eventCode || "";
+    document.getElementById("manage-tournament-lap-meta").textContent =
+      `Lap ${lapIndex || event.lapIndex || "—"} · ${lapLabel || event.name || eventCode}`;
+    document.getElementById("manage-tournament-state-select").value =
+      event.state || "Draft";
+    document
+      .getElementById("modal-manage-tournament-registration")
+      .classList.add("show");
+  },
+
+  closeManageTournamentRegistrationModal() {
+    const modal = document.getElementById(
+      "modal-manage-tournament-registration",
+    );
+    if (modal) modal.classList.remove("show");
+  },
+
+  saveTournamentRegistrationSettings() {
+    const eventCode = document.getElementById(
+      "manage-tournament-event-code",
+    ).value;
+    const state = document.getElementById(
+      "manage-tournament-state-select",
+    ).value;
+    fetchWithAuth(
+      `${API_URL}/admin/events/${encodeURIComponent(eventCode)}/registration-settings`,
+      {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ state }),
+      },
+    )
+      .then((res) => res.json())
+      .then((data) => {
+        if (data.success) {
+          this.closeManageTournamentRegistrationModal();
+          this.renderAdminTournaments();
+          this.renderEvents();
+          this.renderDashboard();
+          this.fetchAllEvents(true);
+          this.showModal({
+            title: "✅ Registration Settings Updated",
+            message: `Lap state: ${data.event.state}`,
+            icon: "✅",
+            iconColor: "#27ae60",
+          });
+        } else {
+          this.showModal({
+            title: "Update Failed",
+            message: data.error || "Failed to update registration settings.",
+            icon: "❌",
+            iconColor: "#c0392b",
+          });
+        }
       })
       .catch(() => {
-        wrap.innerHTML =
-          "<p style=\"color: var(--text-muted)\">Unable to load tournaments.</p>";
+        this.showModal({
+          title: "Connection Error",
+          message: "Unable to connect to the server.",
+          icon: "⚠️",
+          iconColor: "#e67e22",
+        });
       });
   },
 
