@@ -1318,7 +1318,7 @@
 
           <!-- ===== TOURNAMENT RESULTS ===== -->
           <div id="view-tournament-results" class="view-section hidden">
-            <div class="card">
+            <div class="card tournament-results-card">
               <div class="dashboard-header">
                 <h2><i class="fas fa-flag-checkered"></i> Tournament Result</h2>
               </div>
@@ -1380,7 +1380,29 @@
                 3rd 6 · 4th 5 · 5th 4 · 6th 3 · 7th 2 · 8th 1. Tournament rank
                 is total points; tied points go to the higher accumulated speed.
               </p>
+              <section
+                class="results-podium tournament-results-podium"
+                id="tournament-results-podium"
+                hidden
+              >
+                <div class="results-podium-header">
+                  <p class="results-podium-kicker">Championship</p>
+                  <h3 class="results-podium-title">Tournament Podium</h3>
+                </div>
+                <div
+                  class="results-podium-board"
+                  id="tournament-results-podium-board"
+                ></div>
+              </section>
               <div class="tournament-table-wrap">
+                <div
+                  class="results-table-heading"
+                  id="tournament-results-table-heading"
+                  hidden
+                >
+                  <p class="results-table-kicker">Standard Rankings</p>
+                  <h3 class="results-table-title">From 4th Place</h3>
+                </div>
                 <table id="tournament-results-table">
                   <thead id="tournament-results-head"></thead>
                   <tbody id="tournament-results-body"></tbody>

@@ -6082,20 +6082,27 @@ const app = {
     const payload = this._tournamentResultsPayload;
     const head = document.getElementById("tournament-results-head");
     const body = document.getElementById("tournament-results-body");
+    const tableHeading = document.getElementById(
+      "tournament-results-table-heading",
+    );
     if (!head || !body) return;
     if (!payload || !Array.isArray(payload.rows)) {
+      this.renderTournamentResultsPodium([], []);
+      if (tableHeading) tableHeading.hidden = true;
       head.innerHTML = "";
       body.innerHTML =
         "<tr><td colspan=\"8\" style=\"text-align:center;color:var(--text-muted);padding:24px\">Select a tournament to view standings.</td></tr>";
       return;
     }
     const completed = (payload.laps || []).filter((l) => l.completed);
+    this.renderTournamentResultsPodium(payload.rows, completed);
     const q = (
       document.getElementById("tournament-results-search")?.value || ""
     )
       .toLowerCase()
       .trim();
-    const rows = payload.rows.filter((r) => {
+    const sourceRows = q ? payload.rows : payload.rows.slice(3);
+    const rows = sourceRows.filter((r) => {
       if (!q) return true;
       return (
         String(r.playerName || "").toLowerCase().includes(q) ||
@@ -6118,9 +6125,19 @@ const app = {
       <th>Total Speed (m/min)</th>
       ${legHeaders}
     </tr>`;
+    if (tableHeading) {
+      tableHeading.hidden = !!q || payload.rows.length <= 3;
+    }
     if (rows.length === 0) {
       const cols = 6 + completed.length;
-      body.innerHTML = `<tr><td colspan="${cols}" style="text-align:center;color:var(--text-muted);padding:24px">No standings yet. Clock-ins on a lap will appear here.</td></tr>`;
+      let emptyMsg =
+        "No standings yet. Clock-ins on a lap will appear here.";
+      if (payload.rows.length > 0) {
+        emptyMsg = q
+          ? "No matching standings."
+          : "Rankings from 4th place will appear here.";
+      }
+      body.innerHTML = `<tr><td colspan="${cols}" class="results-table-rest-empty">${emptyMsg}</td></tr>`;
       return;
     }
     body.innerHTML = rows
@@ -6148,6 +6165,87 @@ const app = {
         </tr>`;
       })
       .join("");
+  },
+
+  renderTournamentResultsPodium(rows, completedLaps) {
+    const section = document.getElementById("tournament-results-podium");
+    const board = document.getElementById("tournament-results-podium-board");
+    if (!section || !board) return;
+
+    const top = Array.isArray(rows) ? rows.slice(0, 3) : [];
+    if (top.length === 0) {
+      section.hidden = true;
+      board.innerHTML = "";
+      board.className = "results-podium-board";
+      return;
+    }
+
+    const places = [
+      { place: "1st", label: "Champion" },
+      { place: "2nd", label: "2nd Place" },
+      { place: "3rd", label: "3rd Place" },
+    ];
+    const laps = Array.isArray(completedLaps) ? completedLaps : [];
+    section.hidden = false;
+    board.className = `results-podium-board podium-count-${top.length}`;
+    board.innerHTML = top
+      .map((row, index) =>
+        this._tournamentPodiumCardHtml(row, index, places[index], laps),
+      )
+      .join("");
+  },
+
+  _tournamentPodiumCardHtml(row, index, meta, completedLaps) {
+    const avatarSize = index === 0 ? 56 : 48;
+    const avatarHTML = row.avatarId
+      ? getPigeonAvatarSVG(row.avatarId, avatarSize)
+      : getDefaultPigeonSVG(avatarSize);
+    const pigeonName = row.nickname || "N/A";
+    const laps = Array.isArray(completedLaps) ? completedLaps : [];
+    const lapCount = Math.max(laps.length, 1);
+    const lapMetrics = laps.length
+      ? laps
+          .map((l) => {
+            const cell = (row.legs || []).find((x) => x.index === l.index);
+            const speed = cell ? Number(cell.speedMPM) || 0 : 0;
+            const label = `Leg ${l.index}`;
+            return `<div>
+              <dt>${this._escapeCertHtml(label)}</dt>
+              <dd>${speed.toFixed(6)} <small>m/min</small></dd>
+            </div>`;
+          })
+          .join("")
+      : `<div>
+          <dt>Laps</dt>
+          <dd>—</dd>
+        </div>`;
+    return `<article class="podium-card podium-card--${index + 1} tournament-podium-card">
+      <div class="podium-card-rank">
+        <span class="podium-card-place">${meta.place}</span>
+        <span class="podium-card-label">${meta.label}</span>
+      </div>
+      <div class="podium-card-identity">
+        <div class="podium-card-avatar">${avatarHTML}</div>
+        <div class="podium-card-who">
+          <div class="podium-card-player">${this._escapeCertHtml(row.playerName || "—")}</div>
+          <div class="podium-card-pigeon">${this._escapeCertHtml(pigeonName)}</div>
+          <div class="podium-card-ring">${this._escapeCertHtml(row.ringNumber || "—")}</div>
+        </div>
+      </div>
+      <dl class="podium-card-metrics tournament-podium-summary">
+        <div>
+          <dt>Points</dt>
+          <dd>${Number(row.points || 0).toFixed(2)}</dd>
+        </div>
+        <div>
+          <dt>Total Speed</dt>
+          <dd>${Number(row.totalSpeed || 0).toFixed(6)} <small>m/min</small></dd>
+        </div>
+      </dl>
+      <dl class="podium-card-metrics tournament-podium-laps lap-count-${lapCount}">
+        ${lapMetrics}
+      </dl>
+    </article>`;
   },
 
   openPlayerModal() {
