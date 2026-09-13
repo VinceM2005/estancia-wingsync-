@@ -5138,11 +5138,21 @@ const app = {
         (Array.isArray(events) ? events : []).forEach((e) => {
           if (e && e.code) this._tournamentEventByCode[e.code] = e;
         });
-        wrap.innerHTML = this._adminTournamentListHtml(list);
+        this._adminTournamentsCache = Array.isArray(list) ? list : [];
+        this._syncTournamentsPagination();
       })
       .catch(() => {
+        this._adminTournamentsCache = [];
         wrap.innerHTML =
           "<p style=\"color: var(--text-muted)\">Unable to load tournaments.</p>";
+        this._renderTablePagination({
+          containerId: "tournaments-pagination",
+          currentPage: 1,
+          totalItems: 0,
+          pageSize: 1,
+          itemLabel: "tournaments",
+          onPageChange: () => {},
+        });
       });
   },
 
@@ -5301,6 +5311,54 @@ const app = {
       "modal-manage-tournament-registration",
     );
     if (modal) modal.classList.remove("show");
+  },
+
+  _syncTournamentsPagination() {
+    const wrap = document.getElementById("admin-tournaments-list");
+    if (!wrap) return;
+    const list = Array.isArray(this._adminTournamentsCache)
+      ? this._adminTournamentsCache
+      : [];
+    const pageSize = 1;
+    const total = list.length;
+    if (!total) {
+      wrap.innerHTML = this._adminTournamentListHtml(list);
+      this._renderTablePagination({
+        containerId: "tournaments-pagination",
+        currentPage: 1,
+        totalItems: 0,
+        pageSize,
+        itemLabel: "tournaments",
+        onPageChange: () => {},
+      });
+      return;
+    }
+    const totalPages = Math.max(1, Math.ceil(total / pageSize));
+    if (!this.tournamentsPage || this.tournamentsPage < 1) {
+      this.tournamentsPage = 1;
+    }
+    if (this.tournamentsPage > totalPages) this.tournamentsPage = totalPages;
+    const start = (this.tournamentsPage - 1) * pageSize;
+    const pageItems = list.slice(start, start + pageSize);
+    wrap.classList.add("table-pagination-fade");
+    wrap.innerHTML = this._adminTournamentListHtml(pageItems);
+    requestAnimationFrame(() => {
+      wrap.classList.remove("table-pagination-fade");
+    });
+    this._renderTablePagination({
+      containerId: "tournaments-pagination",
+      currentPage: this.tournamentsPage,
+      totalItems: total,
+      pageSize,
+      itemLabel: total === 1 ? "tournament" : "tournaments",
+      onPageChange: (page) => {
+        this.tournamentsPage = page;
+        this._syncTournamentsPagination();
+        document
+          .getElementById("admin-tournaments-list")
+          ?.scrollIntoView({ behavior: "smooth", block: "start" });
+      },
+    });
   },
 
   saveTournamentRegistrationSettings() {

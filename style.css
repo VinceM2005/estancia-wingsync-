@@ -4101,6 +4101,14 @@ tr:hover td {
   transition: opacity 0.15s ease;
 }
 
+#admin-tournaments-list.table-pagination-fade {
+  opacity: 0.55;
+}
+
+#admin-tournaments-list {
+  transition: opacity 0.15s ease;
+}
+
 #players-table tbody,
 #admin-events-table tbody {
   transition: opacity 0.15s ease;
