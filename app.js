@@ -5158,7 +5158,7 @@ const app = {
                         : "";
                     return `<li class="tournament-lap-item">
                       <div>
-                        Leg ${l.index} — ${this._escapeCertHtml(l.label)}
+                        Lap ${l.index} — ${this._escapeCertHtml(l.label)}
                         <span class="tournament-lap-code">${source === "pdf" ? pdfNote : eCode}</span>
                       </div>
                       <div class="tournament-lap-actions">
@@ -6110,10 +6110,10 @@ const app = {
         String(r.nickname || "").toLowerCase().includes(q)
       );
     });
-    const legHeaders = completed
+    const lapHeaders = completed
       .map(
         (l) =>
-          `<th>Leg ${l.index} - ${this._escapeCertHtml(l.label)} (${this._escapeCertHtml(l.eventCode)}) (m/min)</th>`,
+          `<th>Lap ${l.index} - ${this._escapeCertHtml(l.label)} (${this._escapeCertHtml(l.eventCode)}) (m/min)</th>`,
       )
       .join("");
     head.innerHTML = `<tr>
@@ -6123,7 +6123,7 @@ const app = {
       <th>Ring Band No</th>
       <th>Points</th>
       <th>Total Speed (m/min)</th>
-      ${legHeaders}
+      ${lapHeaders}
     </tr>`;
     if (tableHeading) {
       tableHeading.hidden = !!q || payload.rows.length <= 3;
@@ -6146,12 +6146,12 @@ const app = {
           ? getPigeonAvatarSVG(r.avatarId, 28)
           : "";
         const pigeonName = r.nickname || "N/A";
-        const legs = completed
+        const laps = completed
           .map((l) => {
             const cell = (r.legs || []).find((x) => x.index === l.index);
             const speed = cell ? Number(cell.speedMPM) || 0 : 0;
-            const legLabel = `Leg ${l.index} (m/min)`;
-            return `<td data-label="${this._escapeCertHtml(legLabel)}">${speed.toFixed(6)}</td>`;
+            const lapLabel = `Lap ${l.index} (m/min)`;
+            return `<td data-label="${this._escapeCertHtml(lapLabel)}">${speed.toFixed(6)}</td>`;
           })
           .join("");
         return `<tr>
@@ -6161,7 +6161,7 @@ const app = {
           <td data-label="Ring Band No">${this._escapeCertHtml(r.ringNumber || "—")}</td>
           <td data-label="Points">${Number(r.points || 0).toFixed(2)}</td>
           <td data-label="Total Speed (m/min)">${Number(r.totalSpeed || 0).toFixed(6)}</td>
-          ${legs}
+          ${laps}
         </tr>`;
       })
       .join("");
@@ -6208,7 +6208,7 @@ const app = {
           .map((l) => {
             const cell = (row.legs || []).find((x) => x.index === l.index);
             const speed = cell ? Number(cell.speedMPM) || 0 : 0;
-            const label = `Leg ${l.index}`;
+            const label = `Lap ${l.index}`;
             return `<div>
               <dt>${this._escapeCertHtml(label)}</dt>
               <dd>${speed.toFixed(6)} <small>m/min</small></dd>
