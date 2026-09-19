@@ -8,7 +8,7 @@
     />
     <title>Wingsync - Pigeon Clocking System</title>
     <link rel="manifest" href="manifest.json" />
-    <link rel="stylesheet" href="style.css?v=57" />
+    <link rel="stylesheet" href="style.css?v=58" />
     <meta name="theme-color" content="#2a7a62" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="mobile-web-app-capable" content="yes" />
@@ -2024,6 +2024,99 @@
       </div>
     </div>
 
+    <!-- Edit Tournament Lap Release Modal -->
+    <div id="modal-edit-tournament-lap" class="modal-overlay">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h3>
+            <i class="fas fa-edit"></i> Edit Release Time &amp; Location
+          </h3>
+          <button
+            class="close-modal"
+            onclick="app.closeEditTournamentLapReleaseModal()"
+          >
+            <i class="fas fa-times"></i>
+          </button>
+        </div>
+        <input type="hidden" id="edit-tournament-lap-event-code" />
+        <p>
+          <strong>Lap:</strong>
+          <span id="edit-tournament-lap-label"></span>
+        </p>
+        <p>
+          <strong>Event:</strong>
+          <span id="edit-tournament-lap-event-name"></span>
+        </p>
+        <p>
+          <strong>Code:</strong>
+          <span id="edit-tournament-lap-event-code-label"></span>
+        </p>
+        <small style="display: block; margin-bottom: 12px; color: #666">
+          Stickers stay the same. Existing clock-ins are recalculated from the
+          new release time and point.
+        </small>
+        <div class="form-group">
+          <label>Release Date &amp; Time</label>
+          <input
+            type="datetime-local"
+            id="edit-tournament-lap-time"
+            class="form-control"
+          />
+        </div>
+        <div class="form-group">
+          <label><i class="fas fa-search"></i> Search Location</label>
+          <input
+            type="text"
+            id="edit-tournament-lap-search-box"
+            class="form-control"
+            placeholder="e.g., Malinao, Albay"
+          />
+        </div>
+        <div class="form-group">
+          <label>Pinpoint Release Location on Map</label>
+          <div id="edit-tournament-lap-map" class="map-container"></div>
+          <small
+            ><i class="fas fa-location-dot"></i> Coordinates:
+            <span id="edit-tournament-lap-coords-text">None selected</span></small
+          >
+          <div
+            style="display: flex; gap: 8px; margin-top: 6px; flex-wrap: wrap"
+          >
+            <button
+              class="btn btn-sm btn-primary"
+              onclick="app.getEditTournamentLapLocation()"
+              style="font-size: 12px"
+            >
+              <i class="fas fa-location-dot"></i> Use My Location
+            </button>
+            <small
+              style="
+                color: #888;
+                font-size: 11px;
+                display: flex;
+                align-items: center;
+              "
+              >Click map to set exact point • Drag marker to adjust</small
+            >
+          </div>
+        </div>
+        <button
+          class="btn btn-success"
+          style="width: 100%"
+          onclick="app.saveEditTournamentLapRelease()"
+        >
+          <i class="fas fa-save"></i> Save Release Changes
+        </button>
+        <button
+          class="btn btn-secondary"
+          style="width: 100%; margin-top: 8px"
+          onclick="app.closeEditTournamentLapReleaseModal()"
+        >
+          Cancel
+        </button>
+      </div>
+    </div>
+
     <!-- Create / Edit Tournament Modal -->
     <div id="modal-tournament" class="modal-overlay">
       <div class="modal-content" style="max-width: 480px">
@@ -2701,7 +2794,7 @@
     </script>
     <!-- #endregion -->
     <script
-      src="app.js?v=58"
+      src="app.js?v=59"
       onerror="fetch('http://127.0.0.1:7494/ingest/ea5b293e-e31b-435b-a70b-697b12b82dad',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'ac65a1'},body:JSON.stringify({sessionId:'ac65a1',runId:'pre-fix',hypothesisId:'A',location:'index.html:appjs',message:'app.js failed to load',data:{},timestamp:Date.now()})}).catch(function(){})"
     ></script>
     <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>

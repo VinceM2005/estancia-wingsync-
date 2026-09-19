@@ -756,6 +756,134 @@ function createEditEventMap(retries = 0) {
   return map;
 }
 
+let editTournamentLapMap, editTournamentLapMarker;
+let selectedEditTournamentLapLat = null,
+  selectedEditTournamentLapLng = null;
+
+function destroyEditTournamentLapMap() {
+  if (editTournamentLapMarker) {
+    editTournamentLapMarker.setMap(null);
+    editTournamentLapMarker = null;
+  }
+  if (editTournamentLapMap) {
+    const container = document.getElementById("edit-tournament-lap-map");
+    if (container) container.innerHTML = "";
+    editTournamentLapMap = null;
+  }
+  selectedEditTournamentLapLat = null;
+  selectedEditTournamentLapLng = null;
+}
+
+function setEditTournamentLapMarker(lat, lng, map, place = null) {
+  if (lat < -90 || lat > 90 || lng < -180 || lng > 180) {
+    app.showModal({
+      title: "Invalid Location",
+      message: "Please select a valid location on the map.",
+      icon: "⚠️",
+      iconColor: "#e67e22",
+    });
+    return;
+  }
+  if (editTournamentLapMarker) editTournamentLapMarker.setMap(null);
+  const marker = new google.maps.Marker({
+    position: new google.maps.LatLng(lat, lng),
+    map,
+    draggable: true,
+    animation: google.maps.Animation.DROP,
+    title: place ? place.name : "Selected Location",
+  });
+  const coordsEl = document.getElementById("edit-tournament-lap-coords-text");
+  if (coordsEl) coordsEl.innerText = `${lat.toFixed(6)}, ${lng.toFixed(6)}`;
+  selectedEditTournamentLapLat = lat;
+  selectedEditTournamentLapLng = lng;
+  editTournamentLapMarker = marker;
+  marker.addListener("dragend", function () {
+    const pos = marker.getPosition();
+    const newLat = parseFloat(pos.lat().toFixed(6));
+    const newLng = parseFloat(pos.lng().toFixed(6));
+    selectedEditTournamentLapLat = newLat;
+    selectedEditTournamentLapLng = newLng;
+    if (coordsEl)
+      coordsEl.innerText = `${newLat.toFixed(6)}, ${newLng.toFixed(6)}`;
+  });
+}
+
+function createEditTournamentLapMap(retries = 0) {
+  if (typeof google === "undefined" || typeof google.maps === "undefined") {
+    if (retries < 10)
+      setTimeout(() => createEditTournamentLapMap(retries + 1), 500);
+    return;
+  }
+  if (typeof google.maps.places === "undefined") {
+    if (retries < 10) {
+      if (typeof google.maps.importLibrary === "function") {
+        google.maps.importLibrary("places").catch(() => {});
+      }
+      setTimeout(() => createEditTournamentLapMap(retries + 1), 400);
+    }
+    return;
+  }
+  const mapElement = document.getElementById("edit-tournament-lap-map");
+  if (!mapElement) return;
+  if (editTournamentLapMap) {
+    google.maps.event.trigger(editTournamentLapMap, "resize");
+    return editTournamentLapMap;
+  }
+  const rect = mapElement.getBoundingClientRect();
+  if (rect.height === 0 && retries < 5) {
+    setTimeout(() => createEditTournamentLapMap(retries + 1), 300);
+    return;
+  }
+  if (rect.height === 0) mapElement.style.height = "400px";
+  const centerLat =
+    selectedEditTournamentLapLat != null
+      ? selectedEditTournamentLapLat
+      : defaultLat;
+  const centerLng =
+    selectedEditTournamentLapLng != null
+      ? selectedEditTournamentLapLng
+      : defaultLng;
+  const map = new google.maps.Map(mapElement, {
+    center: { lat: centerLat, lng: centerLng },
+    zoom: 15,
+    mapTypeId: google.maps.MapTypeId.HYBRID,
+    mapTypeControl: true,
+    clickableIcons: false,
+  });
+  editTournamentLapMap = map;
+  const searchBox = document.getElementById("edit-tournament-lap-search-box");
+  if (searchBox) {
+    try {
+      const autocomplete = new google.maps.places.Autocomplete(searchBox, {
+        fields: ["geometry", "name", "formatted_address"],
+      });
+      autocomplete.bindTo("bounds", map);
+      autocomplete.addListener("place_changed", function () {
+        const place = autocomplete.getPlace();
+        hidePlaceDropdowns();
+        if (!place.geometry || !place.geometry.location) return;
+        const lat = parseFloat(place.geometry.location.lat().toFixed(6));
+        const lng = parseFloat(place.geometry.location.lng().toFixed(6));
+        map.setCenter({ lat, lng });
+        map.setZoom(17);
+        setEditTournamentLapMarker(lat, lng, map, place);
+      });
+    } catch (err) {
+      console.warn("Places search widget failed:", err);
+    }
+  }
+  map.addListener("click", function (event) {
+    hidePlaceDropdowns();
+    setEditTournamentLapMarker(
+      parseFloat(event.latLng.lat().toFixed(6)),
+      parseFloat(event.latLng.lng().toFixed(6)),
+      map,
+    );
+  });
+  setTimeout(() => google.maps.event.trigger(map, "resize"), 300);
+  return map;
+}
+
 let lapEventMap, lapEventMarker;
 let selectedLapEventLat = null,
   selectedLapEventLng = null;
@@ -5177,6 +5305,7 @@ const app = {
                   <p>${this._escapeCertHtml(t.remarks || "")} · ${this._escapeCertHtml(t.code)}</p>
                 </div>
                 <div class="tournament-admin-actions">
+                  <button class="btn btn-sm btn-secondary admin-export-pdf-btn" onclick="app.exportTournamentResultsPDF('${this._escapeCertHtml(t.code)}', this)"><i class="fas fa-file-pdf"></i> Export PDF</button>
                   <button class="btn btn-sm btn-secondary" onclick="app.openImportTournamentPdf('${this._escapeCertHtml(t.code)}', decodeURIComponent('${nameEnc}'))"><i class="fas fa-file-pdf"></i> Import PDF</button>
                   <button class="btn btn-sm btn-secondary" onclick="app.openAttachLapModal('${this._escapeCertHtml(t.code)}', decodeURIComponent('${nameEnc}'))">Attach Event</button>
                   <button class="btn btn-sm btn-primary" onclick="app.openAddLapModal('${this._escapeCertHtml(t.code)}', decodeURIComponent('${nameEnc}'))">Add Lap</button>
@@ -5208,10 +5337,14 @@ const app = {
       source === "pdf"
         ? ` · PDF ${this._escapeCertHtml(lap.importedFileName || "import")} (${birdCount} birds)`
         : "";
-    const actions = `<div class="tournament-lap-actions">
-                        <button class="btn btn-sm btn-secondary" onclick="app.openEditLapModal('${tCode}', '${eCode}', decodeURIComponent('${labelEnc}'), decodeURIComponent('${nameEnc}'), '${source}')">Edit Attachment</button>
-                        <button class="btn btn-sm btn-danger" onclick="app.deleteTournamentLap('${tCode}', '${eCode}', decodeURIComponent('${labelEnc}'))">Delete Attachment</button>
+    const attachActions = `<button class="btn btn-sm btn-secondary" onclick="app.openEditLapModal('${tCode}', '${eCode}', decodeURIComponent('${labelEnc}'), decodeURIComponent('${nameEnc}'), '${source}')">Edit Attachment</button>
+                        <button class="btn btn-sm btn-danger" onclick="app.deleteTournamentLap('${tCode}', '${eCode}', decodeURIComponent('${labelEnc}'))">Delete Attachment</button>`;
+    const liveActions = `<div class="tournament-lap-actions">
+                        <button class="btn btn-sm btn-secondary" onclick="app.openEditTournamentLapReleaseModal('${eCode}', ${Number(lap.index) || 0}, decodeURIComponent('${labelEnc}'))"><i class="fas fa-edit"></i> Edit</button>
+                        <button class="btn btn-sm btn-secondary admin-export-pdf-btn" onclick="app.exportTournamentLapResultsPDF('${eCode}', this)"><i class="fas fa-file-pdf"></i> Export PDF</button>
+                        ${attachActions}
                       </div>`;
+    const pdfActions = `<div class="tournament-lap-actions">${attachActions}</div>`;
     if (source === "pdf") {
       return `<li class="tournament-lap-item tournament-lap-item--managed">
                       <div class="tournament-lap-main">
@@ -5219,7 +5352,7 @@ const app = {
                           Lap ${lap.index} — ${this._escapeCertHtml(lap.label)}
                           <span class="tournament-lap-code">${pdfNote}</span>
                         </div>
-                        ${actions}
+                        ${pdfActions}
                       </div>
                       <div class="race-info-bar tournament-lap-race-bar">
                         <div class="race-info-item">
@@ -5252,7 +5385,7 @@ const app = {
                           Lap ${lap.index} — ${this._escapeCertHtml(lap.label)}
                           <span class="tournament-lap-code">${eCode}</span>
                         </div>
-                        ${actions}
+                        ${liveActions}
                       </div>
                       <div class="race-info-bar tournament-lap-race-bar">
                         <div class="race-info-item">
@@ -5407,6 +5540,450 @@ const app = {
           iconColor: "#e67e22",
         });
       });
+  },
+
+  openEditTournamentLapReleaseModal(eventCode, lapIndex, lapLabel) {
+    const event =
+      (this._tournamentEventByCode || {})[eventCode] ||
+      (this.eventLookup || {})[eventCode];
+    if (!event || event.lat == null || event.lng == null) {
+      this.showModal({
+        title: "Error",
+        message: "Live lap event not found. PDF laps have no release point to edit.",
+        icon: "❌",
+        iconColor: "#c0392b",
+      });
+      return;
+    }
+    destroyEditTournamentLapMap();
+    document.getElementById("edit-tournament-lap-event-code").value =
+      event.code;
+    document.getElementById("edit-tournament-lap-label").textContent =
+      `Lap ${lapIndex || event.lapIndex || "—"} · ${lapLabel || event.name || event.code}`;
+    document.getElementById("edit-tournament-lap-event-name").textContent =
+      event.name || "";
+    document.getElementById("edit-tournament-lap-event-code-label").textContent =
+      event.code || "";
+    document.getElementById("edit-tournament-lap-time").value =
+      toDatetimeLocalValue(event.releaseTime);
+    selectedEditTournamentLapLat = Number(event.lat);
+    selectedEditTournamentLapLng = Number(event.lng);
+    document.getElementById("edit-tournament-lap-coords-text").innerText =
+      `${Number(event.lat).toFixed(6)}, ${Number(event.lng).toFixed(6)}`;
+    const searchBox = document.getElementById("edit-tournament-lap-search-box");
+    if (searchBox) searchBox.value = "";
+    document.getElementById("modal-edit-tournament-lap").classList.add("show");
+    setTimeout(() => {
+      createEditTournamentLapMap();
+      setTimeout(() => {
+        if (editTournamentLapMap) {
+          editTournamentLapMap.setCenter({
+            lat: selectedEditTournamentLapLat,
+            lng: selectedEditTournamentLapLng,
+          });
+          editTournamentLapMap.setZoom(17);
+          setEditTournamentLapMarker(
+            selectedEditTournamentLapLat,
+            selectedEditTournamentLapLng,
+            editTournamentLapMap,
+          );
+        }
+      }, 300);
+    }, 500);
+  },
+
+  closeEditTournamentLapReleaseModal() {
+    hidePlaceDropdowns();
+    destroyEditTournamentLapMap();
+    const modal = document.getElementById("modal-edit-tournament-lap");
+    if (modal) modal.classList.remove("show");
+  },
+
+  getEditTournamentLapLocation() {
+    if (!navigator.geolocation) {
+      this.showModal({
+        title: "Location Not Available",
+        message: "Your browser doesn't support geolocation.",
+        icon: "⚠️",
+        iconColor: "#e67e22",
+      });
+      return;
+    }
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        const lat = parseFloat(position.coords.latitude.toFixed(6));
+        const lng = parseFloat(position.coords.longitude.toFixed(6));
+        if (editTournamentLapMap) {
+          editTournamentLapMap.setCenter({ lat, lng });
+          editTournamentLapMap.setZoom(18);
+          setEditTournamentLapMarker(lat, lng, editTournamentLapMap);
+        }
+      },
+      () => {
+        this.showModal({
+          title: "Location Error",
+          message:
+            "Unable to get your location. Please select manually on the map.",
+          icon: "⚠️",
+          iconColor: "#e67e22",
+        });
+      },
+      { enableHighAccuracy: true, timeout: 12000 },
+    );
+  },
+
+  saveEditTournamentLapRelease() {
+    const code = document.getElementById("edit-tournament-lap-event-code")
+      .value;
+    const time = document.getElementById("edit-tournament-lap-time").value;
+    if (!code) {
+      this.showModal({
+        title: "Error",
+        message: "Event code is missing.",
+        icon: "❌",
+        iconColor: "#c0392b",
+      });
+      return;
+    }
+    if (!time) {
+      this.showModal({
+        title: "Incomplete",
+        message: "Release date and time are required.",
+        icon: "❌",
+        iconColor: "#c0392b",
+      });
+      return;
+    }
+    if (
+      selectedEditTournamentLapLat == null ||
+      selectedEditTournamentLapLng == null
+    ) {
+      this.showModal({
+        title: "Missing Location",
+        message: "Please select a release location on the map.",
+        icon: "❌",
+        iconColor: "#c0392b",
+      });
+      return;
+    }
+    const lat = parseFloat(Number(selectedEditTournamentLapLat).toFixed(6));
+    const lng = parseFloat(Number(selectedEditTournamentLapLng).toFixed(6));
+    fetchWithAuth(`${API_URL}/events/${encodeURIComponent(code)}`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        releaseTime: new Date(time).toISOString(),
+        lat,
+        lng,
+      }),
+    })
+      .then((res) => res.json())
+      .then((data) => {
+        if (data.success) {
+          this.closeEditTournamentLapReleaseModal();
+          this.renderAdminTournaments();
+          this.renderEvents();
+          this.renderDashboard();
+          this.fetchAllEvents(true);
+          const recalc = data.recalculatedResults || 0;
+          this.showModal({
+            title: "Lap Updated",
+            message: `${data.event.name} release was updated.\n📍 ${data.event.lat.toFixed(6)}, ${data.event.lng.toFixed(6)}\n${recalc} clock-in${recalc === 1 ? "" : "s"} recalculated. Stickers unchanged.`,
+            icon: "✅",
+            iconColor: "#27ae60",
+          });
+        } else {
+          this.showModal({
+            title: "Update Failed",
+            message: data.error || "Failed to update lap release.",
+            icon: "❌",
+            iconColor: "#c0392b",
+          });
+        }
+      })
+      .catch(() => {
+        this.showModal({
+          title: "Connection Error",
+          message: "Unable to connect to the server.",
+          icon: "⚠️",
+          iconColor: "#e67e22",
+        });
+      });
+  },
+
+  exportTournamentLapResultsPDF(eventCode, triggerBtn = null) {
+    const event = (this._tournamentEventByCode || {})[eventCode];
+    if (event) {
+      this.eventLookup = this.eventLookup || {};
+      this.eventLookup[eventCode] = event;
+    }
+    return this.exportEventResultsPDF(eventCode, triggerBtn);
+  },
+
+  async exportTournamentResultsPDF(tournamentCode, triggerBtn = null) {
+    if (!window.jspdf) {
+      this.showModal({
+        title: "PDF Unavailable",
+        message: "PDF library is not loaded. Please refresh the page.",
+        icon: "❌",
+        iconColor: "#c0392b",
+      });
+      return;
+    }
+    const exportBtn = triggerBtn;
+    const prevBtnHtml = exportBtn ? exportBtn.innerHTML : "";
+    if (exportBtn) {
+      exportBtn.disabled = true;
+      exportBtn.innerHTML =
+        '<i class="fas fa-spinner fa-spin"></i> Exporting...';
+    }
+    try {
+      const res = await fetchWithAuth(
+        `${API_URL}/tournaments/${encodeURIComponent(tournamentCode)}/results`,
+      );
+      if (!res.ok) throw new Error("Failed to fetch tournament results");
+      const data = await res.json();
+      if (data.error) throw new Error(data.error);
+      const rows = Array.isArray(data.rows) ? data.rows : [];
+      if (rows.length === 0) {
+        this.showModal({
+          title: "No Results",
+          message:
+            "This tournament has no standings yet. Export is available once a lap has results.",
+          icon: "ℹ️",
+          iconColor: "#e67e22",
+        });
+        return;
+      }
+      await this._generateTournamentResultsPDF(data);
+      this.showModal({
+        title: "PDF Downloaded",
+        message: `Tournament results for "${data.tournament?.name || tournamentCode}" have been exported.`,
+        icon: "✅",
+        iconColor: "#27ae60",
+      });
+    } catch (err) {
+      console.error("Tournament export PDF error:", err);
+      this.showModal({
+        title: "Export Failed",
+        message: err.message || "Could not generate the PDF.",
+        icon: "❌",
+        iconColor: "#c0392b",
+      });
+    } finally {
+      if (exportBtn) {
+        exportBtn.disabled = false;
+        exportBtn.innerHTML = prevBtnHtml;
+      }
+    }
+  },
+
+  async _generateTournamentResultsPDF(payload) {
+    const { jsPDF } = window.jspdf;
+    const doc = new jsPDF({
+      orientation: "landscape",
+      unit: "mm",
+      format: "a4",
+    });
+    const pageW = doc.internal.pageSize.getWidth();
+    const pageH = doc.internal.pageSize.getHeight();
+    const margin = 10;
+    const footerY = pageH - 8;
+    const logoData = await this._loadPdfLogoDataUrl();
+    const tournament = payload.tournament || {};
+    const completed = (payload.laps || []).filter((l) => l.completed);
+    const rows = payload.rows || [];
+    const lapColW = completed.length > 3 ? 22 : 26;
+    const cols = [
+      { key: "rank", label: "Rank", w: 12, align: "center" },
+      { key: "player", label: "Player Name", w: 36 },
+      { key: "pigeon", label: "Pigeon", w: 28 },
+      { key: "ring", label: "Ring Band No", w: 32 },
+      { key: "points", label: "Points", w: 18, align: "right" },
+      { key: "total", label: "Total Speed", w: 26, align: "right" },
+      ...completed.map((l) => ({
+        key: `lap${l.index}`,
+        label: `Lap ${l.index}`,
+        w: lapColW,
+        align: "right",
+      })),
+    ];
+    const tableWidth = cols.reduce((sum, c) => sum + c.w, 0);
+    const tableX = margin + Math.max(0, (pageW - margin * 2 - tableWidth) / 2);
+    const rowH = 7.5;
+    const headerBandH = 8;
+    const generatedStr = new Date().toLocaleString("en-PH", {
+      year: "numeric",
+      month: "short",
+      day: "numeric",
+      hour: "numeric",
+      minute: "2-digit",
+    });
+
+    const drawPageHeader = () => {
+      let y = margin;
+      if (logoData) {
+        doc.addImage(logoData, "PNG", margin, y, 24, 24);
+      }
+      const headerTextX = logoData ? margin + 28 : margin;
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(18);
+      doc.setTextColor(15, 49, 38);
+      doc.text("TOURNAMENT RESULTS", headerTextX, y + 9);
+      doc.setFontSize(10);
+      doc.setTextColor(42, 122, 98);
+      doc.text("MALINAO RACING PIGEON CLUB", headerTextX, y + 15);
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(8);
+      doc.setTextColor(120, 120, 120);
+      doc.text("— MRPC —", headerTextX, y + 19);
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(12);
+      doc.setTextColor(30, 41, 59);
+      doc.text(tournament.name || "Unknown Tournament", pageW - margin, y + 8, {
+        align: "right",
+      });
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(9);
+      doc.setTextColor(80, 90, 100);
+      doc.text(`Tournament ID: ${tournament.code || "—"}`, pageW - margin, y + 14, {
+        align: "right",
+      });
+      if (tournament.remarks) {
+        doc.text(String(tournament.remarks), pageW - margin, y + 19, {
+          align: "right",
+        });
+      }
+      y += 28;
+      doc.setDrawColor(42, 122, 98);
+      doc.setLineWidth(0.6);
+      doc.line(margin, y, pageW - margin, y);
+      y += 5;
+      doc.setFontSize(8.5);
+      doc.setTextColor(60, 70, 80);
+      doc.text(`Laps completed: ${completed.length}`, margin, y);
+      doc.text(`Birds ranked: ${rows.length}`, margin + 70, y);
+      doc.text(`Exported: ${generatedStr}`, margin + 140, y);
+      y += 5;
+      doc.setDrawColor(200, 210, 220);
+      doc.setLineWidth(0.3);
+      doc.line(margin, y, pageW - margin, y);
+      return y + 3;
+    };
+
+    const drawTableHead = (startY) => {
+      doc.setFillColor(42, 122, 98);
+      doc.rect(tableX, startY, tableWidth, headerBandH, "F");
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(7);
+      doc.setTextColor(255, 255, 255);
+      let x = tableX;
+      cols.forEach((col) => {
+        const tx =
+          col.align === "right"
+            ? x + col.w - 2
+            : col.align === "center"
+              ? x + col.w / 2
+              : x + 2;
+        doc.text(col.label, tx, startY + 5.3, {
+          align: col.align || "left",
+        });
+        x += col.w;
+      });
+      return startY + headerBandH;
+    };
+
+    const drawRow = (row, startY, indexOnPage) => {
+      if (indexOnPage % 2 === 0) {
+        doc.setFillColor(248, 250, 252);
+        doc.rect(tableX, startY, tableWidth, rowH, "F");
+      }
+      const rank = row.rank ?? indexOnPage + 1;
+      const values = [
+        String(rank),
+        row.playerName || "—",
+        row.nickname || "N/A",
+        row.ringNumber || "—",
+        Number(row.points || 0).toFixed(2),
+        Number(row.totalSpeed || 0).toFixed(4),
+        ...completed.map((l) => {
+          const cell = (row.legs || []).find((x) => x.index === l.index);
+          const speed = cell ? Number(cell.speedMPM) || 0 : 0;
+          return speed.toFixed(4);
+        }),
+      ];
+      doc.setFont("helvetica", rank <= 3 ? "bold" : "normal");
+      doc.setFontSize(7);
+      if (rank === 1) doc.setTextColor(180, 130, 0);
+      else if (rank === 2) doc.setTextColor(90, 100, 110);
+      else if (rank === 3) doc.setTextColor(160, 90, 40);
+      else doc.setTextColor(40, 50, 60);
+      let x = tableX;
+      values.forEach((val, i) => {
+        const col = cols[i];
+        const pad = 2;
+        const maxW = col.w - pad * 2;
+        const text = this._pdfTruncateText(doc, String(val), maxW);
+        const tx =
+          col.align === "right"
+            ? x + col.w - pad
+            : col.align === "center"
+              ? x + col.w / 2
+              : x + pad;
+        if (i > 0) doc.setTextColor(40, 50, 60);
+        doc.setFont("helvetica", i === 0 && rank <= 3 ? "bold" : "normal");
+        doc.text(text, tx, startY + 5.2, { align: col.align || "left" });
+        x += col.w;
+      });
+      doc.setDrawColor(226, 232, 240);
+      doc.setLineWidth(0.2);
+      doc.line(tableX, startY + rowH, tableX + tableWidth, startY + rowH);
+      return startY + rowH;
+    };
+
+    const drawFooter = (pageNum, totalPages) => {
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(7.5);
+      doc.setTextColor(130, 140, 150);
+      doc.text(
+        "Malinao Racing Pigeon Club · WingSync Tournament Results",
+        pageW / 2,
+        footerY,
+        { align: "center" },
+      );
+      doc.text(`Page ${pageNum} of ${totalPages}`, pageW - margin, footerY, {
+        align: "right",
+      });
+    };
+
+    let pageNum = 1;
+    let y = drawPageHeader();
+    y = drawTableHead(y);
+    let rowsOnPage = 0;
+    const maxY = footerY - 6;
+    rows.forEach((row) => {
+      if (y + rowH > maxY) {
+        drawFooter(pageNum, 0);
+        doc.addPage();
+        pageNum += 1;
+        y = drawPageHeader();
+        y = drawTableHead(y);
+        rowsOnPage = 0;
+      }
+      y = drawRow(row, y, rowsOnPage);
+      rowsOnPage += 1;
+    });
+    const totalPages = pageNum;
+    for (let p = 1; p <= totalPages; p += 1) {
+      doc.setPage(p);
+      drawFooter(p, totalPages);
+    }
+    const safeName = (tournament.name || tournament.code || "tournament")
+      .replace(/[^\w\s-]/g, "")
+      .trim()
+      .replace(/\s+/g, "_")
+      .slice(0, 40);
+    doc.save(`MRPC_TournamentResults_${safeName}_${tournament.code}.pdf`);
   },
 
   openAddLapModal(code, name) {
