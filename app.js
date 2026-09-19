@@ -2404,36 +2404,40 @@ const app = {
     const listed = [];
     const seen = new Set();
     pigeons.forEach((p) => {
-      const pid = String(p._id || p);
+      if (p == null) return;
+      const pid = String(p._id || p || "");
+      if (!pid || pid === "null" || pid === "undefined") return;
       seen.add(pid);
       listed.push({
-        pigeon: p,
+        pigeon: typeof p === "object" ? p : { _id: pid },
         review: reviewById[pid] || { status: "pending" },
       });
     });
     reviews.forEach((r) => {
+      if (!r || r.status !== "invalid") return;
       const pid = String(r.pigeonId || "");
-      if (r.status === "invalid" && pid && !seen.has(pid)) {
-        listed.push({ pigeon: r, review: r });
-      }
+      if (!pid || seen.has(pid)) return;
+      listed.push({ pigeon: r, review: r });
     });
     if (!listed.length) {
       return `<li class="entry-pigeon-empty">No pigeons on this entry.</li>`;
     }
     return listed
       .map(({ pigeon: p, review }) => {
-        const avatarId = p.avatarId || review.avatarId || "";
+        const src = p && typeof p === "object" ? p : {};
+        const rev = review && typeof review === "object" ? review : {};
+        const avatarId = src.avatarId || rev.avatarId || "";
         const avatarHTML = avatarId
           ? getPigeonAvatarSVG(avatarId, 36)
           : getDefaultPigeonSVG(36);
         const ring = this._escapeCertHtml(
-          p.ringNumber || review.ringNumber || "Unknown ring",
+          src.ringNumber || rev.ringNumber || "Unknown ring",
         );
-        const nick = String(p.nickname || review.nickname || "").trim();
+        const nick = String(src.nickname || rev.nickname || "").trim();
         const sub = nick
           ? `<span class="entry-pigeon-nick">${this._escapeCertHtml(nick)}</span>`
           : "";
-        const status = (review.status || "pending").toLowerCase();
+        const status = String(rev.status || "pending").toLowerCase();
         const statusLabel =
           status === "valid"
             ? "Valid entry"

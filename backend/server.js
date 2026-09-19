@@ -395,6 +395,8 @@ function pigeonReviewIdKey(id) {
 
 function snapshotPigeonReview(pigeon, extra = {}) {
   const p = pigeon && typeof pigeon === "object" ? pigeon : {};
+  const yearRaw = extra.birthYear ?? p.birthYear;
+  const yearNum = Number(yearRaw);
   return {
     pigeonId: pigeonReviewIdKey(extra.pigeonId || p._id || p.pigeonId),
     status: extra.status || "pending",
@@ -404,7 +406,8 @@ function snapshotPigeonReview(pigeon, extra = {}) {
     nickname: extra.nickname || p.nickname || "",
     color: extra.color || p.color || "",
     gender: extra.gender || p.gender || "",
-    birthYear: extra.birthYear ?? p.birthYear ?? null,
+    birthYear:
+      Number.isFinite(yearNum) && yearNum >= 1900 ? yearNum : undefined,
     avatarId: extra.avatarId || p.avatarId || "",
   };
 }
@@ -448,53 +451,40 @@ function applyPigeonReviewLocks(doc) {
   return doc;
 }
 
-EventRegistrationSchema.pre("save", function (next) {
+EventRegistrationSchema.pre("save", function () {
   applyPigeonReviewLocks(this);
-  next();
 });
 
-EventRegistrationSchema.pre("findOneAndUpdate", async function (next) {
-  try {
-    const update = this.getUpdate() || {};
-    const set = update.$set || {};
-    const incomingIds =
-      set.pigeonIds !== undefined ? set.pigeonIds : update.pigeonIds;
-    if (incomingIds === undefined) return next();
-    const existing = await this.model.findOne(this.getQuery()).lean();
-    const merged = {
-      pigeonIds: incomingIds,
-      pigeonReviews:
-        set.pigeonReviews ||
-        update.pigeonReviews ||
-        existing?.pigeonReviews ||
-        [],
-    };
-    applyPigeonReviewLocks(merged);
-    if (update.$set) {
-      update.$set.pigeonIds = merged.pigeonIds;
-      update.$set.pigeonReviews = merged.pigeonReviews;
-    } else {
-      update.pigeonIds = merged.pigeonIds;
-      update.pigeonReviews = merged.pigeonReviews;
-    }
-    this.setUpdate(update);
-    next();
-  } catch (err) {
-    next(err);
+EventRegistrationSchema.pre("findOneAndUpdate", async function () {
+  const update = this.getUpdate() || {};
+  const set = update.$set || {};
+  const incomingIds =
+    set.pigeonIds !== undefined ? set.pigeonIds : update.pigeonIds;
+  if (incomingIds === undefined) return;
+  const existing = await this.model.findOne(this.getQuery()).lean();
+  const merged = {
+    pigeonIds: incomingIds,
+    pigeonReviews:
+      set.pigeonReviews ||
+      update.pigeonReviews ||
+      existing?.pigeonReviews ||
+      [],
+  };
+  applyPigeonReviewLocks(merged);
+  if (update.$set) {
+    update.$set.pigeonIds = merged.pigeonIds;
+    update.$set.pigeonReviews = merged.pigeonReviews;
+  } else {
+    update.pigeonIds = merged.pigeonIds;
+    update.pigeonReviews = merged.pigeonReviews;
   }
+  this.setUpdate(update);
 });
 
-EventRegistrationSchema.pre("findOneAndDelete", async function (next) {
-  try {
-    const existing = await this.model.findOne(this.getQuery()).lean();
-    if (existing?.pigeonReviews?.some((r) => r.status === "valid")) {
-      return next(
-        new Error("Cannot withdraw an entry that has valid locked pigeons."),
-      );
-    }
-    next();
-  } catch (err) {
-    next(err);
+EventRegistrationSchema.pre("findOneAndDelete", async function () {
+  const existing = await this.model.findOne(this.getQuery()).lean();
+  if (existing?.pigeonReviews?.some((r) => r.status === "valid")) {
+    throw new Error("Cannot withdraw an entry that has valid locked pigeons.");
   }
 });
 
