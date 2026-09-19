@@ -8,7 +8,7 @@
     />
     <title>Wingsync - Pigeon Clocking System</title>
     <link rel="manifest" href="manifest.json" />
-    <link rel="stylesheet" href="style.css?v=58" />
+    <link rel="stylesheet" href="style.css?v=59" />
     <meta name="theme-color" content="#2a7a62" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="mobile-web-app-capable" content="yes" />
@@ -2117,6 +2117,74 @@
       </div>
     </div>
 
+    <!-- Event Review Pigeon Details Modal -->
+    <div id="modal-review-pigeon" class="modal-overlay">
+      <div class="modal-content" style="max-width: 480px">
+        <div class="modal-header">
+          <h3><i class="fas fa-dove"></i> Pigeon Details</h3>
+          <button class="close-modal" onclick="app.closeReviewPigeonModal()">
+            <i class="fas fa-times"></i>
+          </button>
+        </div>
+        <input type="hidden" id="review-pigeon-event-code" />
+        <input type="hidden" id="review-pigeon-player-id" />
+        <input type="hidden" id="review-pigeon-id" />
+        <p class="review-pigeon-player">
+          <strong>Player:</strong>
+          <span id="review-pigeon-player-name"></span>
+        </p>
+        <dl class="review-pigeon-details">
+          <div>
+            <dt>Ring number</dt>
+            <dd id="review-pigeon-ring">—</dd>
+          </div>
+          <div>
+            <dt>Nickname</dt>
+            <dd id="review-pigeon-nickname">—</dd>
+          </div>
+          <div>
+            <dt>Color</dt>
+            <dd id="review-pigeon-color">—</dd>
+          </div>
+          <div>
+            <dt>Gender</dt>
+            <dd id="review-pigeon-gender">—</dd>
+          </div>
+          <div>
+            <dt>Birth year</dt>
+            <dd id="review-pigeon-birth-year">—</dd>
+          </div>
+        </dl>
+        <p id="review-pigeon-warnings" class="review-pigeon-warnings hidden"></p>
+        <p id="review-pigeon-locked-note" class="review-pigeon-locked hidden">
+          <i class="fas fa-lock"></i> This pigeon is locked as a valid entry.
+        </p>
+        <div class="review-pigeon-actions">
+          <button
+            id="review-pigeon-valid-btn"
+            class="btn btn-success"
+            onclick="app.reviewPigeonValid(document.getElementById('review-pigeon-event-code').value, document.getElementById('review-pigeon-player-id').value, document.getElementById('review-pigeon-id').value)"
+          >
+            <i class="fas fa-check"></i> Valid
+          </button>
+          <button
+            id="review-pigeon-invalid-btn"
+            class="btn btn-danger"
+            onclick="app.reviewPigeonInvalid(document.getElementById('review-pigeon-event-code').value, document.getElementById('review-pigeon-player-id').value, document.getElementById('review-pigeon-id').value)"
+          >
+            <i class="fas fa-times"></i> Invalid
+          </button>
+        </div>
+        <button
+          class="btn btn-secondary"
+          style="width: 100%; margin-top: 8px"
+          onclick="app.closeReviewPigeonModal()"
+        >
+          Close
+        </button>
+      </div>
+    </div>
+
     <!-- Create / Edit Tournament Modal -->
     <div id="modal-tournament" class="modal-overlay">
       <div class="modal-content" style="max-width: 480px">
@@ -2794,7 +2862,7 @@
     </script>
     <!-- #endregion -->
     <script
-      src="app.js?v=59"
+      src="app.js?v=60"
       onerror="fetch('http://127.0.0.1:7494/ingest/ea5b293e-e31b-435b-a70b-697b12b82dad',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'ac65a1'},body:JSON.stringify({sessionId:'ac65a1',runId:'pre-fix',hypothesisId:'A',location:'index.html:appjs',message:'app.js failed to load',data:{},timestamp:Date.now()})}).catch(function(){})"
     ></script>
     <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>

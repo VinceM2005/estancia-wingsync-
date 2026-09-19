@@ -2178,64 +2178,278 @@ const app = {
         </div>
       `;
 
-      html += `
-        <div style="overflow-x:auto; margin-top: 12px;">
-          <table class="review-table" style="width:100%; font-size:14px;">
-            <thead>
-              <tr>
-                <th>Player</th>
-                <th>Pigeons</th>
-                <th>Status</th>
-                <th>Valid</th>
-                <th>Actions</th>
-              </tr>
-            </thead>
-            <tbody>
-      `;
-
-      if (registrations.length === 0) {
-        html += `<tr><td colspan="5" style="text-align:center; color:#999; padding:20px;">No registrations yet.</td></tr>`;
-      } else {
-        for (const reg of registrations) {
-          const validClass = reg.valid ? "badge-valid" : "badge-invalid";
-          let pigeonList = "";
-          if (reg.pigeonIds && reg.pigeonIds.length) {
-            pigeonList = reg.pigeonIds
-              .map((pid, idx) => {
-                const ringNum = reg.ringNumbers[idx] || "Unknown";
-                const avatarId =
-                  reg.avatarIds && reg.avatarIds[idx] ? reg.avatarIds[idx] : "";
-                const avatarHTML = avatarId
-                  ? getPigeonAvatarSVG(avatarId, 32)
-                  : getDefaultPigeonSVG(32);
-                return `<span style="display:inline-flex;align-items:center;gap:4px;margin:2px 6px 2px 0;background:var(--bg);padding:2px 8px 2px 4px;border-radius:12px;border:1px solid var(--border);">
-                <span style="width:24px;height:24px;display:inline-block;border-radius:50%;overflow:hidden;">${avatarHTML}</span>
-                ${ringNum}
-              </span>`;
-              })
-              .join("");
-          } else {
-            pigeonList = reg.ringNumbers ? reg.ringNumbers.join(", ") : "N/A";
-          }
-          html += `
-            <tr>
-              <td>${reg.playerName}</td>
-              <td>${pigeonList}</td>
-              <td>${reg.status}</td>
-              <td><span class="${validClass}">${reg.valid ? "✅" : "❌"}</span></td>
-              <td>
-                ${!reg.valid ? `<button class="btn btn-sm btn-danger" onclick="app.removeRegistration('${eventCode}', '${reg.playerId}')">Remove</button>` : ""}
-              </td>
-            </tr>
-          `;
-        }
-      }
-      html += `</tbody></table></div>`;
+      html += this._buildAdminReviewTableHtml(
+        eventCode,
+        registrations,
+        eventData,
+      );
       container.innerHTML = html;
     } catch (err) {
       console.error("Load admin review error:", err);
       container.innerHTML = `<p style="color:red;">Failed to load registrations.</p>`;
     }
+  },
+
+  _buildAdminReviewTableHtml(eventCode, registrations, eventData) {
+    const reviewLocked = [
+      "Registration Closed",
+      "Sticker Generated",
+      "Ready for Release",
+      "Live Race",
+      "Result Verification",
+    ].includes(eventData.state);
+    this._adminReviewPigeons = {};
+    let html = `
+        <div style="overflow-x:auto; margin-top: 12px;">
+          <table class="review-table" style="width:100%; font-size:14px;">
+            <thead>
+              <tr>
+                <th>Player</th>
+                <th>Pigeon</th>
+                <th>Status</th>
+                <th>Review</th>
+                <th>Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+      `;
+    const rows = [];
+    for (const reg of registrations || []) {
+      const pigeons =
+        Array.isArray(reg.pigeons) && reg.pigeons.length
+          ? reg.pigeons
+          : (reg.pigeonIds || []).map((pid, idx) => ({
+              pigeonId: pid,
+              playerId: reg.playerId,
+              playerName: reg.playerName,
+              ringNumber: (reg.ringNumbers || [])[idx] || "Unknown",
+              nickname: "",
+              color: "",
+              gender: "",
+              birthYear: null,
+              avatarId: (reg.avatarIds || [])[idx] || "",
+              reviewStatus: reviewLocked ? "valid" : "pending",
+              reviewLocked: reviewLocked,
+            }));
+      for (const p of pigeons) {
+        if (p.reviewStatus === "invalid") continue;
+        const key = `${reg.playerId}::${p.pigeonId}`;
+        this._adminReviewPigeons[key] = {
+          ...p,
+          playerId: reg.playerId,
+          playerName: reg.playerName,
+          entryStatus: reg.status,
+        };
+        rows.push({ reg, pigeon: p, key });
+      }
+    }
+    if (!rows.length) {
+      html += `<tr><td colspan="5" style="text-align:center; color:#999; padding:20px;">No registrations yet.</td></tr>`;
+    } else {
+      for (const row of rows) {
+        const p = row.pigeon;
+        const reviewStatus = p.reviewLocked ? "valid" : p.reviewStatus || "pending";
+        const locked = !!p.reviewLocked || reviewStatus === "valid" || reviewLocked;
+        const avatarId = p.avatarId || "";
+        const avatarHTML = avatarId
+          ? getPigeonAvatarSVG(avatarId, 32)
+          : getDefaultPigeonSVG(32);
+        const ring = this._escapeCertHtml(p.ringNumber || "Unknown");
+        const reviewLabel =
+          reviewStatus === "valid"
+            ? "Valid"
+            : reviewStatus === "invalid"
+              ? "Invalid"
+              : "Pending";
+        const reviewClass = `review-status-badge review-status-badge--${reviewStatus === "valid" ? "valid" : reviewStatus === "invalid" ? "invalid" : "pending"}`;
+        const playerIdEnc = encodeURIComponent(row.reg.playerId);
+        const pigeonIdEnc = encodeURIComponent(p.pigeonId);
+        const eventEnc = encodeURIComponent(eventCode);
+        const actions = locked
+          ? `<span class="review-locked-label"><i class="fas fa-lock"></i> Locked</span>`
+          : `<button class="btn btn-sm btn-success" onclick="app.reviewPigeonValid(decodeURIComponent('${eventEnc}'), decodeURIComponent('${playerIdEnc}'), decodeURIComponent('${pigeonIdEnc}'))"><i class="fas fa-check"></i> Valid</button>
+                        <button class="btn btn-sm btn-danger" onclick="app.reviewPigeonInvalid(decodeURIComponent('${eventEnc}'), decodeURIComponent('${playerIdEnc}'), decodeURIComponent('${pigeonIdEnc}'))"><i class="fas fa-times"></i> Invalid</button>`;
+        html += `
+            <tr>
+              <td>${this._escapeCertHtml(row.reg.playerName || "")}</td>
+              <td>
+                <button type="button" class="review-pigeon-chip" onclick="app.openReviewPigeonModal(decodeURIComponent('${eventEnc}'), decodeURIComponent('${playerIdEnc}'), decodeURIComponent('${pigeonIdEnc}'))">
+                  <span class="review-pigeon-chip-avatar">${avatarHTML}</span>
+                  ${ring}
+                </button>
+              </td>
+              <td>${this._escapeCertHtml(row.reg.status || "")}</td>
+              <td><span class="${reviewClass}">${reviewLabel}</span></td>
+              <td><div class="review-actions">${actions}</div></td>
+            </tr>
+          `;
+      }
+    }
+    html += `</tbody></table></div>`;
+    return html;
+  },
+
+  openReviewPigeonModal(eventCode, playerId, pigeonId) {
+    const pigeon =
+      (this._adminReviewPigeons || {})[`${playerId}::${pigeonId}`];
+    if (!pigeon) {
+      this.showModal({
+        title: "Pigeon not found",
+        message: "Refresh Event Review and try again.",
+        icon: "❌",
+        iconColor: "#c0392b",
+      });
+      return;
+    }
+    const locked =
+      !!pigeon.reviewLocked || pigeon.reviewStatus === "valid";
+    document.getElementById("review-pigeon-event-code").value = eventCode;
+    document.getElementById("review-pigeon-player-id").value = playerId;
+    document.getElementById("review-pigeon-id").value = pigeonId;
+    document.getElementById("review-pigeon-player-name").textContent =
+      pigeon.playerName || "";
+    document.getElementById("review-pigeon-ring").textContent =
+      pigeon.ringNumber || "—";
+    document.getElementById("review-pigeon-nickname").textContent =
+      pigeon.nickname || "—";
+    document.getElementById("review-pigeon-color").textContent =
+      pigeon.color || "—";
+    document.getElementById("review-pigeon-gender").textContent =
+      pigeon.gender || "—";
+    document.getElementById("review-pigeon-birth-year").textContent =
+      pigeon.birthYear || "—";
+    const warn = [];
+    if (pigeon.duplicateRing) warn.push("Duplicate ring in this event.");
+    if (pigeon.invalidStatus) warn.push("Loft status is not Active.");
+    if (pigeon.missingInfo) warn.push("Missing color or birth year.");
+    const warnEl = document.getElementById("review-pigeon-warnings");
+    if (warnEl) {
+      warnEl.textContent = warn.join(" ");
+      warnEl.classList.toggle("hidden", warn.length === 0);
+    }
+    const validBtn = document.getElementById("review-pigeon-valid-btn");
+    const invalidBtn = document.getElementById("review-pigeon-invalid-btn");
+    if (validBtn) validBtn.disabled = locked;
+    if (invalidBtn) invalidBtn.disabled = locked;
+    const lockedNote = document.getElementById("review-pigeon-locked-note");
+    if (lockedNote) lockedNote.classList.toggle("hidden", !locked);
+    document.getElementById("modal-review-pigeon").classList.add("show");
+  },
+
+  closeReviewPigeonModal() {
+    const modal = document.getElementById("modal-review-pigeon");
+    if (modal) modal.classList.remove("show");
+  },
+
+  reviewPigeonValid(eventCode, playerId, pigeonId) {
+    return this._submitPigeonReview(eventCode, playerId, pigeonId, "valid");
+  },
+
+  reviewPigeonInvalid(eventCode, playerId, pigeonId) {
+    return this._submitPigeonReview(eventCode, playerId, pigeonId, "invalid");
+  },
+
+  async _submitPigeonReview(eventCode, playerId, pigeonId, decision) {
+    const label = decision === "valid" ? "Valid" : "Invalid";
+    if (decision === "invalid") {
+      if (
+        !confirm(
+          "Mark this pigeon as Invalid for this event? It will leave Event Review. The player can enter it again later.",
+        )
+      ) {
+        return;
+      }
+    }
+    try {
+      const res = await fetchWithAuth(
+        `${API_URL}/admin/events/${encodeURIComponent(eventCode)}/registrations/${encodeURIComponent(playerId)}/pigeons/${encodeURIComponent(pigeonId)}/review`,
+        {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ decision }),
+        },
+      );
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        throw new Error(data.error || `Failed to mark ${label.toLowerCase()}.`);
+      }
+      this.closeReviewPigeonModal();
+      this.loadAdminReview();
+      this.showModal({
+        title: decision === "valid" ? "Valid entry locked" : "Invalid entry",
+        message:
+          decision === "valid"
+            ? "This pigeon is locked as valid for this event. It will get a sticker when registration closes."
+            : "This pigeon was marked invalid and removed from Event Review. It stays in the loft and can be entered again.",
+        icon: decision === "valid" ? "✅" : "🗑️",
+        iconColor: decision === "valid" ? "#27ae60" : "#c0392b",
+      });
+    } catch (err) {
+      this.showModal({
+        title: "Review failed",
+        message: err.message || "Could not save the review decision.",
+        icon: "❌",
+        iconColor: "#c0392b",
+      });
+    }
+  },
+
+  _buildMyEntryPigeonItemsHtml(reg) {
+    const pigeons = Array.isArray(reg?.pigeonIds) ? reg.pigeonIds : [];
+    const reviews = Array.isArray(reg?.pigeonReviews) ? reg.pigeonReviews : [];
+    const reviewById = {};
+    reviews.forEach((r) => {
+      if (r && r.pigeonId) reviewById[String(r.pigeonId)] = r;
+    });
+    const listed = [];
+    const seen = new Set();
+    pigeons.forEach((p) => {
+      const pid = String(p._id || p);
+      seen.add(pid);
+      listed.push({
+        pigeon: p,
+        review: reviewById[pid] || { status: "pending" },
+      });
+    });
+    reviews.forEach((r) => {
+      const pid = String(r.pigeonId || "");
+      if (r.status === "invalid" && pid && !seen.has(pid)) {
+        listed.push({ pigeon: r, review: r });
+      }
+    });
+    if (!listed.length) {
+      return `<li class="entry-pigeon-empty">No pigeons on this entry.</li>`;
+    }
+    return listed
+      .map(({ pigeon: p, review }) => {
+        const avatarId = p.avatarId || review.avatarId || "";
+        const avatarHTML = avatarId
+          ? getPigeonAvatarSVG(avatarId, 36)
+          : getDefaultPigeonSVG(36);
+        const ring = this._escapeCertHtml(
+          p.ringNumber || review.ringNumber || "Unknown ring",
+        );
+        const nick = String(p.nickname || review.nickname || "").trim();
+        const sub = nick
+          ? `<span class="entry-pigeon-nick">${this._escapeCertHtml(nick)}</span>`
+          : "";
+        const status = (review.status || "pending").toLowerCase();
+        const statusLabel =
+          status === "valid"
+            ? "Valid entry"
+            : status === "invalid"
+              ? "Invalid entry"
+              : "Pending";
+        return `<li class="entry-pigeon-item">
+                  <span class="entry-pigeon-avatar">${avatarHTML}</span>
+                  <span class="entry-pigeon-info">
+                    <span class="entry-pigeon-ring">${ring}</span>
+                    ${sub}
+                  </span>
+                  <span class="entry-status entry-status--review-${status}">${statusLabel}</span>
+                </li>`;
+      })
+      .join("");
   },
 
   // ============================================================
@@ -7708,32 +7922,7 @@ const app = {
           status.charAt(0).toUpperCase() + status.slice(1).replace("_", " ");
         const statusClass = `entry-status entry-status--${status.replace(/\s+/g, "-")}`;
 
-        const pigeons = reg.pigeonIds || [];
-        const pigeonItems =
-          pigeons.length > 0
-            ? pigeons
-                .map((p) => {
-                  const avatarId = p.avatarId || "";
-                  const avatarHTML = avatarId
-                    ? getPigeonAvatarSVG(avatarId, 36)
-                    : getDefaultPigeonSVG(36);
-                  const ring = this._escapeCertHtml(
-                    p.ringNumber || "Unknown ring",
-                  );
-                  const nick = (p.nickname || "").trim();
-                  const sub = nick
-                    ? `<span class="entry-pigeon-nick">${this._escapeCertHtml(nick)}</span>`
-                    : "";
-                  return `<li class="entry-pigeon-item">
-                  <span class="entry-pigeon-avatar">${avatarHTML}</span>
-                  <span class="entry-pigeon-info">
-                    <span class="entry-pigeon-ring">${ring}</span>
-                    ${sub}
-                  </span>
-                </li>`;
-                })
-                .join("")
-            : `<li class="entry-pigeon-empty">No pigeons on this entry.</li>`;
+        const pigeonItems = this._buildMyEntryPigeonItemsHtml(reg);
 
         const registeredAt = reg.registrationDate
           ? new Date(reg.registrationDate).toLocaleString("en-PH", {

@@ -348,11 +348,32 @@ const PigeonSchema = new mongoose.Schema({
 });
 PigeonSchema.index({ ownerId: 1, status: 1 });
 
+const PigeonReviewSchema = new mongoose.Schema(
+  {
+    pigeonId: { type: String, required: true },
+    status: {
+      type: String,
+      enum: ["pending", "valid", "invalid"],
+      default: "pending",
+    },
+    reviewedAt: { type: Date },
+    reviewedBy: { type: String, default: "" },
+    ringNumber: { type: String, default: "" },
+    nickname: { type: String, default: "" },
+    color: { type: String, default: "" },
+    gender: { type: String, default: "" },
+    birthYear: { type: Number, default: null },
+    avatarId: { type: String, default: "" },
+  },
+  { _id: false },
+);
+
 const EventRegistrationSchema = new mongoose.Schema(
   {
     eventId: { type: String, required: true, index: true },
     playerId: { type: String, required: true, index: true },
     pigeonIds: [{ type: String, ref: "Pigeon" }],
+    pigeonReviews: { type: [PigeonReviewSchema], default: [] },
     status: {
       type: String,
       enum: ["draft", "confirmed", "locked"],
@@ -365,6 +386,117 @@ const EventRegistrationSchema = new mongoose.Schema(
 );
 EventRegistrationSchema.index({ eventId: 1, playerId: 1 }, { unique: true });
 EventRegistrationSchema.index({ playerId: 1, status: 1 });
+
+function pigeonReviewIdKey(id) {
+  if (id == null) return "";
+  if (typeof id === "object" && id._id) return String(id._id);
+  return String(id);
+}
+
+function snapshotPigeonReview(pigeon, extra = {}) {
+  const p = pigeon && typeof pigeon === "object" ? pigeon : {};
+  return {
+    pigeonId: pigeonReviewIdKey(extra.pigeonId || p._id || p.pigeonId),
+    status: extra.status || "pending",
+    reviewedAt: extra.reviewedAt,
+    reviewedBy: extra.reviewedBy || "",
+    ringNumber: extra.ringNumber || p.ringNumber || "",
+    nickname: extra.nickname || p.nickname || "",
+    color: extra.color || p.color || "",
+    gender: extra.gender || p.gender || "",
+    birthYear: extra.birthYear ?? p.birthYear ?? null,
+    avatarId: extra.avatarId || p.avatarId || "",
+  };
+}
+
+function applyPigeonReviewLocks(doc) {
+  if (!doc) return doc;
+  const pigeonIds = (doc.pigeonIds || [])
+    .map(pigeonReviewIdKey)
+    .filter(Boolean);
+  const reviews = Array.isArray(doc.pigeonReviews)
+    ? doc.pigeonReviews.map((r) =>
+        snapshotPigeonReview(r, r.toObject ? r.toObject() : r),
+      )
+    : [];
+  const byId = new Map();
+  for (const r of reviews) {
+    if (r.pigeonId) byId.set(r.pigeonId, r);
+  }
+  const idSet = new Set(pigeonIds);
+  for (const r of byId.values()) {
+    if (r.status === "valid" && r.pigeonId && !idSet.has(r.pigeonId)) {
+      pigeonIds.push(r.pigeonId);
+      idSet.add(r.pigeonId);
+    }
+  }
+  for (const pid of pigeonIds) {
+    const row = byId.get(pid);
+    if (!row) {
+      byId.set(
+        pid,
+        snapshotPigeonReview(null, { pigeonId: pid, status: "pending" }),
+      );
+    } else if (row.status === "invalid") {
+      row.status = "pending";
+      row.reviewedAt = undefined;
+      row.reviewedBy = "";
+    }
+  }
+  doc.pigeonIds = pigeonIds;
+  doc.pigeonReviews = Array.from(byId.values());
+  return doc;
+}
+
+EventRegistrationSchema.pre("save", function (next) {
+  applyPigeonReviewLocks(this);
+  next();
+});
+
+EventRegistrationSchema.pre("findOneAndUpdate", async function (next) {
+  try {
+    const update = this.getUpdate() || {};
+    const set = update.$set || {};
+    const incomingIds =
+      set.pigeonIds !== undefined ? set.pigeonIds : update.pigeonIds;
+    if (incomingIds === undefined) return next();
+    const existing = await this.model.findOne(this.getQuery()).lean();
+    const merged = {
+      pigeonIds: incomingIds,
+      pigeonReviews:
+        set.pigeonReviews ||
+        update.pigeonReviews ||
+        existing?.pigeonReviews ||
+        [],
+    };
+    applyPigeonReviewLocks(merged);
+    if (update.$set) {
+      update.$set.pigeonIds = merged.pigeonIds;
+      update.$set.pigeonReviews = merged.pigeonReviews;
+    } else {
+      update.pigeonIds = merged.pigeonIds;
+      update.pigeonReviews = merged.pigeonReviews;
+    }
+    this.setUpdate(update);
+    next();
+  } catch (err) {
+    next(err);
+  }
+});
+
+EventRegistrationSchema.pre("findOneAndDelete", async function (next) {
+  try {
+    const existing = await this.model.findOne(this.getQuery()).lean();
+    if (existing?.pigeonReviews?.some((r) => r.status === "valid")) {
+      return next(
+        new Error("Cannot withdraw an entry that has valid locked pigeons."),
+      );
+    }
+    next();
+  } catch (err) {
+    next(err);
+  }
+});
 
 const CertificateSchema = new mongoose.Schema({
   certificateNumber: { type: String, required: true, unique: true },
@@ -974,6 +1106,7 @@ async function updateAllEventStates() {
               message: `Event ${event.name} (${event.code}) automatically closed registration.`,
             });
             try {
+              await lockEventReviewPigeonsAsValid(event.code);
               await generateStickersForEvent(event.code);
             } catch (genErr) {
               console.error("Failed to auto-generate stickers:", genErr);
@@ -3691,6 +3824,114 @@ async function validateRegistrations(eventId, statusFilter = null) {
   return results;
 }
 
+const EVENT_REVIEW_LOCKED_STATES = [
+  "Registration Closed",
+  "Sticker Generated",
+  "Ready for Release",
+  "Live Race",
+  "Result Verification",
+];
+
+async function lockEventReviewPigeonsAsValid(
+  eventId,
+  reviewedBy = "registration-closed",
+) {
+  const regs = await EventRegistration.find({ eventId }).populate("pigeonIds");
+  const now = new Date();
+  for (const reg of regs) {
+    const reviews = Array.isArray(reg.pigeonReviews)
+      ? reg.pigeonReviews.map((r) =>
+          snapshotPigeonReview(r, r.toObject ? r.toObject() : r),
+        )
+      : [];
+    const byId = new Map(reviews.map((r) => [String(r.pigeonId), r]));
+    let changed = false;
+    for (const p of reg.pigeonIds || []) {
+      const pid = pigeonReviewIdKey(p);
+      if (!pid) continue;
+      const pop = typeof p === "object" ? p : {};
+      let row = byId.get(pid);
+      if (!row) {
+        byId.set(
+          pid,
+          snapshotPigeonReview(pop, {
+            pigeonId: pid,
+            status: "valid",
+            reviewedAt: now,
+            reviewedBy,
+          }),
+        );
+        changed = true;
+      } else if (row.status === "pending" || !row.status) {
+        row.status = "valid";
+        row.reviewedAt = now;
+        row.reviewedBy = reviewedBy;
+        if (!row.ringNumber && pop.ringNumber) {
+          Object.assign(
+            row,
+            snapshotPigeonReview(pop, {
+              ...row,
+              status: "valid",
+              reviewedAt: now,
+              reviewedBy,
+            }),
+          );
+        }
+        changed = true;
+      }
+    }
+    if (changed) {
+      reg.pigeonReviews = Array.from(byId.values());
+      await reg.save();
+    }
+  }
+}
+
+async function enrichEventReviewRegistrations(eventId, validation, event) {
+  const regs = await EventRegistration.find({ eventId }).populate("pigeonIds");
+  const byPlayer = new Map(regs.map((r) => [String(r.playerId), r]));
+  const reviewLocked = EVENT_REVIEW_LOCKED_STATES.includes(event?.state);
+  return validation.map((row) => {
+    const reg = byPlayer.get(String(row.playerId));
+    const reviews = Array.isArray(reg?.pigeonReviews)
+      ? reg.pigeonReviews.map((r) => (r.toObject ? r.toObject() : r))
+      : [];
+    const reviewById = new Map(reviews.map((r) => [String(r.pigeonId), r]));
+    const pigeons = (reg?.pigeonIds || [])
+      .map((p, idx) => {
+        const pid = pigeonReviewIdKey(p);
+        const pop = typeof p === "object" ? p : {};
+        const review = reviewById.get(pid) || {};
+        let reviewStatus = review.status || "pending";
+        if (reviewLocked && reviewStatus === "pending") reviewStatus = "valid";
+        if (reviewStatus === "invalid") return null;
+        return {
+          pigeonId: pid,
+          playerId: row.playerId,
+          playerName: row.playerName,
+          ringNumber: pop.ringNumber || row.ringNumbers?.[idx] || "",
+          nickname: pop.nickname || review.nickname || "",
+          color: pop.color || review.color || "",
+          gender: pop.gender || review.gender || "",
+          birthYear: pop.birthYear ?? review.birthYear ?? null,
+          avatarId: pop.avatarId || row.avatarIds?.[idx] || "",
+          pigeonStatus: pop.status || "",
+          reviewStatus,
+          reviewLocked: reviewStatus === "valid" || reviewLocked,
+          duplicateRing: !!row.duplicateRing,
+          invalidStatus: !!row.invalidStatus,
+          missingInfo: !!row.missingInfo,
+        };
+      })
+      .filter(Boolean);
+    return {
+      ...row,
+      pigeons,
+      reviewLocked,
+    };
+  });
+}
+
 app.get(
   "/api/admin/events/:eventId/registrations",
   requireAdmin,
@@ -3715,6 +3956,11 @@ app.get(
         eventId,
         requestedStatuses.length ? requestedStatuses : null,
       );
+      const registrations = await enrichEventReviewRegistrations(
+        eventId,
+        validation,
+        event,
+      );
 
       let certificatesGenerated = !!event.certificatesGenerated;
       if (!certificatesGenerated) {
@@ -3727,11 +3973,94 @@ app.get(
           state: event.state,
           certificatesGenerated,
         },
-        registrations: validation,
+        registrations: registrations,
       });
     } catch (error) {
       console.error("Error fetching admin registrations:", error);
       res.status(500).json({ error: "Failed to fetch registrations." });
+    }
+  },
+);
+
+app.patch(
+  "/api/admin/events/:eventId/registrations/:playerId/pigeons/:pigeonId/review",
+  requireAdmin,
+  async (req, res) => {
+    try {
+      const { eventId, playerId, pigeonId } = req.params;
+      const decision = String(req.body?.decision || "")
+        .trim()
+        .toLowerCase();
+      if (decision !== "valid" && decision !== "invalid") {
+        return res
+          .status(400)
+          .json({ error: "Decision must be valid or invalid." });
+      }
+      const event = await Event.findOne({ code: eventId });
+      if (!event) {
+        return res.status(404).json({ error: "Event not found." });
+      }
+      if (event.state !== "Registration Open") {
+        return res.status(400).json({
+          error:
+            "Review is locked. Entries can only be reviewed while Registration Open.",
+        });
+      }
+      const registration = await EventRegistration.findOne({
+        eventId,
+        playerId,
+      });
+      if (!registration) {
+        return res.status(404).json({ error: "Registration not found." });
+      }
+      const pid = String(pigeonId);
+      const onEntry = (registration.pigeonIds || []).some(
+        (id) => String(id) === pid,
+      );
+      if (!onEntry) {
+        return res
+          .status(404)
+          .json({ error: "Pigeon is not on this event review list." });
+      }
+      const reviews = Array.isArray(registration.pigeonReviews)
+        ? registration.pigeonReviews.map((r) =>
+            snapshotPigeonReview(r, r.toObject ? r.toObject() : r),
+          )
+        : [];
+      const existing = reviews.find((r) => String(r.pigeonId) === pid);
+      if (existing?.status === "valid") {
+        return res
+          .status(400)
+          .json({ error: "This pigeon is locked as valid." });
+      }
+      const pigeon = await Pigeon.findById(pid).lean();
+      const now = new Date();
+      const reviewedBy = req.user?.id || req.user?.name || "admin";
+      const nextRow = snapshotPigeonReview(pigeon, {
+        ...(existing || {}),
+        pigeonId: pid,
+        status: decision,
+        reviewedAt: now,
+        reviewedBy,
+      });
+      const nextReviews = reviews.filter((r) => String(r.pigeonId) !== pid);
+      nextReviews.push(nextRow);
+      registration.pigeonReviews = nextReviews;
+      if (decision === "invalid") {
+        registration.pigeonIds = (registration.pigeonIds || []).filter(
+          (id) => String(id) !== pid,
+        );
+      }
+      registration.updatedAt = now;
+      await registration.save();
+      await Log.create({
+        message: `Admin marked pigeon ${pid} as ${decision} for player ${playerId} in event ${eventId}.`,
+      });
+      invalidateLiveCaches(eventId, playerId);
+      res.json({ success: true, review: nextRow });
+    } catch (error) {
+      console.error("Error reviewing pigeon:", error);
+      res.status(500).json({ error: "Failed to review pigeon." });
     }
   },
 );
@@ -3991,6 +4320,19 @@ app.put(
 
       event.state = state;
       await event.save();
+      if (state === "Registration Closed") {
+        await lockEventReviewPigeonsAsValid(eventId);
+        try {
+          await generateStickersForEvent(eventId);
+          const refreshed = await Event.findOne({ code: eventId });
+          if (refreshed) event.state = refreshed.state;
+        } catch (genErr) {
+          console.error(
+            "Failed to generate stickers after closing registration:",
+            genErr,
+          );
+        }
+      }
       await Log.create({
         message: `Admin changed state of event ${event.name} (${eventId}) to ${state}.`,
       });
