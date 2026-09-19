@@ -2394,7 +2394,7 @@ const app = {
     }
   },
 
-  _buildMyEntryPigeonItemsHtml(reg) {
+  _listMyEntryReviewedPigeons(reg) {
     const pigeons = Array.isArray(reg?.pigeonIds) ? reg.pigeonIds : [];
     const reviews = Array.isArray(reg?.pigeonReviews) ? reg.pigeonReviews : [];
     const reviewById = {};
@@ -2419,6 +2419,81 @@ const app = {
       if (!pid || seen.has(pid)) return;
       listed.push({ pigeon: r, review: r });
     });
+    return listed;
+  },
+
+  _summarizeMyEntryReviewStatus(reg) {
+    const listed = this._listMyEntryReviewedPigeons(reg);
+    let pending = 0;
+    let valid = 0;
+    let invalid = 0;
+    listed.forEach(({ review }) => {
+      const status = String(review?.status || "pending").toLowerCase();
+      if (status === "valid") valid += 1;
+      else if (status === "invalid") invalid += 1;
+      else pending += 1;
+    });
+    const kinds = [];
+    if (invalid) kinds.push({ key: "invalid", count: invalid });
+    if (valid) kinds.push({ key: "valid", count: valid });
+    if (pending) kinds.push({ key: "pending", count: pending });
+    if (!kinds.length) {
+      return {
+        label: "Pending",
+        className: "entry-status entry-status--review-pending",
+      };
+    }
+    if (kinds.length === 1) {
+      const key = kinds[0].key;
+      return {
+        label: key.charAt(0).toUpperCase() + key.slice(1),
+        className: `entry-status entry-status--review-${key}`,
+      };
+    }
+    return {
+      label: kinds.map((k) => `${k.key} - ${k.count}`).join(" "),
+      className: `entry-status entry-status--review-${invalid ? "invalid" : pending ? "pending" : "valid"}`,
+    };
+  },
+
+  _watchMyEntryReviewStatus(eventCode) {
+    if (this._myEntryWatchTimer) {
+      clearInterval(this._myEntryWatchTimer);
+      this._myEntryWatchTimer = null;
+    }
+    this._myEntryWatchEvent = eventCode;
+    const refresh = () => {
+      const modal = document.getElementById("custom-modal");
+      if (!modal || this._myEntryWatchEvent !== eventCode) {
+        if (this._myEntryWatchTimer) {
+          clearInterval(this._myEntryWatchTimer);
+          this._myEntryWatchTimer = null;
+        }
+        return;
+      }
+      fetchWithAuth(`${API_URL}/events/${eventCode}/registrations/my`)
+        .then((res) => res.json())
+        .then((data) => {
+          if (!document.getElementById("custom-modal")) return;
+          if (this._myEntryWatchEvent !== eventCode) return;
+          const reg = data.registration;
+          if (!reg) return;
+          const summary = this._summarizeMyEntryReviewStatus(reg);
+          const statusEl = modal.querySelector(".entry-detail-row .entry-status");
+          if (statusEl) {
+            statusEl.className = summary.className;
+            statusEl.textContent = summary.label;
+          }
+          const list = modal.querySelector(".entry-pigeon-list");
+          if (list) list.innerHTML = this._buildMyEntryPigeonItemsHtml(reg);
+        })
+        .catch(() => {});
+    };
+    this._myEntryWatchTimer = setInterval(refresh, 2000);
+  },
+
+  _buildMyEntryPigeonItemsHtml(reg) {
+    const listed = this._listMyEntryReviewedPigeons(reg);
     if (!listed.length) {
       return `<li class="entry-pigeon-empty">No pigeons on this entry.</li>`;
     }
@@ -7921,10 +7996,9 @@ const app = {
           return;
         }
 
-        const status = (reg.status || "draft").toLowerCase();
-        const statusLabel =
-          status.charAt(0).toUpperCase() + status.slice(1).replace("_", " ");
-        const statusClass = `entry-status entry-status--${status.replace(/\s+/g, "-")}`;
+        const reviewStatus = this._summarizeMyEntryReviewStatus(reg);
+        const statusLabel = reviewStatus.label;
+        const statusClass = reviewStatus.className;
 
         const pigeonItems = this._buildMyEntryPigeonItemsHtml(reg);
 
@@ -7967,6 +8041,7 @@ const app = {
           htmlMessage: true,
           maxWidth: 480,
         });
+        this._watchMyEntryReviewStatus(eventCode);
       });
   },
 
