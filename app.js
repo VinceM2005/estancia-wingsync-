@@ -8671,7 +8671,7 @@ const app = {
               </div>
               <div class="cert-sigs">
                 <div class="cert-sig">
-                  <span class="cert-sig-name">Ash Cargullo</span>
+                  <span class="cert-sig-name">Justine Lloyd Brutas</span>
                   <span class="cert-sig-title">Club Vice-President</span>
                 </div>
                 <div class="cert-sig">
@@ -9034,7 +9034,7 @@ const app = {
     doc.setFont("times", "italic");
     doc.setFontSize(11);
     doc.setTextColor(26, 36, 32);
-    doc.text("Ash Cargullo", pageWidth - margin - 32, footerY - 10, {
+    doc.text("Justine Lloyd Brutas", pageWidth - margin - 32, footerY - 10, {
       align: "center",
     });
     doc.setFont("helvetica", "normal");
@@ -10207,7 +10207,7 @@ window.app = app;
               <div class="cert-ornament" aria-hidden="true"></div>
               <div class="cert-sigs">
                 <div class="cert-sig">
-                  <span class="tcert-sig-name">Ash Cargullo</span>
+                  <span class="tcert-sig-name">Justine Lloyd Brutas</span>
                   <span class="tcert-sig-title">Club Vice President</span>
                 </div>
                 <div class="cert-sig">
@@ -10281,6 +10281,236 @@ window.app = app;
       iconColor: "#27ae60",
     });
   };
+})();
+
+(function attachPrivateSpeedForecast() {
+  function formatForecastElapsed(minutes) {
+    if (!(minutes > 0)) return "00:00:00";
+    const totalSec = Math.floor(minutes * 60);
+    const h = Math.floor(totalSec / 3600);
+    const m = Math.floor((totalSec % 3600) / 60);
+    const s = totalSec % 60;
+    return [h, m, s].map((n) => String(n).padStart(2, "0")).join(":");
+  }
+
+  function forecastCardHtml(payload) {
+    const player = payload && payload.player;
+    const eventName = payload && payload.eventName ? payload.eventName : "";
+    const releaseTime = payload && payload.releaseTime;
+    const released = !!(payload && payload.released);
+    const distanceKm = player ? player.distanceKm : null;
+    const speed = player ? player.forecastSpeedMpm : null;
+    const elapsed = payload ? payload.elapsedMinutes : 0;
+    const clocked = !!(player && player.clocked);
+
+    if (!player) return "";
+
+    if (distanceKm == null) {
+      return `
+        <section class="speed-forecast-card">
+          <p class="speed-forecast-kicker">Private to you</p>
+          <h3 class="speed-forecast-title">Your Speed Forecast</h3>
+          ${eventName ? `<p class="speed-forecast-event">${escapeHtml(eventName)}</p>` : ""}
+          <p class="speed-forecast-empty">Add your loft coordinates in Profile to see your speed forecast.</p>
+        </section>`;
+    }
+
+    const waiting = !released;
+    return `
+      <section
+        class="speed-forecast-card"
+        data-forecast-release="${escapeHtml(String(releaseTime || ""))}"
+        data-forecast-distance="${escapeHtml(String(distanceKm))}"
+      >
+        <p class="speed-forecast-kicker">Private to you</p>
+        <h3 class="speed-forecast-title">Your Speed Forecast</h3>
+        ${eventName ? `<p class="speed-forecast-event">${escapeHtml(eventName)}</p>` : ""}
+        <p class="speed-forecast-hint">If your bird arrived right now, this is the speed it would score from your loft to the release point. Other players cannot see this.</p>
+        <div class="speed-forecast-metrics">
+          <div class="speed-forecast-metric">
+            <span class="speed-forecast-metric-label">Forecast</span>
+            <span class="speed-forecast-metric-value">
+              <span data-forecast-speed>${waiting ? "—" : escapeHtml(formatSpeedMpm(speed))}</span>
+              <small>m/min</small>
+            </span>
+          </div>
+          <div class="speed-forecast-metric">
+            <span class="speed-forecast-metric-label">Air distance</span>
+            <span class="speed-forecast-metric-value">${escapeHtml(formatDistanceKm(distanceKm))} <small>km</small></span>
+          </div>
+          <div class="speed-forecast-metric">
+            <span class="speed-forecast-metric-label">Time since release</span>
+            <span class="speed-forecast-metric-value" data-forecast-elapsed>${waiting ? "Waiting" : escapeHtml(formatForecastElapsed(elapsed))}</span>
+          </div>
+        </div>
+        <p class="speed-forecast-note">${clocked ? "You already have a clock-in for this race." : waiting ? `Waiting for release${releaseTime ? ` at ${new Date(releaseTime).toLocaleString()}` : ""}.` : "This number drops as time passes."}</p>
+      </section>`;
+  }
+
+  function setMountHtml(mount, html) {
+    if (!mount) return;
+    const content = String(html || "").trim();
+    mount.innerHTML = content;
+    mount.hidden = !content;
+  }
+
+  function visibleViewId() {
+    const el = document.querySelector(".view-section:not(.hidden)");
+    return el ? el.id : "";
+  }
+
+  function isPlayer() {
+    return !!(window.app && app.currentUser && app.currentUser.role === "player");
+  }
+
+  let tickId = null;
+  let lastFetchKey = "";
+  let lastFetchAt = 0;
+  let inFlight = false;
+
+  function stopTicker() {
+    if (tickId) {
+      clearInterval(tickId);
+      tickId = null;
+    }
+  }
+
+  function tickCards() {
+    document.querySelectorAll("[data-forecast-release]").forEach((card) => {
+      const release = new Date(card.getAttribute("data-forecast-release"));
+      const distanceKm = Number(card.getAttribute("data-forecast-distance"));
+      if (Number.isNaN(release.getTime()) || !Number.isFinite(distanceKm)) return;
+      const elapsedMinutes = (Date.now() - release.getTime()) / 60000;
+      const speedEl = card.querySelector("[data-forecast-speed]");
+      const elapsedEl = card.querySelector("[data-forecast-elapsed]");
+      if (!(elapsedMinutes > 0)) {
+        if (speedEl) speedEl.textContent = "—";
+        if (elapsedEl) elapsedEl.textContent = "Waiting";
+        return;
+      }
+      if (speedEl) {
+        speedEl.textContent = formatSpeedMpm((distanceKm * 1000) / elapsedMinutes);
+      }
+      if (elapsedEl) elapsedEl.textContent = formatForecastElapsed(elapsedMinutes);
+    });
+  }
+
+  function startTicker() {
+    if (tickId || !document.querySelector("[data-forecast-release]")) return;
+    tickId = setInterval(tickCards, 1000);
+  }
+
+  function hideForecasts() {
+    setMountHtml(document.getElementById("dashboard-speed-forecast"), "");
+    setMountHtml(document.getElementById("results-speed-forecast"), "");
+    stopTicker();
+  }
+
+  function fetchMine(eventCode) {
+    const qs = eventCode
+      ? `?eventCode=${encodeURIComponent(eventCode)}`
+      : "";
+    return fetchWithAuth(`${API_URL}/forecast/mine${qs}`).then((res) => {
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      return res.json();
+    });
+  }
+
+  function renderItems(mount, items) {
+    const html = (items || []).map((item) => forecastCardHtml(item)).join("");
+    setMountHtml(mount, html);
+    if (html) startTicker();
+    else stopTicker();
+  }
+
+  function syncForecast(force) {
+    const dashMount = document.getElementById("dashboard-speed-forecast");
+    const resultsMount = document.getElementById("results-speed-forecast");
+    if (!dashMount && !resultsMount) return;
+
+    if (!isPlayer()) {
+      hideForecasts();
+      lastFetchKey = "";
+      return;
+    }
+
+    const view = visibleViewId();
+    const eventCode = (window.app && app.selectedEventCode) || "";
+    let key = "";
+    if (view === "view-dashboard") key = "dashboard";
+    else if (view === "view-results") key = `results:${eventCode}`;
+    else {
+      hideForecasts();
+      lastFetchKey = "";
+      return;
+    }
+
+    const now = Date.now();
+    if (!force && key === lastFetchKey && now - lastFetchAt < 20000) {
+      startTicker();
+      return;
+    }
+    if (inFlight) return;
+    inFlight = true;
+    lastFetchKey = key;
+    lastFetchAt = now;
+
+    const request =
+      view === "view-dashboard"
+        ? fetchMine()
+        : eventCode
+          ? fetchMine(eventCode)
+          : Promise.resolve({ items: [] });
+
+    request
+      .then((data) => {
+        const items = Array.isArray(data && data.items) ? data.items : [];
+        if (view === "view-dashboard") {
+          setMountHtml(resultsMount, "");
+          renderItems(dashMount, items);
+        } else {
+          setMountHtml(dashMount, "");
+          renderItems(resultsMount, items);
+        }
+      })
+      .catch((err) => {
+        console.warn("Speed forecast error:", err);
+      })
+      .finally(() => {
+        inFlight = false;
+      });
+  }
+
+  function startWatcher() {
+    const run = () => syncForecast(false);
+    setInterval(run, 4000);
+    document.addEventListener("visibilitychange", () => {
+      if (!document.hidden) syncForecast(true);
+    });
+    const root =
+      document.querySelector(".content-area") ||
+      document.getElementById("app-screen") ||
+      document.body;
+    if (root && typeof MutationObserver === "function") {
+      let debounce = null;
+      const observer = new MutationObserver(() => {
+        clearTimeout(debounce);
+        debounce = setTimeout(run, 250);
+      });
+      observer.observe(root, {
+        subtree: true,
+        attributes: true,
+        attributeFilter: ["class", "hidden"],
+      });
+    }
+    run();
+  }
+
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", startWatcher);
+  } else {
+    startWatcher();
+  }
 })();
 
 function bootWingsync() {

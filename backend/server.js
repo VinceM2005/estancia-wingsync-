@@ -1700,6 +1700,91 @@ app.post(
 // ============================================================
 //  RESULTS
 // ============================================================
+app.get("/api/forecast/mine", async (req, res) => {
+  try {
+    const playerId = req.user && req.user.id;
+    if (!playerId) {
+      return res.status(401).json({ error: "Access denied." });
+    }
+
+    const regs = await EventRegistration.find({
+      playerId,
+      status: { $in: ["confirmed", "locked"] },
+    })
+      .select("eventId")
+      .lean();
+    const eventCodes = [...new Set(regs.map((r) => r.eventId).filter(Boolean))];
+    const requestedCode = String(req.query.eventCode || "").trim();
+    if (eventCodes.length === 0) {
+      return res.json({ items: [] });
+    }
+    if (requestedCode && !eventCodes.includes(requestedCode)) {
+      return res.json({ items: [] });
+    }
+
+    const eventFilter = requestedCode
+      ? { code: requestedCode }
+      : {
+          code: { $in: eventCodes },
+          state: { $in: ["Ready for Release", "Live Race"] },
+        };
+
+    const [user, events, clockedRows] = await Promise.all([
+      User.findOne({ id: playerId }).select("id name lat lng").lean(),
+      Event.find(eventFilter).sort({ releaseTime: 1 }).lean(),
+      Result.find({ userId: playerId, eventId: { $in: eventCodes } })
+        .select("eventId")
+        .lean(),
+    ]);
+
+    const clockedIds = new Set(clockedRows.map((r) => r.eventId));
+    const now = new Date();
+    const items = events.map((event) => {
+      const releaseTime = new Date(event.releaseTime);
+      const elapsedMinutes = (now.getTime() - releaseTime.getTime()) / 60000;
+      let distanceKm = null;
+      if (
+        user &&
+        typeof user.lat === "number" &&
+        typeof user.lng === "number" &&
+        typeof event.lat === "number" &&
+        typeof event.lng === "number"
+      ) {
+        try {
+          distanceKm = roundRace(
+            calculateDistance(event.lat, event.lng, user.lat, user.lng),
+          );
+        } catch (_) {
+          distanceKm = null;
+        }
+      }
+      let forecastSpeedMpm = null;
+      if (distanceKm != null && elapsedMinutes > 0) {
+        forecastSpeedMpm = roundRace((distanceKm * 1000) / elapsedMinutes);
+      }
+      return {
+        eventCode: event.code,
+        eventName: event.name,
+        releaseTime: event.releaseTime,
+        elapsedMinutes,
+        released: elapsedMinutes > 0,
+        player: {
+          userId: playerId,
+          userName: (user && user.name) || req.user.name,
+          distanceKm,
+          clocked: clockedIds.has(event.code),
+          forecastSpeedMpm,
+        },
+      };
+    });
+
+    res.json({ items });
+  } catch (error) {
+    console.error("My speed forecast error:", error);
+    res.status(500).json({ error: "Failed to load speed forecast." });
+  }
+});
+
 app.get("/api/results/:eventCode/forecast", async (req, res) => {
   try {
     const event = await getEventByCode(req.params.eventCode);

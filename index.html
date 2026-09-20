@@ -8,7 +8,7 @@
     />
     <title>Wingsync - Pigeon Clocking System</title>
     <link rel="manifest" href="manifest.json" />
-    <link rel="stylesheet" href="style.css?v=59" />
+    <link rel="stylesheet" href="style.css?v=60" />
     <meta name="theme-color" content="#2a7a62" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="mobile-web-app-capable" content="yes" />
@@ -647,6 +647,11 @@
                 <i class="fas fa-check-circle"></i> Clock Bird Arrival
               </button>
             </div>
+            <div
+              id="dashboard-speed-forecast"
+              class="speed-forecast-stack"
+              hidden
+            ></div>
             <div class="card">
               <h3><i class="fas fa-list-ul"></i> Current Events</h3>
               <table id="active-events-table">
@@ -968,6 +973,12 @@
                   <span class="race-status-badge" id="race-status">—</span>
                 </div>
               </div>
+
+              <div
+                id="results-speed-forecast"
+                class="speed-forecast-stack"
+                hidden
+              ></div>
 
               <section class="results-podium" id="results-podium" hidden>
                 <div class="results-podium-header">
@@ -2862,7 +2873,7 @@
     </script>
     <!-- #endregion -->
     <script
-      src="app.js?v=62"
+      src="app.js?v=64"
       onerror="fetch('http://127.0.0.1:7494/ingest/ea5b293e-e31b-435b-a70b-697b12b82dad',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'ac65a1'},body:JSON.stringify({sessionId:'ac65a1',runId:'pre-fix',hypothesisId:'A',location:'index.html:appjs',message:'app.js failed to load',data:{},timestamp:Date.now()})}).catch(function(){})"
     ></script>
     <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
