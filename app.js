@@ -10504,6 +10504,20 @@ window.app = app;
         run();
       });
     }
+    setInterval(() => {
+      if (document.hidden) return;
+      if (!isPlayer()) return;
+      if (!currentForecastKey()) return;
+      lastFetchKey = "";
+      run();
+    }, 20000);
+    document.addEventListener("visibilitychange", () => {
+      if (document.hidden) return;
+      if (!isPlayer()) return;
+      if (!currentForecastKey()) return;
+      lastFetchKey = "";
+      run();
+    });
     run();
   }
 
@@ -10512,6 +10526,29 @@ window.app = app;
   } else {
     startWatcher();
   }
+})();
+
+(function attachTournamentStandingsQuietRefresh() {
+  const POLL_MS = typeof LIVE_POLL_MS === "number" ? LIVE_POLL_MS : 20000;
+  let lastRun = 0;
+
+  function tick() {
+    if (document.hidden) return;
+    if (!window.app || typeof app.loadTournamentResults !== "function") return;
+    const view = document.querySelector(".view-section:not(.hidden)");
+    if (!view || view.id !== "view-tournament-results") return;
+    const select = document.getElementById("tournament-results-select");
+    if (!select || !String(select.value || "").trim()) return;
+    const now = Date.now();
+    if (now - lastRun < POLL_MS - 250) return;
+    lastRun = now;
+    app.loadTournamentResults();
+  }
+
+  setInterval(tick, POLL_MS);
+  document.addEventListener("visibilitychange", () => {
+    if (!document.hidden) tick();
+  });
 })();
 
 function bootWingsync() {
