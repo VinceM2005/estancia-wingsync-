@@ -1814,86 +1814,10 @@ app.get("/api/forecast/mine", async (req, res) => {
   }
 });
 
-app.get("/api/results/:eventCode/forecast", async (req, res) => {
-  try {
-    const event = await getEventByCode(req.params.eventCode);
-    if (!event) {
-      return res.status(404).json({ error: "Event not found." });
-    }
-
-    const now = new Date();
-    const releaseTime = new Date(event.releaseTime);
-    const elapsedMinutes = (now.getTime() - releaseTime.getTime()) / 60000;
-
-    const base = await cacheWrap(
-      `forecastBase:${event.code}`,
-      RESULTS_TTL_MS,
-      async () => {
-        const regs = await EventRegistration.find({
-          eventId: event.code,
-          status: { $in: ["confirmed", "locked"] },
-        })
-          .select("playerId")
-          .lean();
-        const playerIds = [...new Set(regs.map((r) => r.playerId))];
-        const [users, clockedRows] = await Promise.all([
-          User.find({ id: { $in: playerIds } })
-            .select("id name lat lng")
-            .lean(),
-          Result.find({ eventId: event.code }).select("userId").lean(),
-        ]);
-        const clockedIds = new Set(clockedRows.map((r) => r.userId));
-        return users.map((u) => {
-          let distanceKm = null;
-          if (
-            typeof u.lat === "number" &&
-            typeof u.lng === "number" &&
-            typeof event.lat === "number" &&
-            typeof event.lng === "number"
-          ) {
-            try {
-              distanceKm = roundRace(
-                calculateDistance(event.lat, event.lng, u.lat, u.lng),
-              );
-            } catch (_) {
-              distanceKm = null;
-            }
-          }
-          return {
-            userId: u.id,
-            userName: u.name,
-            distanceKm,
-            clocked: clockedIds.has(u.id),
-          };
-        });
-      },
-    );
-
-    const players = base
-      .map((p) => {
-        let forecastSpeedMpm = null;
-        if (p.distanceKm != null && elapsedMinutes > 0) {
-          forecastSpeedMpm = roundRace((p.distanceKm * 1000) / elapsedMinutes);
-        }
-        return { ...p, forecastSpeedMpm };
-      })
-      .sort((a, b) => {
-        const as = a.forecastSpeedMpm == null ? -1 : a.forecastSpeedMpm;
-        const bs = b.forecastSpeedMpm == null ? -1 : b.forecastSpeedMpm;
-        return bs - as;
-      });
-
-    res.json({
-      eventCode: event.code,
-      releaseTime: event.releaseTime,
-      elapsedMinutes,
-      released: elapsedMinutes > 0,
-      players,
-    });
-  } catch (error) {
-    console.error("Speed forecast error:", error);
-    res.status(500).json({ error: "Failed to load speed forecast." });
-  }
+app.get("/api/results/:eventCode/forecast", (req, res) => {
+  return res.status(410).json({
+    error: "This forecast list was removed. Use /api/forecast/mine.",
+  });
 });
 
 app.get("/api/results/:eventCode", async (req, res) => {
