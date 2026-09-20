@@ -10396,8 +10396,26 @@ window.app = app;
     });
   }
 
+  function forecastItemOpen(item) {
+    if (!item) return false;
+    const state = item.state;
+    if (state && state !== "Ready for Release" && state !== "Live Race") {
+      return false;
+    }
+    const elapsed = Number(item.elapsedMinutes);
+    if (Number.isFinite(elapsed) && elapsed >= 12 * 60) return false;
+    const release = item.releaseTime ? new Date(item.releaseTime) : null;
+    if (release && !Number.isNaN(release.getTime())) {
+      return Date.now() < release.getTime() + 12 * 60 * 60 * 1000;
+    }
+    return true;
+  }
+
   function renderItems(mount, items) {
-    const html = (items || []).map((item) => forecastCardHtml(item)).join("");
+    const html = (items || [])
+      .filter(forecastItemOpen)
+      .map((item) => forecastCardHtml(item))
+      .join("");
     setMountHtml(mount, html);
   }
 

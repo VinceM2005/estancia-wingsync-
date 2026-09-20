@@ -1752,14 +1752,21 @@ app.get("/api/forecast/mine", async (req, res) => {
       return res.json({ items: [] });
     }
 
+    const now = new Date();
+    const twelveHoursAgo = new Date(now.getTime() - 12 * 60 * 60 * 1000);
+    const openForecast = {
+      state: { $in: ["Ready for Release", "Live Race"] },
+      releaseTime: { $gt: twelveHoursAgo },
+    };
     const eventFilter = requestedCode
-      ? { code: requestedCode }
+      ? { code: requestedCode, ...openForecast }
       : requestedTournament
-        ? { code: { $in: eventCodes }, tournamentId: requestedTournament }
-        : {
+        ? {
             code: { $in: eventCodes },
-            state: { $in: ["Ready for Release", "Live Race"] },
-          };
+            tournamentId: requestedTournament,
+            ...openForecast,
+          }
+        : { code: { $in: eventCodes }, ...openForecast };
 
     const [user, events, clockedRows] = await Promise.all([
       User.findOne({ id: playerId }).select("id name lat lng").lean(),
@@ -1776,8 +1783,20 @@ app.get("/api/forecast/mine", async (req, res) => {
     ]);
 
     const clockedIds = new Set(clockedRows.map((r) => r.eventId));
-    const now = new Date();
-    const items = events.map((event) => {
+    const FORECAST_OPEN_MS = 12 * 60 * 60 * 1000;
+    const items = events
+      .filter((event) => {
+        if (
+          event.state !== "Ready for Release" &&
+          event.state !== "Live Race"
+        ) {
+          return false;
+        }
+        const releaseTime = new Date(event.releaseTime);
+        if (Number.isNaN(releaseTime.getTime())) return false;
+        return now.getTime() < releaseTime.getTime() + FORECAST_OPEN_MS;
+      })
+      .map((event) => {
       const releaseTime = new Date(event.releaseTime);
       const elapsedMinutes = (now.getTime() - releaseTime.getTime()) / 60000;
       let distanceKm = null;
@@ -1803,6 +1822,7 @@ app.get("/api/forecast/mine", async (req, res) => {
       return {
         eventCode: event.code,
         eventName: event.name,
+        state: event.state,
         releaseTime: event.releaseTime,
         elapsedMinutes,
         released: elapsedMinutes > 0,
