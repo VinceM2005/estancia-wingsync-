@@ -10325,15 +10325,18 @@ window.app = app;
     const eventName = payload && payload.eventName ? payload.eventName : "";
     const releaseTime = payload && payload.releaseTime;
     const distanceKm = player ? player.distanceKm : null;
-    const clocked = !!(player && player.clocked);
+    const releaseDate = releaseTime ? new Date(releaseTime) : null;
+    const releaseLabel =
+      releaseDate && !Number.isNaN(releaseDate.getTime())
+        ? formatKuboStamp(releaseDate)
+        : "";
 
     if (!player) return "";
 
     if (distanceKm == null) {
       return `
         <section class="speed-forecast-card">
-          <p class="speed-forecast-kicker">Private to you</p>
-          <h3 class="speed-forecast-title">FORECAST</h3>
+          <h3 class="speed-forecast-title">Speed Forecast</h3>
           ${eventName ? `<p class="speed-forecast-event">${escapeHtml(eventName)}</p>` : ""}
           <p class="speed-forecast-empty">Add your loft coordinates in Profile to see your speed forecast.</p>
         </section>`;
@@ -10344,12 +10347,22 @@ window.app = app;
 
     return `
       <section class="speed-forecast-card">
-        <p class="speed-forecast-kicker">Private to you</p>
-        <h3 class="speed-forecast-title">FORECAST</h3>
-        ${eventName ? `<p class="speed-forecast-event">${escapeHtml(eventName)}</p>` : ""}
-        <p class="speed-forecast-meta">Air dist ${escapeHtml(formatDistanceKm(distanceKm))} km</p>
+        <h3 class="speed-forecast-title">Speed Forecast</h3>
+        <dl class="speed-forecast-facts">
+          <div>
+            <dt>Event Name</dt>
+            <dd>${escapeHtml(eventName || "—")}</dd>
+          </div>
+          <div>
+            <dt>Release Date and Time</dt>
+            <dd>${escapeHtml(releaseLabel || "—")}</dd>
+          </div>
+          <div>
+            <dt>Air Distance</dt>
+            <dd>${escapeHtml(formatDistanceKm(distanceKm))} km</dd>
+          </div>
+        </dl>
         <ul class="kubo-forecast-list">${rows}</ul>
-        ${clocked ? `<p class="speed-forecast-note">You already have a clock-in for this race.</p>` : ""}
       </section>`;
   }
 
