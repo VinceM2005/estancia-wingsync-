@@ -6172,7 +6172,7 @@ img {
   }
 }
 
-/* ===== PRIVATE SPEED FORECAST ===== */
+/* ===== PRIVATE SPEED FORECAST (Kubo format) ===== */
 .speed-forecast-stack {
   display: grid;
   gap: 12px;
@@ -6184,7 +6184,7 @@ img {
 }
 
 .speed-forecast-card {
-  padding: 16px 18px 14px;
+  padding: 14px 16px 12px;
   background: var(--card-bg);
   border: 1px solid var(--border);
   border-radius: 14px;
@@ -6208,8 +6208,9 @@ img {
   margin: 0;
   font-size: 18px;
   font-weight: 800;
-  letter-spacing: -0.03em;
-  color: var(--text);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: #e67e22;
 }
 
 .speed-forecast-event {
@@ -6219,46 +6220,9 @@ img {
   color: var(--text);
 }
 
-.speed-forecast-hint {
-  margin: 8px 0 12px;
+.speed-forecast-meta {
+  margin: 6px 0 10px;
   font-size: 13px;
-  line-height: 1.45;
-  color: var(--text-muted);
-}
-
-.speed-forecast-metrics {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 10px;
-}
-
-.speed-forecast-metric {
-  padding: 10px 12px;
-  background: var(--bg);
-  border: 1px solid var(--border);
-  border-radius: 10px;
-}
-
-.speed-forecast-metric-label {
-  display: block;
-  font-size: 11px;
-  font-weight: 700;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-  color: var(--text-muted);
-}
-
-.speed-forecast-metric-value {
-  display: block;
-  margin-top: 4px;
-  font-size: 18px;
-  font-weight: 800;
-  letter-spacing: -0.03em;
-  color: var(--text);
-}
-
-.speed-forecast-metric-value small {
-  font-size: 11px;
   font-weight: 700;
   color: var(--text-muted);
 }
@@ -6276,9 +6240,57 @@ img {
   color: var(--text-muted);
 }
 
+.kubo-forecast-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 6px;
+}
+
+.kubo-forecast-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.kubo-forecast-diamond {
+  width: 8px;
+  height: 8px;
+  flex-shrink: 0;
+  background: #3b82f6;
+  transform: rotate(45deg);
+  border-radius: 1px;
+}
+
+.kubo-forecast-line {
+  font-family: ui-monospace, "Cascadia Mono", "Segoe UI Mono", Consolas, monospace;
+  font-size: 14px;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+  color: var(--text);
+  white-space: nowrap;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
 @media (max-width: 720px) {
-  .speed-forecast-metrics {
-    grid-template-columns: 1fr;
+  .speed-forecast-card {
+    padding: 12px 12px 10px;
+    border-radius: 12px;
+  }
+
+  .speed-forecast-title {
+    font-size: 16px;
+  }
+
+  .kubo-forecast-line {
+    font-size: 12.5px;
+  }
+
+  .kubo-forecast-list {
+    gap: 5px;
   }
 }
 

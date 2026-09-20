@@ -10284,23 +10284,47 @@ window.app = app;
 })();
 
 (function attachPrivateSpeedForecast() {
-  function formatForecastElapsed(minutes) {
-    if (!(minutes > 0)) return "00:00:00";
-    const totalSec = Math.floor(minutes * 60);
-    const h = Math.floor(totalSec / 3600);
-    const m = Math.floor((totalSec % 3600) / 60);
-    const s = totalSec % 60;
-    return [h, m, s].map((n) => String(n).padStart(2, "0")).join(":");
+  const KUBO_SPEEDS = [
+    1600, 1500, 1400, 1300, 1200, 1100, 1000, 900, 800, 700, 600, 500,
+  ];
+
+  function formatKuboStamp(date) {
+    const parts = new Intl.DateTimeFormat("en-US", {
+      timeZone: "Asia/Manila",
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+      hour: "2-digit",
+      minute: "2-digit",
+      second: "2-digit",
+      hour12: true,
+    }).formatToParts(date);
+    const get = (type) => {
+      const row = parts.find((p) => p.type === type);
+      return row ? row.value : "";
+    };
+    const dayPeriod = get("dayPeriod").toUpperCase();
+    return `${get("year")}-${get("month")}-${get("day")} ${String(get("hour")).padStart(2, "0")}:${String(get("minute")).padStart(2, "0")}:${String(get("second")).padStart(2, "0")} ${dayPeriod}`;
+  }
+
+  function kuboRowsHtml(releaseTime, distanceKm) {
+    const release = new Date(releaseTime);
+    const meters = Number(distanceKm) * 1000;
+    if (Number.isNaN(release.getTime()) || !Number.isFinite(meters) || meters <= 0) {
+      return "";
+    }
+    return KUBO_SPEEDS.map((speed) => {
+      const arrival = new Date(release.getTime() + (meters / speed) * 60000);
+      const line = `${speed}-${formatKuboStamp(arrival)}`;
+      return `<li class="kubo-forecast-item"><span class="kubo-forecast-diamond" aria-hidden="true"></span><span class="kubo-forecast-line">${escapeHtml(line)}</span></li>`;
+    }).join("");
   }
 
   function forecastCardHtml(payload) {
     const player = payload && payload.player;
     const eventName = payload && payload.eventName ? payload.eventName : "";
     const releaseTime = payload && payload.releaseTime;
-    const released = !!(payload && payload.released);
     const distanceKm = player ? player.distanceKm : null;
-    const speed = player ? player.forecastSpeedMpm : null;
-    const elapsed = payload ? payload.elapsedMinutes : 0;
     const clocked = !!(player && player.clocked);
 
     if (!player) return "";
@@ -10309,41 +10333,23 @@ window.app = app;
       return `
         <section class="speed-forecast-card">
           <p class="speed-forecast-kicker">Private to you</p>
-          <h3 class="speed-forecast-title">Your Speed Forecast</h3>
+          <h3 class="speed-forecast-title">FORECAST</h3>
           ${eventName ? `<p class="speed-forecast-event">${escapeHtml(eventName)}</p>` : ""}
           <p class="speed-forecast-empty">Add your loft coordinates in Profile to see your speed forecast.</p>
         </section>`;
     }
 
-    const waiting = !released;
+    const rows = kuboRowsHtml(releaseTime, distanceKm);
+    if (!rows) return "";
+
     return `
-      <section
-        class="speed-forecast-card"
-        data-forecast-release="${escapeHtml(String(releaseTime || ""))}"
-        data-forecast-distance="${escapeHtml(String(distanceKm))}"
-      >
+      <section class="speed-forecast-card">
         <p class="speed-forecast-kicker">Private to you</p>
-        <h3 class="speed-forecast-title">Your Speed Forecast</h3>
+        <h3 class="speed-forecast-title">FORECAST</h3>
         ${eventName ? `<p class="speed-forecast-event">${escapeHtml(eventName)}</p>` : ""}
-        <p class="speed-forecast-hint">If your bird arrived right now, this is the speed it would score from your loft to the release point. Other players cannot see this.</p>
-        <div class="speed-forecast-metrics">
-          <div class="speed-forecast-metric">
-            <span class="speed-forecast-metric-label">Forecast</span>
-            <span class="speed-forecast-metric-value">
-              <span data-forecast-speed>${waiting ? "—" : escapeHtml(formatSpeedMpm(speed))}</span>
-              <small>m/min</small>
-            </span>
-          </div>
-          <div class="speed-forecast-metric">
-            <span class="speed-forecast-metric-label">Air distance</span>
-            <span class="speed-forecast-metric-value">${escapeHtml(formatDistanceKm(distanceKm))} <small>km</small></span>
-          </div>
-          <div class="speed-forecast-metric">
-            <span class="speed-forecast-metric-label">Time since release</span>
-            <span class="speed-forecast-metric-value" data-forecast-elapsed>${waiting ? "Waiting" : escapeHtml(formatForecastElapsed(elapsed))}</span>
-          </div>
-        </div>
-        <p class="speed-forecast-note">${clocked ? "You already have a clock-in for this race." : waiting ? `Waiting for release${releaseTime ? ` at ${new Date(releaseTime).toLocaleString()}` : ""}.` : "This number drops as time passes."}</p>
+        <p class="speed-forecast-meta">Air dist ${escapeHtml(formatDistanceKm(distanceKm))} km</p>
+        <ul class="kubo-forecast-list">${rows}</ul>
+        ${clocked ? `<p class="speed-forecast-note">You already have a clock-in for this race.</p>` : ""}
       </section>`;
   }
 
@@ -10363,47 +10369,12 @@ window.app = app;
     return !!(window.app && app.currentUser && app.currentUser.role === "player");
   }
 
-  let tickId = null;
   let lastFetchKey = "";
-  let lastFetchAt = 0;
   let inFlight = false;
-
-  function stopTicker() {
-    if (tickId) {
-      clearInterval(tickId);
-      tickId = null;
-    }
-  }
-
-  function tickCards() {
-    document.querySelectorAll("[data-forecast-release]").forEach((card) => {
-      const release = new Date(card.getAttribute("data-forecast-release"));
-      const distanceKm = Number(card.getAttribute("data-forecast-distance"));
-      if (Number.isNaN(release.getTime()) || !Number.isFinite(distanceKm)) return;
-      const elapsedMinutes = (Date.now() - release.getTime()) / 60000;
-      const speedEl = card.querySelector("[data-forecast-speed]");
-      const elapsedEl = card.querySelector("[data-forecast-elapsed]");
-      if (!(elapsedMinutes > 0)) {
-        if (speedEl) speedEl.textContent = "—";
-        if (elapsedEl) elapsedEl.textContent = "Waiting";
-        return;
-      }
-      if (speedEl) {
-        speedEl.textContent = formatSpeedMpm((distanceKm * 1000) / elapsedMinutes);
-      }
-      if (elapsedEl) elapsedEl.textContent = formatForecastElapsed(elapsedMinutes);
-    });
-  }
-
-  function startTicker() {
-    if (tickId || !document.querySelector("[data-forecast-release]")) return;
-    tickId = setInterval(tickCards, 1000);
-  }
 
   function hideForecasts() {
     setMountHtml(document.getElementById("dashboard-speed-forecast"), "");
     setMountHtml(document.getElementById("results-speed-forecast"), "");
-    stopTicker();
   }
 
   function fetchMine(eventCode) {
@@ -10419,11 +10390,9 @@ window.app = app;
   function renderItems(mount, items) {
     const html = (items || []).map((item) => forecastCardHtml(item)).join("");
     setMountHtml(mount, html);
-    if (html) startTicker();
-    else stopTicker();
   }
 
-  function syncForecast(force) {
+  function syncForecast() {
     const dashMount = document.getElementById("dashboard-speed-forecast");
     const resultsMount = document.getElementById("results-speed-forecast");
     if (!dashMount && !resultsMount) return;
@@ -10445,15 +10414,9 @@ window.app = app;
       return;
     }
 
-    const now = Date.now();
-    if (!force && key === lastFetchKey && now - lastFetchAt < 20000) {
-      startTicker();
-      return;
-    }
-    if (inFlight) return;
+    if (key === lastFetchKey || inFlight) return;
     inFlight = true;
     lastFetchKey = key;
-    lastFetchAt = now;
 
     const request =
       view === "view-dashboard"
@@ -10475,18 +10438,24 @@ window.app = app;
       })
       .catch((err) => {
         console.warn("Speed forecast error:", err);
+        lastFetchKey = "";
       })
       .finally(() => {
         inFlight = false;
+        const view = visibleViewId();
+        const eventCode = (window.app && app.selectedEventCode) || "";
+        const key =
+          view === "view-dashboard"
+            ? "dashboard"
+            : view === "view-results"
+              ? `results:${eventCode}`
+              : "";
+        if (key && key !== lastFetchKey) syncForecast();
       });
   }
 
   function startWatcher() {
-    const run = () => syncForecast(false);
-    setInterval(run, 4000);
-    document.addEventListener("visibilitychange", () => {
-      if (!document.hidden) syncForecast(true);
-    });
+    const run = () => syncForecast();
     const root =
       document.querySelector(".content-area") ||
       document.getElementById("app-screen") ||
@@ -10495,7 +10464,7 @@ window.app = app;
       let debounce = null;
       const observer = new MutationObserver(() => {
         clearTimeout(debounce);
-        debounce = setTimeout(run, 250);
+        debounce = setTimeout(run, 400);
       });
       observer.observe(root, {
         subtree: true,
