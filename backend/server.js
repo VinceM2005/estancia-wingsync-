@@ -1744,6 +1744,7 @@ app.get("/api/forecast/mine", async (req, res) => {
       .lean();
     const eventCodes = [...new Set(regs.map((r) => r.eventId).filter(Boolean))];
     const requestedCode = String(req.query.eventCode || "").trim();
+    const requestedTournament = String(req.query.tournamentCode || "").trim();
     if (eventCodes.length === 0) {
       return res.json({ items: [] });
     }
@@ -1753,14 +1754,22 @@ app.get("/api/forecast/mine", async (req, res) => {
 
     const eventFilter = requestedCode
       ? { code: requestedCode }
-      : {
-          code: { $in: eventCodes },
-          state: { $in: ["Ready for Release", "Live Race"] },
-        };
+      : requestedTournament
+        ? { code: { $in: eventCodes }, tournamentId: requestedTournament }
+        : {
+            code: { $in: eventCodes },
+            state: { $in: ["Ready for Release", "Live Race"] },
+          };
 
     const [user, events, clockedRows] = await Promise.all([
       User.findOne({ id: playerId }).select("id name lat lng").lean(),
-      Event.find(eventFilter).sort({ releaseTime: 1 }).lean(),
+      Event.find(eventFilter)
+        .sort(
+          requestedTournament
+            ? { lapIndex: 1, releaseTime: 1 }
+            : { releaseTime: 1 },
+        )
+        .lean(),
       Result.find({ userId: playerId, eventId: { $in: eventCodes } })
         .select("eventId")
         .lean(),

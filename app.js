@@ -10377,12 +10377,19 @@ window.app = app;
   function hideForecasts() {
     setMountHtml(document.getElementById("dashboard-speed-forecast"), "");
     setMountHtml(document.getElementById("results-speed-forecast"), "");
+    setMountHtml(document.getElementById("tournament-speed-forecast"), "");
   }
 
-  function fetchMine(eventCode) {
-    const qs = eventCode
-      ? `?eventCode=${encodeURIComponent(eventCode)}`
-      : "";
+  function selectedTournamentCode() {
+    const select = document.getElementById("tournament-results-select");
+    return select ? String(select.value || "").trim() : "";
+  }
+
+  function fetchMine(eventCode, tournamentCode) {
+    const params = new URLSearchParams();
+    if (eventCode) params.set("eventCode", eventCode);
+    if (tournamentCode) params.set("tournamentCode", tournamentCode);
+    const qs = params.toString() ? `?${params.toString()}` : "";
     return fetchWithAuth(`${API_URL}/forecast/mine${qs}`).then((res) => {
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       return res.json();
@@ -10394,10 +10401,23 @@ window.app = app;
     setMountHtml(mount, html);
   }
 
+  function currentForecastKey() {
+    const view = visibleViewId();
+    if (view === "view-dashboard") return "dashboard";
+    if (view === "view-results") {
+      return `results:${(window.app && app.selectedEventCode) || ""}`;
+    }
+    if (view === "view-tournament-results") {
+      return `tournament:${selectedTournamentCode()}`;
+    }
+    return "";
+  }
+
   function syncForecast() {
     const dashMount = document.getElementById("dashboard-speed-forecast");
     const resultsMount = document.getElementById("results-speed-forecast");
-    if (!dashMount && !resultsMount) return;
+    const tournamentMount = document.getElementById("tournament-speed-forecast");
+    if (!dashMount && !resultsMount && !tournamentMount) return;
 
     if (!isPlayer()) {
       hideForecasts();
@@ -10406,11 +10426,8 @@ window.app = app;
     }
 
     const view = visibleViewId();
-    const eventCode = (window.app && app.selectedEventCode) || "";
-    let key = "";
-    if (view === "view-dashboard") key = "dashboard";
-    else if (view === "view-results") key = `results:${eventCode}`;
-    else {
+    const key = currentForecastKey();
+    if (!key) {
       hideForecasts();
       lastFetchKey = "";
       return;
@@ -10420,22 +10437,34 @@ window.app = app;
     inFlight = true;
     lastFetchKey = key;
 
+    const eventCode = (window.app && app.selectedEventCode) || "";
+    const tournamentCode = selectedTournamentCode();
     const request =
       view === "view-dashboard"
         ? fetchMine()
-        : eventCode
-          ? fetchMine(eventCode)
-          : Promise.resolve({ items: [] });
+        : view === "view-results"
+          ? eventCode
+            ? fetchMine(eventCode)
+            : Promise.resolve({ items: [] })
+          : tournamentCode
+            ? fetchMine("", tournamentCode)
+            : Promise.resolve({ items: [] });
 
     request
       .then((data) => {
         const items = Array.isArray(data && data.items) ? data.items : [];
         if (view === "view-dashboard") {
           setMountHtml(resultsMount, "");
+          setMountHtml(tournamentMount, "");
           renderItems(dashMount, items);
+        } else if (view === "view-results") {
+          setMountHtml(dashMount, "");
+          setMountHtml(tournamentMount, "");
+          renderItems(resultsMount, items);
         } else {
           setMountHtml(dashMount, "");
-          renderItems(resultsMount, items);
+          setMountHtml(resultsMount, "");
+          renderItems(tournamentMount, items);
         }
       })
       .catch((err) => {
@@ -10444,15 +10473,8 @@ window.app = app;
       })
       .finally(() => {
         inFlight = false;
-        const view = visibleViewId();
-        const eventCode = (window.app && app.selectedEventCode) || "";
-        const key =
-          view === "view-dashboard"
-            ? "dashboard"
-            : view === "view-results"
-              ? `results:${eventCode}`
-              : "";
-        if (key && key !== lastFetchKey) syncForecast();
+        const nextKey = currentForecastKey();
+        if (nextKey && nextKey !== lastFetchKey) syncForecast();
       });
   }
 
@@ -10470,8 +10492,16 @@ window.app = app;
       });
       observer.observe(root, {
         subtree: true,
+        childList: true,
         attributes: true,
         attributeFilter: ["class", "hidden"],
+      });
+    }
+    const tournamentSelect = document.getElementById("tournament-results-select");
+    if (tournamentSelect) {
+      tournamentSelect.addEventListener("change", () => {
+        lastFetchKey = "";
+        run();
       });
     }
     run();
