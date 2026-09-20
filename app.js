@@ -10348,20 +10348,9 @@ window.app = app;
     return `
       <section class="speed-forecast-card">
         <h3 class="speed-forecast-title">Speed Forecast</h3>
-        <dl class="speed-forecast-facts">
-          <div>
-            <dt>Event Name</dt>
-            <dd>${escapeHtml(eventName || "—")}</dd>
-          </div>
-          <div>
-            <dt>Release Date and Time</dt>
-            <dd>${escapeHtml(releaseLabel || "—")}</dd>
-          </div>
-          <div>
-            <dt>Air Distance</dt>
-            <dd>${escapeHtml(formatDistanceKm(distanceKm))} km</dd>
-          </div>
-        </dl>
+        <p class="speed-forecast-info"><span>Event</span>${escapeHtml(eventName || "—")}</p>
+        <p class="speed-forecast-info"><span>Release</span>${escapeHtml(releaseLabel || "—")}</p>
+        <p class="speed-forecast-info"><span>Air Distance</span>${escapeHtml(formatDistanceKm(distanceKm))} km</p>
         <ul class="kubo-forecast-list">${rows}</ul>
       </section>`;
   }
