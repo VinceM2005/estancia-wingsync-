@@ -19,6 +19,35 @@ const allowedOrigins = process.env.FRONTEND_URL
   ? process.env.FRONTEND_URL.split(",").map((url) => url.trim())
   : ["http://localhost:5173", "http://localhost:3000", "http://localhost:5500"];
 
+[
+  "https://estancia-wingsync.vercel.app",
+  "http://localhost:5173",
+  "http://localhost:3000",
+  "http://localhost:5500",
+].forEach((url) => {
+  if (!allowedOrigins.includes(url)) allowedOrigins.push(url);
+});
+
+app.use((req, res, next) => {
+  const raw = req.headers.origin;
+  if (!raw) return next();
+  const origin = String(raw).replace(/\/$/, "");
+  if (allowedOrigins.includes(origin) || allowedOrigins.includes(raw)) {
+    return next();
+  }
+  try {
+    const host = new URL(origin).hostname;
+    const vercelApp =
+      host === "estancia-wingsync.vercel.app" ||
+      (host.endsWith(".vercel.app") && host.includes("estancia-wingsync"));
+    if (vercelApp) {
+      if (!allowedOrigins.includes(origin)) allowedOrigins.push(origin);
+      if (!allowedOrigins.includes(raw)) allowedOrigins.push(raw);
+    }
+  } catch (_) {}
+  next();
+});
+
 app.use(
   cors({
     origin: (origin, callback) => {
@@ -5333,6 +5362,13 @@ app.get("/api/pigeons/:id/stats", async (req, res) => {
     console.error("Pigeon stats error:", error);
     res.status(500).json({ error: "Failed to fetch pigeon stats." });
   }
+});
+
+app.use((err, req, res, next) => {
+  if (err && String(err.message || err) === "Not allowed by CORS") {
+    return res.status(403).json({ error: "Not allowed by CORS" });
+  }
+  return next(err);
 });
 
 // ============================================================
