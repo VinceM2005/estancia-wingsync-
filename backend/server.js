@@ -5093,14 +5093,18 @@ async function getClubSeasonTable(year) {
     const liveSources = new Set();
 
     const standaloneEvents = await Event.find({
-      state: { $in: SEASON_STATES },
-      $or: [{ tournamentId: null }, { tournamentId: "" }],
+      $or: [
+        { tournamentId: null },
+        { tournamentId: "" },
+        { tournamentId: { $exists: false } },
+      ],
     })
       .select("code releaseTime tournamentId")
       .lean();
-    const seasonEvents = standaloneEvents.filter(
-      (event) => calendarYearInManila(event.releaseTime) === year,
-    );
+    const seasonEvents = standaloneEvents.filter((event) => {
+      if (event.tournamentId) return false;
+      return calendarYearInManila(event.releaseTime) === year;
+    });
     if (seasonEvents.length) {
       const codes = seasonEvents.map((event) => event.code);
       const rows = await Result.find({ eventId: { $in: codes } })
@@ -5187,8 +5191,12 @@ async function getClubSeasonTable(year) {
           acc = { pts: 0, name: "" };
           byPlayer.set(uid, acc);
         }
-        acc.pts += pts;
-        if (!acc.name) acc.name = String(row.playerName || "").trim();
+        if (pts > acc.pts) {
+          acc.pts = pts;
+          acc.name = String(row.playerName || acc.name || "").trim();
+        } else if (!acc.name) {
+          acc.name = String(row.playerName || "").trim();
+        }
       }
       for (const [uid, acc] of byPlayer.entries()) {
         liveAwards.push({
@@ -5279,7 +5287,11 @@ async function getClubSeasonTable(year) {
     const ranked = [...byPlayer.values()]
       .map((row) => ({
         ...row,
-        totalPoints: row.eventPoints + row.tournamentPoints,
+        eventPoints: Math.trunc(row.eventPoints) || 0,
+        tournamentPoints: Math.trunc(row.tournamentPoints) || 0,
+        totalPoints:
+          (Math.trunc(row.eventPoints) || 0) +
+          (Math.trunc(row.tournamentPoints) || 0),
       }))
       .filter((row) => row.totalPoints > 0)
       .sort((a, b) => {

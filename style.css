@@ -2011,14 +2011,6 @@ tr:hover td {
   color: var(--primary-dark);
 }
 
-.season-rank-split {
-  display: block;
-  margin-top: 2px;
-  font-size: 11px;
-  font-weight: 600;
-  color: var(--text-muted);
-}
-
 .season-rank-meta {
   display: flex;
   gap: 20px;
@@ -2175,7 +2167,7 @@ tr:hover td {
 
 .season-board-row {
   display: grid;
-  grid-template-columns: 56px minmax(0, 1fr) auto auto;
+  grid-template-columns: 56px minmax(0, 1fr) auto;
   gap: 10px 12px;
   align-items: center;
   min-height: 52px;
@@ -2249,24 +2241,6 @@ tr:hover td {
   color: var(--primary-dark);
 }
 
-.season-board-split {
-  font-size: 12px;
-  font-weight: 650;
-  font-variant-numeric: tabular-nums;
-  color: var(--text-light);
-  white-space: nowrap;
-}
-
-.season-board-split small {
-  margin-left: 3px;
-  margin-right: 4px;
-  font-size: 10px;
-  font-weight: 600;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-  color: var(--text-muted);
-}
-
 .season-board-pts {
   font-size: 14px;
   font-weight: 800;
@@ -2317,16 +2291,6 @@ tr:hover td {
   .season-board-row {
     grid-template-columns: 48px minmax(0, 1fr) auto;
     padding: 8px 10px;
-  }
-
-  .season-board-split {
-    grid-column: 2 / 3;
-    font-size: 11px;
-  }
-
-  .season-board-pts {
-    grid-column: 3 / 4;
-    grid-row: 1 / 3;
   }
 
   .season-board-rank .season-rank-badge {
