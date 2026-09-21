@@ -5223,6 +5223,51 @@ async function getClubSeasonRankingForPlayer(playerId) {
   };
 }
 
+async function getClubSeasonStandings(viewerId) {
+  const year = calendarYearInManila(new Date());
+  const table = await getClubSeasonTable(year);
+  const ids = [
+    ...new Set(
+      table.ranked
+        .map((row) => String(row.playerId || "").trim())
+        .filter((id) => id && !id.startsWith("pdf:")),
+    ),
+  ];
+  const users = ids.length
+    ? await User.find({ id: { $in: ids } }).select("id name").lean()
+    : [];
+  const nameById = new Map(
+    users.map((user) => [String(user.id), String(user.name || "").trim()]),
+  );
+  const viewer = String(viewerId || "");
+  const rows = table.ranked.map((row, index) => {
+    const rank = index + 1;
+    const playerId = String(row.playerId || "");
+    let playerName = nameById.get(playerId) || "";
+    if (!playerName && playerId.startsWith("pdf:")) {
+      playerName = playerId.slice(4).replace(/[-_]+/g, " ").trim();
+    }
+    if (!playerName) playerName = playerId;
+    return {
+      rank,
+      badge: clubSeasonBadge(rank),
+      playerId,
+      playerName,
+      you: viewer !== "" && playerId === viewer,
+      totalPoints: row.totalPoints,
+      eventPoints: row.eventPoints,
+      tournamentPoints: row.tournamentPoints,
+      eventWins: row.eventWins,
+      tournamentRaces: row.tournamentRaces,
+    };
+  });
+  return {
+    year: table.year,
+    fieldSize: rows.length,
+    rows,
+  };
+}
+
 app.get("/api/users/player/:id/stats", authenticateToken, async (req, res) => {
   try {
     const { id } = req.params;
@@ -5361,6 +5406,20 @@ app.get("/api/season/mine", async (req, res) => {
   } catch (error) {
     console.error("Club season ranking error:", error);
     res.status(500).json({ error: "Failed to load season ranking." });
+  }
+});
+
+app.get("/api/season/standings", async (req, res) => {
+  try {
+    const playerId = req.user && req.user.id;
+    if (!playerId) {
+      return res.status(401).json({ error: "Access denied." });
+    }
+    const payload = await getClubSeasonStandings(playerId);
+    res.json(payload);
+  } catch (error) {
+    console.error("Club season standings error:", error);
+    res.status(500).json({ error: "Failed to load season leaderboard." });
   }
 });
 

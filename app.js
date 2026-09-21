@@ -10725,6 +10725,117 @@ window.app = app;
   }
 })();
 
+(function attachSeasonLeaderboard() {
+  function visibleViewId() {
+    const el = document.querySelector(".view-section:not(.hidden)");
+    return el ? el.id : "";
+  }
+
+  function rankCell(row) {
+    const rank = Number(row && row.rank) || 0;
+    const badge = row && row.badge;
+    if (badge === "gold" || badge === "silver" || badge === "bronze") {
+      const place = badge === "gold" ? "1" : badge === "silver" ? "2" : "3";
+      return `<span class="season-rank-badge" data-place="${place}"><span class="season-rank-badge-mark">${place}</span></span>`;
+    }
+    return escapeHtml(rank > 0 ? String(rank) : "—");
+  }
+
+  function rowHtml(row, viewerId) {
+    const you = !!(row && (row.you || (viewerId && row.playerId === viewerId)));
+    const name = row && row.playerName ? row.playerName : "—";
+    const points = Number(row && row.totalPoints) || 0;
+    return `<div class="season-board-row${you ? " season-board-row-you" : ""}"${you ? ' id="season-board-you"' : ""}>
+      <span class="season-board-rank">${rankCell(row)}</span>
+      <span class="season-board-name">${escapeHtml(name)}${you ? '<span class="season-board-you-tag">You</span>' : ""}</span>
+      <span class="season-board-pts">${escapeHtml(String(points))}<small>pts</small></span>
+    </div>`;
+  }
+
+  function renderBoard(data) {
+    const list = document.getElementById("season-board-list");
+    const yearEl = document.getElementById("season-board-year");
+    if (!list) return;
+    const year = data && data.year ? data.year : "";
+    const rows = data && Array.isArray(data.rows) ? data.rows : [];
+    const fieldSize = Number(data && data.fieldSize) || rows.length;
+    if (yearEl) {
+      yearEl.textContent = year
+        ? `${year} · ${fieldSize} player${fieldSize === 1 ? "" : "s"}`
+        : "—";
+    }
+    const viewerId =
+      window.app && app.currentUser ? String(app.currentUser.id || "") : "";
+    if (!rows.length) {
+      list.innerHTML =
+        '<p class="season-board-empty">No season points yet this year.</p>';
+      return;
+    }
+    list.innerHTML = rows.map((row) => rowHtml(row, viewerId)).join("");
+    return list.querySelector("#season-board-you");
+  }
+
+  let inFlight = false;
+  let opened = false;
+
+  function loadBoard() {
+    if (visibleViewId() !== "view-leaderboard") return;
+    if (!window.app || !app.currentUser) return;
+    if (inFlight) return;
+    inFlight = true;
+    const shouldScroll = !opened;
+    opened = true;
+    fetchWithAuth(`${API_URL}/season/standings`)
+      .then((res) => {
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        return res.json();
+      })
+      .then((data) => {
+        const youRow = renderBoard(data);
+        if (shouldScroll && youRow && typeof youRow.scrollIntoView === "function") {
+          youRow.scrollIntoView({ block: "center", behavior: "smooth" });
+        }
+      })
+      .catch((err) => {
+        console.warn("Season leaderboard error:", err);
+        opened = false;
+        const list = document.getElementById("season-board-list");
+        if (list) {
+          list.innerHTML =
+            '<p class="season-board-empty">Unable to load the leaderboard.</p>';
+        }
+      })
+      .finally(() => {
+        inFlight = false;
+      });
+  }
+
+  function start() {
+    const view = document.getElementById("view-leaderboard");
+    if (view && typeof MutationObserver === "function") {
+      const observer = new MutationObserver(() => {
+        if (view.classList.contains("hidden")) {
+          opened = false;
+          return;
+        }
+        loadBoard();
+      });
+      observer.observe(view, { attributes: true, attributeFilter: ["class"] });
+    }
+    setInterval(() => {
+      if (document.hidden) return;
+      if (visibleViewId() !== "view-leaderboard") return;
+      loadBoard();
+    }, typeof LIVE_POLL_MS === "number" ? LIVE_POLL_MS : 20000);
+  }
+
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", start);
+  } else {
+    start();
+  }
+})();
+
 function bootWingsync() {
   // #region agent log
   __wsDbg(
