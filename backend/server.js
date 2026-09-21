@@ -588,6 +588,24 @@ const TournamentSchema = new mongoose.Schema({
 TournamentSchema.index({ createdAt: -1 });
 const Tournament = mongoose.model("Tournament", TournamentSchema);
 
+const SeasonAwardSchema = new mongoose.Schema({
+  year: { type: Number, required: true, index: true },
+  playerId: { type: String, required: true, index: true },
+  playerName: { type: String, default: "" },
+  sourceType: { type: String, enum: ["event", "tournament"], required: true },
+  sourceId: { type: String, required: true },
+  eventPoints: { type: Number, default: 0 },
+  tournamentPoints: { type: Number, default: 0 },
+  eventWins: { type: Number, default: 0 },
+  tournamentRaces: { type: Number, default: 0 },
+  updatedAt: { type: Date, default: Date.now },
+});
+SeasonAwardSchema.index(
+  { year: 1, sourceType: 1, sourceId: 1, playerId: 1 },
+  { unique: true },
+);
+const SeasonAward = mongoose.model("SeasonAward", SeasonAwardSchema);
+
 // ============================================================
 //  SHORT-LIVED MEMORY CACHE (shared by all requests)
 // ============================================================
@@ -5071,10 +5089,8 @@ function clubSeasonBadge(rank) {
 
 async function getClubSeasonTable(year) {
   return cacheWrap(`clubSeasonTable:${year}`, 20000, async () => {
-    const eventPoints = new Map();
-    const tournamentPoints = new Map();
-    const eventWins = new Map();
-    const tournamentRaces = new Map();
+    const liveAwards = [];
+    const liveSources = new Set();
 
     const standaloneEvents = await Event.find({
       state: { $in: SEASON_STATES },
@@ -5101,7 +5117,10 @@ async function getClubSeasonTable(year) {
         }
         list.push(row);
       }
-      for (const list of byEvent.values()) {
+      for (const event of seasonEvents) {
+        const list = byEvent.get(event.code) || [];
+        const sourceId = event.code;
+        liveSources.add(`event:${sourceId}`);
         const bestByPlayer = new Map();
         for (const row of list) {
           const uid = String(row.userId || "").trim();
@@ -5126,12 +5145,21 @@ async function getClubSeasonTable(year) {
         });
         if (!ordered.length) continue;
         const winnerId = ordered[0][0];
-        addSeasonInt(eventPoints, winnerId, 1);
-        addSeasonInt(eventWins, winnerId, 1);
+        liveAwards.push({
+          year,
+          playerId: winnerId,
+          playerName: "",
+          sourceType: "event",
+          sourceId,
+          eventPoints: 1,
+          tournamentPoints: 0,
+          eventWins: 1,
+          tournamentRaces: 0,
+        });
       }
     }
 
-    const tournaments = await Tournament.find({}).select("code createdAt laps").lean();
+    const tournaments = await Tournament.find({}).select("code name createdAt laps").lean();
     for (const tournament of tournaments) {
       const laps = tournament.laps || [];
       if (!laps.length) continue;
@@ -5149,35 +5177,103 @@ async function getClubSeasonTable(year) {
       } catch (_) {
         continue;
       }
-      const scoredThisTournament = new Set();
+      const sourceId = String(tournament.code);
+      liveSources.add(`tournament:${sourceId}`);
       for (const row of standings || []) {
         const pts = Math.trunc(Number(row.points) || 0);
         if (pts <= 0) continue;
         const uid = String(row.playerId || "").trim();
         if (!uid) continue;
-        addSeasonInt(tournamentPoints, uid, pts);
-        scoredThisTournament.add(uid);
+        liveAwards.push({
+          year,
+          playerId: uid,
+          playerName: String(row.playerName || "").trim(),
+          sourceType: "tournament",
+          sourceId,
+          eventPoints: 0,
+          tournamentPoints: pts,
+          eventWins: 0,
+          tournamentRaces: 1,
+        });
       }
-      scoredThisTournament.forEach((uid) => addSeasonInt(tournamentRaces, uid, 1));
     }
 
-    const playerIds = new Set([
-      ...eventPoints.keys(),
-      ...tournamentPoints.keys(),
-    ]);
-    const ranked = [...playerIds]
-      .map((playerId) => {
-        const eventPts = eventPoints.get(playerId) || 0;
-        const tournamentPts = tournamentPoints.get(playerId) || 0;
-        return {
-          playerId,
-          eventPoints: eventPts,
-          tournamentPoints: tournamentPts,
-          totalPoints: eventPts + tournamentPts,
-          eventWins: eventWins.get(playerId) || 0,
-          tournamentRaces: tournamentRaces.get(playerId) || 0,
+    if (liveAwards.length) {
+      const ids = [
+        ...new Set(liveAwards.map((row) => row.playerId).filter(Boolean)),
+      ];
+      const users = ids.length
+        ? await User.find({ id: { $in: ids } }).select("id name").lean()
+        : [];
+      const nameById = new Map(
+        users.map((user) => [String(user.id), String(user.name || "").trim()]),
+      );
+      for (const award of liveAwards) {
+        if (!award.playerName) {
+          award.playerName = nameById.get(award.playerId) || "";
+        }
+      }
+      await SeasonAward.bulkWrite(
+        liveAwards.map((award) => ({
+          updateOne: {
+            filter: {
+              year: award.year,
+              sourceType: award.sourceType,
+              sourceId: award.sourceId,
+              playerId: award.playerId,
+            },
+            update: { $set: { ...award, updatedAt: new Date() } },
+            upsert: true,
+          },
+        })),
+        { ordered: false },
+      );
+    }
+
+    for (const key of liveSources) {
+      const sep = key.indexOf(":");
+      const sourceType = key.slice(0, sep);
+      const sourceId = key.slice(sep + 1);
+      const keepIds = liveAwards
+        .filter((row) => row.sourceType === sourceType && row.sourceId === sourceId)
+        .map((row) => row.playerId);
+      await SeasonAward.deleteMany({
+        year,
+        sourceType,
+        sourceId,
+        playerId: { $nin: keepIds },
+      });
+    }
+
+    const stored = await SeasonAward.find({ year }).lean();
+    const byPlayer = new Map();
+    for (const row of stored) {
+      const uid = String(row.playerId || "").trim();
+      if (!uid) continue;
+      let acc = byPlayer.get(uid);
+      if (!acc) {
+        acc = {
+          playerId: uid,
+          playerName: "",
+          eventPoints: 0,
+          tournamentPoints: 0,
+          eventWins: 0,
+          tournamentRaces: 0,
         };
-      })
+        byPlayer.set(uid, acc);
+      }
+      if (!acc.playerName && row.playerName) acc.playerName = String(row.playerName);
+      acc.eventPoints += Math.trunc(Number(row.eventPoints) || 0);
+      acc.tournamentPoints += Math.trunc(Number(row.tournamentPoints) || 0);
+      acc.eventWins += Math.trunc(Number(row.eventWins) || 0);
+      acc.tournamentRaces += Math.trunc(Number(row.tournamentRaces) || 0);
+    }
+
+    const ranked = [...byPlayer.values()]
+      .map((row) => ({
+        ...row,
+        totalPoints: row.eventPoints + row.tournamentPoints,
+      }))
       .filter((row) => row.totalPoints > 0)
       .sort((a, b) => {
         if (b.totalPoints !== a.totalPoints) return b.totalPoints - a.totalPoints;
@@ -5243,7 +5339,7 @@ async function getClubSeasonStandings(viewerId) {
   const rows = table.ranked.map((row, index) => {
     const rank = index + 1;
     const playerId = String(row.playerId || "");
-    let playerName = nameById.get(playerId) || "";
+    let playerName = nameById.get(playerId) || row.playerName || "";
     if (!playerName && playerId.startsWith("pdf:")) {
       playerName = playerId.slice(4).replace(/[-_]+/g, " ").trim();
     }
