@@ -2047,6 +2047,96 @@ tr:hover td {
   color: var(--text-muted);
 }
 
+.profile-season-name-row {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin: 0 0 4px;
+}
+
+.profile-season-name-row #prof-name {
+  margin: 0;
+}
+
+.season-rank-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  min-width: 20px;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: 50%;
+  font-family: inherit;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0;
+  line-height: 1;
+  flex-shrink: 0;
+  background: transparent;
+  color: inherit;
+}
+
+.season-rank-badge[hidden] {
+  display: none !important;
+}
+
+.season-rank-badge-mark {
+  display: block;
+  font-variant-numeric: tabular-nums;
+  transform: translateY(0.5px);
+}
+
+.season-rank-badge[data-place="1"] {
+  color: #6a5420;
+  background: #f3e6c4;
+  border-color: #c6a45a;
+}
+
+.season-rank-badge[data-place="2"] {
+  color: #4a5560;
+  background: #e8edf1;
+  border-color: #a8b3bd;
+}
+
+.season-rank-badge[data-place="3"] {
+  color: #6a4324;
+  background: #edd4bf;
+  border-color: #b57a4a;
+}
+
+[data-theme="dark"] .season-rank-badge[data-place="1"] {
+  color: #f0e2b8;
+  background: #3a3120;
+  border-color: #c6a45a;
+}
+
+[data-theme="dark"] .season-rank-badge[data-place="2"] {
+  color: #d5dde4;
+  background: #2a3340;
+  border-color: #8e9aa6;
+}
+
+[data-theme="dark"] .season-rank-badge[data-place="3"] {
+  color: #f0d0b4;
+  background: #3a2a20;
+  border-color: #b57a4a;
+}
+
+#nav-profile .season-rank-badge {
+  margin-left: auto;
+}
+
+#header-season-badge,
+#profile-season-badge {
+  width: 22px;
+  height: 22px;
+  min-width: 22px;
+}
+
 @media (max-width: 600px) {
   .profile-page-card {
     padding: 20px 16px 24px;

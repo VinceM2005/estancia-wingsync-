@@ -5056,6 +5056,173 @@ async function getSeasonRanking(playerId) {
   };
 }
 
+function addSeasonInt(map, key, amount) {
+  const next = (map.get(key) || 0) + amount;
+  map.set(key, next);
+  return next;
+}
+
+function clubSeasonBadge(rank) {
+  if (rank === 1) return "gold";
+  if (rank === 2) return "silver";
+  if (rank === 3) return "bronze";
+  return null;
+}
+
+async function getClubSeasonTable(year) {
+  return cacheWrap(`clubSeasonTable:${year}`, 20000, async () => {
+    const eventPoints = new Map();
+    const tournamentPoints = new Map();
+    const eventWins = new Map();
+    const tournamentRaces = new Map();
+
+    const standaloneEvents = await Event.find({
+      state: { $in: SEASON_STATES },
+      $or: [{ tournamentId: null }, { tournamentId: "" }],
+    })
+      .select("code releaseTime tournamentId")
+      .lean();
+    const seasonEvents = standaloneEvents.filter(
+      (event) => calendarYearInManila(event.releaseTime) === year,
+    );
+    if (seasonEvents.length) {
+      const codes = seasonEvents.map((event) => event.code);
+      const rows = await Result.find({ eventId: { $in: codes } })
+        .select("eventId userId speedMPM arrivalTime")
+        .lean();
+      const byEvent = new Map();
+      for (const row of rows) {
+        const speed = Number(row.speedMPM);
+        if (!Number.isFinite(speed)) continue;
+        let list = byEvent.get(row.eventId);
+        if (!list) {
+          list = [];
+          byEvent.set(row.eventId, list);
+        }
+        list.push(row);
+      }
+      for (const list of byEvent.values()) {
+        const bestByPlayer = new Map();
+        for (const row of list) {
+          const uid = String(row.userId || "").trim();
+          if (!uid) continue;
+          const speed = Number(row.speedMPM);
+          const arrival = row.arrivalTime
+            ? new Date(row.arrivalTime).getTime()
+            : Number.POSITIVE_INFINITY;
+          const prev = bestByPlayer.get(uid);
+          if (
+            !prev ||
+            speed > prev.speed ||
+            (speed === prev.speed && arrival < prev.arrival)
+          ) {
+            bestByPlayer.set(uid, { speed, arrival });
+          }
+        }
+        const ordered = [...bestByPlayer.entries()].sort((a, b) => {
+          if (b[1].speed !== a[1].speed) return b[1].speed - a[1].speed;
+          if (a[1].arrival !== b[1].arrival) return a[1].arrival - b[1].arrival;
+          return String(a[0]).localeCompare(String(b[0]));
+        });
+        if (!ordered.length) continue;
+        const winnerId = ordered[0][0];
+        addSeasonInt(eventPoints, winnerId, 1);
+        addSeasonInt(eventWins, winnerId, 1);
+      }
+    }
+
+    const tournaments = await Tournament.find({}).select("code createdAt laps").lean();
+    for (const tournament of tournaments) {
+      const laps = tournament.laps || [];
+      if (!laps.length) continue;
+      let anchor;
+      try {
+        anchor = await getTournamentLastLapAnchor(tournament);
+      } catch (_) {
+        anchor = tournament.createdAt ? new Date(tournament.createdAt) : null;
+      }
+      if (!anchor || Number.isNaN(anchor.getTime())) continue;
+      if (calendarYearInManila(anchor) !== year) continue;
+      let standings = [];
+      try {
+        standings = await buildTournamentStandingsForCertificates(tournament);
+      } catch (_) {
+        continue;
+      }
+      const scoredThisTournament = new Set();
+      for (const row of standings || []) {
+        const pts = Math.trunc(Number(row.points) || 0);
+        if (pts <= 0) continue;
+        const uid = String(row.playerId || "").trim();
+        if (!uid) continue;
+        addSeasonInt(tournamentPoints, uid, pts);
+        scoredThisTournament.add(uid);
+      }
+      scoredThisTournament.forEach((uid) => addSeasonInt(tournamentRaces, uid, 1));
+    }
+
+    const playerIds = new Set([
+      ...eventPoints.keys(),
+      ...tournamentPoints.keys(),
+    ]);
+    const ranked = [...playerIds]
+      .map((playerId) => {
+        const eventPts = eventPoints.get(playerId) || 0;
+        const tournamentPts = tournamentPoints.get(playerId) || 0;
+        return {
+          playerId,
+          eventPoints: eventPts,
+          tournamentPoints: tournamentPts,
+          totalPoints: eventPts + tournamentPts,
+          eventWins: eventWins.get(playerId) || 0,
+          tournamentRaces: tournamentRaces.get(playerId) || 0,
+        };
+      })
+      .filter((row) => row.totalPoints > 0)
+      .sort((a, b) => {
+        if (b.totalPoints !== a.totalPoints) return b.totalPoints - a.totalPoints;
+        if (b.tournamentPoints !== a.tournamentPoints) {
+          return b.tournamentPoints - a.tournamentPoints;
+        }
+        if (b.eventWins !== a.eventWins) return b.eventWins - a.eventWins;
+        return String(a.playerId).localeCompare(String(b.playerId));
+      });
+
+    return { year, ranked };
+  });
+}
+
+async function getClubSeasonRankingForPlayer(playerId) {
+  const year = calendarYearInManila(new Date());
+  const table = await getClubSeasonTable(year);
+  const pid = String(playerId || "");
+  const rankIndex = table.ranked.findIndex((row) => row.playerId === pid);
+  const row =
+    rankIndex >= 0
+      ? table.ranked[rankIndex]
+      : {
+          playerId: pid,
+          eventPoints: 0,
+          tournamentPoints: 0,
+          totalPoints: 0,
+          eventWins: 0,
+          tournamentRaces: 0,
+        };
+  const rank = rankIndex >= 0 ? rankIndex + 1 : null;
+  return {
+    year: table.year,
+    rank,
+    badge: clubSeasonBadge(rank),
+    totalPoints: row.totalPoints,
+    eventPoints: row.eventPoints,
+    tournamentPoints: row.tournamentPoints,
+    eventWins: row.eventWins,
+    tournamentRaces: row.tournamentRaces,
+    eventsParticipated: (row.eventWins || 0) + (row.tournamentRaces || 0),
+    fieldSize: table.ranked.length,
+  };
+}
+
 app.get("/api/users/player/:id/stats", authenticateToken, async (req, res) => {
   try {
     const { id } = req.params;
@@ -5180,6 +5347,20 @@ app.get("/api/users/player/:id/stats", authenticateToken, async (req, res) => {
   } catch (error) {
     console.error("Player stats error:", error);
     res.status(500).json({ error: "An internal error occurred." });
+  }
+});
+
+app.get("/api/season/mine", async (req, res) => {
+  try {
+    const playerId = req.user && req.user.id;
+    if (!playerId) {
+      return res.status(401).json({ error: "Access denied." });
+    }
+    const payload = await getClubSeasonRankingForPlayer(playerId);
+    res.json(payload);
+  } catch (error) {
+    console.error("Club season ranking error:", error);
+    res.status(500).json({ error: "Failed to load season ranking." });
   }
 });
 

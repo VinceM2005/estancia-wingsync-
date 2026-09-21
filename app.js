@@ -10569,6 +10569,162 @@ window.app = app;
   });
 })();
 
+(function attachClubSeasonRank() {
+  const BADGE_TITLE = {
+    gold: "Season rank #1",
+    silver: "Season rank #2",
+    bronze: "Season rank #3",
+  };
+  let lastPayload = null;
+  let inFlight = false;
+
+  function paintBadge(el, badge) {
+    if (!el) return;
+    const allowed = badge === "gold" || badge === "silver" || badge === "bronze";
+    const place = allowed ? (badge === "gold" ? "1" : badge === "silver" ? "2" : "3") : "";
+    if (!place) {
+      el.hidden = true;
+      el.removeAttribute("data-place");
+      el.removeAttribute("aria-label");
+      el.textContent = "";
+      el.removeAttribute("title");
+      return;
+    }
+    el.hidden = false;
+    el.setAttribute("data-place", place);
+    el.setAttribute("aria-label", BADGE_TITLE[badge]);
+    el.title = BADGE_TITLE[badge];
+    el.innerHTML = `<span class="season-rank-badge-mark">${place}</span>`;
+  }
+
+  function ensureProfileBadge() {
+    const name = document.getElementById("prof-name");
+    if (!name) return null;
+    let badge = document.getElementById("profile-season-badge");
+    if (!badge) {
+      badge = document.createElement("span");
+      badge.id = "profile-season-badge";
+      badge.className = "season-rank-badge";
+      badge.hidden = true;
+      const row = document.createElement("div");
+      row.className = "profile-season-name-row";
+      if (name.parentNode) {
+        name.parentNode.insertBefore(row, name);
+        row.appendChild(name);
+        row.appendChild(badge);
+      }
+    }
+    return badge;
+  }
+
+  function applyPayload(data) {
+    if (!data) return;
+    lastPayload = data;
+    const rank = Number(data.rank) || 0;
+    const points = Number(data.totalPoints) || 0;
+    const races = Number(data.eventsParticipated) || 0;
+    const year = data.year || "";
+    const fieldSize = Number(data.fieldSize) || 0;
+    const eventPts = Number(data.eventPoints) || 0;
+    const tournamentPts = Number(data.tournamentPoints) || 0;
+
+    const rankEl = document.getElementById("stats-season-rank");
+    const pointsEl = document.getElementById("stats-season-points");
+    const racesEl = document.getElementById("stats-season-races");
+    const yearEl = document.getElementById("stats-season-year");
+    const hintEl = document.getElementById("stats-season-hint");
+    const panel = document.getElementById("season-rank-panel");
+
+    if (yearEl && year) yearEl.textContent = String(year);
+    if (pointsEl) pointsEl.textContent = String(points);
+    if (racesEl) racesEl.textContent = String(races);
+
+    if (rankEl && panel) {
+      if (rank > 0) {
+        rankEl.textContent = `#${rank}`;
+        panel.classList.remove("season-rank-panel-empty");
+        if (hintEl) {
+          const place = fieldSize ? `${rank} of ${fieldSize} players` : `Rank #${rank}`;
+          hintEl.textContent = `${place} · ${year} · event 1st = 1 pt · tournament = real points (${eventPts} event + ${tournamentPts} tournament)`;
+        }
+      } else {
+        rankEl.textContent = "Unranked";
+        panel.classList.add("season-rank-panel-empty");
+        if (hintEl) {
+          hintEl.textContent = `No ${year} season points yet. Event races count 1st place only (1 pt). Tournament races count every scoring pigeon’s real points.`;
+        }
+      }
+    }
+
+    const medal =
+      data.badge === "gold" || data.badge === "silver" || data.badge === "bronze"
+        ? data.badge
+        : null;
+    paintBadge(document.getElementById("sidebar-season-badge"), medal);
+    paintBadge(document.getElementById("header-season-badge"), medal);
+    paintBadge(ensureProfileBadge(), medal);
+  }
+
+  function loadMine() {
+    if (!window.app || !app.currentUser || app.currentUser.role !== "player") {
+      paintBadge(document.getElementById("sidebar-season-badge"), null);
+      paintBadge(document.getElementById("header-season-badge"), null);
+      const profileBadge = document.getElementById("profile-season-badge");
+      if (profileBadge) paintBadge(profileBadge, null);
+      return;
+    }
+    if (inFlight) return;
+    inFlight = true;
+    fetchWithAuth(`${API_URL}/season/mine`)
+      .then((res) => {
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        return res.json();
+      })
+      .then((data) => applyPayload(data))
+      .catch((err) => {
+        console.warn("Season rank error:", err);
+      })
+      .finally(() => {
+        inFlight = false;
+      });
+  }
+
+  function start() {
+    const run = () => loadMine();
+    const panel = document.getElementById("season-rank-panel");
+    if (panel && typeof MutationObserver === "function") {
+      let debounce = null;
+      const observer = new MutationObserver(() => {
+        if (!lastPayload) return;
+        clearTimeout(debounce);
+        debounce = setTimeout(() => applyPayload(lastPayload), 80);
+      });
+      observer.observe(panel, { subtree: true, childList: true, characterData: true });
+    }
+    const appScreen = document.getElementById("app-screen");
+    if (appScreen && typeof MutationObserver === "function") {
+      const vis = new MutationObserver(() => {
+        if (!appScreen.classList.contains("hidden")) run();
+      });
+      vis.observe(appScreen, { attributes: true, attributeFilter: ["class"] });
+    }
+    setInterval(() => {
+      if (document.hidden) return;
+      run();
+    }, typeof LIVE_POLL_MS === "number" ? LIVE_POLL_MS : 20000);
+    document.addEventListener("visibilitychange", () => {
+      if (!document.hidden) run();
+    });
+    run();
+  }
+
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", start);
+  } else {
+    start();
+  }
+})();
+
 function bootWingsync() {
   // #region agent log
   __wsDbg(
