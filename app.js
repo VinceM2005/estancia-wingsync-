@@ -10629,11 +10629,18 @@ window.app = app;
     const pointsEl = document.getElementById("stats-season-points");
     const racesEl = document.getElementById("stats-season-races");
     const yearEl = document.getElementById("stats-season-year");
+    const splitEl = document.getElementById("stats-season-split");
     const panel = document.getElementById("season-rank-panel");
 
     if (yearEl && year) yearEl.textContent = String(year);
     if (pointsEl) pointsEl.textContent = String(points);
     if (racesEl) racesEl.textContent = String(races);
+    if (splitEl) {
+      const eventPts = Math.trunc(Number(data.eventPoints) || 0);
+      const tournamentPts = Math.trunc(Number(data.tournamentPoints) || 0);
+      splitEl.textContent =
+        points > 0 ? `${eventPts} event + ${tournamentPts} tournament` : "";
+    }
 
     if (rankEl && panel) {
       if (rank > 0) {
@@ -10733,7 +10740,9 @@ window.app = app;
   function rowHtml(row, viewerId) {
     const you = !!(row && (row.you || (viewerId && row.playerId === viewerId)));
     const name = row && row.playerName ? row.playerName : "—";
-    const points = Number(row && row.totalPoints) || 0;
+    const points = Math.trunc(Number(row && row.totalPoints) || 0);
+    const eventPts = Math.trunc(Number(row && row.eventPoints) || 0);
+    const tournamentPts = Math.trunc(Number(row && row.tournamentPoints) || 0);
     const badge = row && row.badge;
     const place =
       badge === "gold" ? "1" : badge === "silver" ? "2" : badge === "bronze" ? "3" : "";
@@ -10744,6 +10753,7 @@ window.app = app;
     return `<div class="season-board-row${youClass}${placeClass}"${placeAttr}${youId}>
       <span class="season-board-rank">${rankCell(row)}</span>
       <span class="season-board-name">${escapeHtml(name)}${you ? '<span class="season-board-you-tag">You</span>' : ""}</span>
+      <span class="season-board-split">${escapeHtml(String(eventPts))}<small>event</small> + ${escapeHtml(String(tournamentPts))}<small>trn</small></span>
       <span class="season-board-pts">${escapeHtml(String(points))}<small>pts</small></span>
     </div>`;
   }

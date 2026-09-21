@@ -5121,33 +5121,30 @@ async function getClubSeasonTable(year) {
         const list = byEvent.get(event.code) || [];
         const sourceId = event.code;
         liveSources.add(`event:${sourceId}`);
-        const bestByPlayer = new Map();
+        let winner = null;
         for (const row of list) {
           const uid = String(row.userId || "").trim();
           if (!uid) continue;
           const speed = Number(row.speedMPM);
+          if (!Number.isFinite(speed)) continue;
           const arrival = row.arrivalTime
             ? new Date(row.arrivalTime).getTime()
             : Number.POSITIVE_INFINITY;
-          const prev = bestByPlayer.get(uid);
           if (
-            !prev ||
-            speed > prev.speed ||
-            (speed === prev.speed && arrival < prev.arrival)
+            !winner ||
+            speed > winner.speed ||
+            (speed === winner.speed && arrival < winner.arrival) ||
+            (speed === winner.speed &&
+              arrival === winner.arrival &&
+              uid < winner.uid)
           ) {
-            bestByPlayer.set(uid, { speed, arrival });
+            winner = { uid, speed, arrival };
           }
         }
-        const ordered = [...bestByPlayer.entries()].sort((a, b) => {
-          if (b[1].speed !== a[1].speed) return b[1].speed - a[1].speed;
-          if (a[1].arrival !== b[1].arrival) return a[1].arrival - b[1].arrival;
-          return String(a[0]).localeCompare(String(b[0]));
-        });
-        if (!ordered.length) continue;
-        const winnerId = ordered[0][0];
+        if (!winner) continue;
         liveAwards.push({
           year,
-          playerId: winnerId,
+          playerId: winner.uid,
           playerName: "",
           sourceType: "event",
           sourceId,
@@ -5179,19 +5176,29 @@ async function getClubSeasonTable(year) {
       }
       const sourceId = String(tournament.code);
       liveSources.add(`tournament:${sourceId}`);
+      const byPlayer = new Map();
       for (const row of standings || []) {
         const pts = Math.trunc(Number(row.points) || 0);
         if (pts <= 0) continue;
         const uid = String(row.playerId || "").trim();
         if (!uid) continue;
+        let acc = byPlayer.get(uid);
+        if (!acc) {
+          acc = { pts: 0, name: "" };
+          byPlayer.set(uid, acc);
+        }
+        acc.pts += pts;
+        if (!acc.name) acc.name = String(row.playerName || "").trim();
+      }
+      for (const [uid, acc] of byPlayer.entries()) {
         liveAwards.push({
           year,
           playerId: uid,
-          playerName: String(row.playerName || "").trim(),
+          playerName: acc.name,
           sourceType: "tournament",
           sourceId,
           eventPoints: 0,
-          tournamentPoints: pts,
+          tournamentPoints: acc.pts,
           eventWins: 0,
           tournamentRaces: 1,
         });
