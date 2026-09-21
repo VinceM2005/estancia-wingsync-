@@ -10594,7 +10594,7 @@ window.app = app;
     el.setAttribute("data-place", place);
     el.setAttribute("aria-label", BADGE_TITLE[badge]);
     el.title = BADGE_TITLE[badge];
-    el.innerHTML = `<span class="season-rank-badge-mark">${place}</span>`;
+    el.innerHTML = `<span class="season-rank-badge-sprite" aria-hidden="true"></span>`;
   }
 
   function ensureProfileBadge() {
@@ -10736,7 +10736,7 @@ window.app = app;
     const badge = row && row.badge;
     if (badge === "gold" || badge === "silver" || badge === "bronze") {
       const place = badge === "gold" ? "1" : badge === "silver" ? "2" : "3";
-      return `<span class="season-rank-badge" data-place="${place}"><span class="season-rank-badge-mark">${place}</span></span>`;
+      return `<span class="season-rank-badge" data-place="${place}"><span class="season-rank-badge-sprite" aria-hidden="true"></span></span>`;
     }
     return escapeHtml(rank > 0 ? String(rank) : "—");
   }
@@ -10745,7 +10745,14 @@ window.app = app;
     const you = !!(row && (row.you || (viewerId && row.playerId === viewerId)));
     const name = row && row.playerName ? row.playerName : "—";
     const points = Number(row && row.totalPoints) || 0;
-    return `<div class="season-board-row${you ? " season-board-row-you" : ""}"${you ? ' id="season-board-you"' : ""}>
+    const badge = row && row.badge;
+    const place =
+      badge === "gold" ? "1" : badge === "silver" ? "2" : badge === "bronze" ? "3" : "";
+    const placeClass = place ? ` season-board-row-place-${place}` : "";
+    const placeAttr = place ? ` data-place="${place}"` : "";
+    const youClass = you ? " season-board-row-you" : "";
+    const youId = you ? ' id="season-board-you"' : "";
+    return `<div class="season-board-row${youClass}${placeClass}"${placeAttr}${youId}>
       <span class="season-board-rank">${rankCell(row)}</span>
       <span class="season-board-name">${escapeHtml(name)}${you ? '<span class="season-board-you-tag">You</span>' : ""}</span>
       <span class="season-board-pts">${escapeHtml(String(points))}<small>pts</small></span>
