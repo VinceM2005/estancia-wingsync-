@@ -2177,6 +2177,10 @@ tr:hover td {
   background: var(--card-bg);
 }
 
+.season-board-row[hidden] {
+  display: none !important;
+}
+
 .season-board-row-you {
   background: rgba(42, 122, 98, 0.08);
   box-shadow: inset 3px 0 0 var(--primary);
@@ -2283,6 +2287,11 @@ tr:hover td {
   background: rgba(166, 107, 60, 0.12);
 }
 
+#season-board-pager.table-pagination {
+  margin-top: 14px;
+  padding-top: 14px;
+}
+
 @media (max-width: 600px) {
   .season-board-card {
     padding: 16px 14px 14px;
@@ -2297,6 +2306,11 @@ tr:hover td {
     width: 36px;
     height: 46px;
     min-width: 36px;
+  }
+
+  #season-board-pager.table-pagination {
+    margin-top: 12px;
+    padding-top: 12px;
   }
 }
 

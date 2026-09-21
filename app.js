@@ -10832,6 +10832,156 @@ window.app = app;
   }
 })();
 
+(function attachSeasonLeaderboardPager() {
+  const PAGE_SIZE = 10;
+  let page = 1;
+  let userPaged = false;
+  let applying = false;
+
+  function listEl() {
+    return document.getElementById("season-board-list");
+  }
+
+  function pagerEl() {
+    return document.getElementById("season-board-pager");
+  }
+
+  function allRows() {
+    const list = listEl();
+    if (!list) return [];
+    return Array.from(list.querySelectorAll(".season-board-row"));
+  }
+
+  function pageButtons(safePage, totalPages) {
+    const buttons = [];
+    for (let p = 1; p <= totalPages; p += 1) {
+      const isEdge = p === 1 || p === totalPages;
+      const isNear = Math.abs(p - safePage) <= 1;
+      if (isEdge || isNear || totalPages <= 7) {
+        buttons.push(p);
+      } else if (buttons[buttons.length - 1] !== "…") {
+        buttons.push("…");
+      }
+    }
+    return buttons
+      .map((p) => {
+        if (p === "…") {
+          return '<span class="table-pagination-ellipsis">…</span>';
+        }
+        const active = p === safePage ? " table-pagination-page--active" : "";
+        return `<button type="button" class="table-pagination-page${active}" data-page="${p}" aria-label="Page ${p}" aria-current="${p === safePage ? "page" : "false"}">${p}</button>`;
+      })
+      .join("");
+  }
+
+  function paintPager(totalItems, totalPages, safePage) {
+    const pager = pagerEl();
+    if (!pager) return;
+    if (!totalItems) {
+      pager.innerHTML = "";
+      pager.classList.remove("table-pagination--visible");
+      return;
+    }
+    pager.classList.add("table-pagination--visible");
+    if (totalPages <= 1) {
+      pager.innerHTML = `<p class="table-pagination-info">Showing all <strong>${totalItems}</strong> players</p>`;
+      return;
+    }
+    const start = (safePage - 1) * PAGE_SIZE + 1;
+    const end = Math.min(safePage * PAGE_SIZE, totalItems);
+    pager.innerHTML = `
+      <p class="table-pagination-info">Showing <strong>${start}–${end}</strong> of <strong>${totalItems}</strong> players</p>
+      <nav class="table-pagination-controls" aria-label="Leaderboard pages">
+        <button type="button" class="table-pagination-nav" data-page="prev" ${safePage <= 1 ? "disabled" : ""} aria-label="Previous page">
+          <i class="fas fa-chevron-left" aria-hidden="true"></i>
+        </button>
+        <div class="table-pagination-pages">${pageButtons(safePage, totalPages)}</div>
+        <button type="button" class="table-pagination-nav" data-page="next" ${safePage >= totalPages ? "disabled" : ""} aria-label="Next page">
+          <i class="fas fa-chevron-right" aria-hidden="true"></i>
+        </button>
+      </nav>
+    `;
+  }
+
+  function youPage(rows) {
+    const idx = rows.findIndex((el) => el.id === "season-board-you");
+    if (idx < 0) return 1;
+    return Math.floor(idx / PAGE_SIZE) + 1;
+  }
+
+  function applyPager() {
+    if (applying) return;
+    applying = true;
+    const rows = allRows();
+    const totalItems = rows.length;
+    if (!totalItems) {
+      page = 1;
+      paintPager(0, 1, 1);
+      applying = false;
+      return;
+    }
+    const totalPages = Math.max(1, Math.ceil(totalItems / PAGE_SIZE));
+    if (!userPaged) page = youPage(rows);
+    if (page > totalPages) page = totalPages;
+    if (page < 1) page = 1;
+    const start = (page - 1) * PAGE_SIZE;
+    const end = start + PAGE_SIZE;
+    rows.forEach((el, i) => {
+      el.hidden = i < start || i >= end;
+    });
+    paintPager(totalItems, totalPages, page);
+    applying = false;
+  }
+
+  function goToPage(nextPage) {
+    userPaged = true;
+    page = nextPage;
+    applyPager();
+    const list = listEl();
+    if (list && typeof list.scrollIntoView === "function") {
+      list.scrollIntoView({ block: "start" });
+    }
+  }
+
+  function start() {
+    const list = listEl();
+    const pager = pagerEl();
+    const view = document.getElementById("view-leaderboard");
+    if (pager) {
+      pager.addEventListener("click", (e) => {
+        const btn = e.target.closest("[data-page]");
+        if (!btn || btn.disabled) return;
+        const rows = allRows();
+        const totalPages = Math.max(1, Math.ceil(rows.length / PAGE_SIZE));
+        const target = btn.getAttribute("data-page");
+        if (target === "prev" && page > 1) goToPage(page - 1);
+        else if (target === "next" && page < totalPages) goToPage(page + 1);
+        else if (/^\d+$/.test(target)) goToPage(parseInt(target, 10));
+      });
+    }
+    if (list && typeof MutationObserver === "function") {
+      const observer = new MutationObserver(() => applyPager());
+      observer.observe(list, { childList: true });
+      applyPager();
+    }
+    if (view && typeof MutationObserver === "function") {
+      const vis = new MutationObserver(() => {
+        if (view.classList.contains("hidden")) {
+          userPaged = false;
+          page = 1;
+        }
+      });
+      vis.observe(view, { attributes: true, attributeFilter: ["class"] });
+    }
+  }
+
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", start);
+  } else {
+    start();
+  }
+})();
+
 function bootWingsync() {
   // #region agent log
   __wsDbg(
