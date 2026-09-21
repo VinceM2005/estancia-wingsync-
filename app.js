@@ -10624,15 +10624,11 @@ window.app = app;
     const points = Number(data.totalPoints) || 0;
     const races = Number(data.eventsParticipated) || 0;
     const year = data.year || "";
-    const fieldSize = Number(data.fieldSize) || 0;
-    const eventPts = Number(data.eventPoints) || 0;
-    const tournamentPts = Number(data.tournamentPoints) || 0;
 
     const rankEl = document.getElementById("stats-season-rank");
     const pointsEl = document.getElementById("stats-season-points");
     const racesEl = document.getElementById("stats-season-races");
     const yearEl = document.getElementById("stats-season-year");
-    const hintEl = document.getElementById("stats-season-hint");
     const panel = document.getElementById("season-rank-panel");
 
     if (yearEl && year) yearEl.textContent = String(year);
@@ -10643,16 +10639,9 @@ window.app = app;
       if (rank > 0) {
         rankEl.textContent = `#${rank}`;
         panel.classList.remove("season-rank-panel-empty");
-        if (hintEl) {
-          const place = fieldSize ? `${rank} of ${fieldSize} players` : `Rank #${rank}`;
-          hintEl.textContent = `${place} · ${year} · event 1st = 1 pt · tournament = real points (${eventPts} event + ${tournamentPts} tournament)`;
-        }
       } else {
         rankEl.textContent = "Unranked";
         panel.classList.add("season-rank-panel-empty");
-        if (hintEl) {
-          hintEl.textContent = `No ${year} season points yet. Event races count 1st place only (1 pt). Tournament races count every scoring pigeon’s real points.`;
-        }
       }
     }
 
